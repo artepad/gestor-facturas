@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -34,8 +35,13 @@ CREATE INDEX IF NOT EXISTS idx_fecha ON facturas(fecha);
 CREATE INDEX IF NOT EXISTS idx_rut ON facturas(rut_emisor);
 
 CREATE TABLE IF NOT EXISTS alias_proveedor (
-  alias_normalizado  TEXT PRIMARY KEY,    -- forma canónica (lowercase, alfanumérico)
-  proveedor_canonico TEXT NOT NULL        -- nombre bonito para mostrar
+  alias_normalizado  TEXT PRIMARY KEY,    -- nombre normalizado (sin acentos ni sufijos legales)
+  proveedor_canonico TEXT NOT NULL        -- nombre de carpeta de esa empresa
+);
+
+CREATE TABLE IF NOT EXISTS empresa_rut (
+  rut                TEXT PRIMARY KEY,    -- RUT normalizado: sin puntos, con guion, DV en mayúscula
+  proveedor_canonico TEXT NOT NULL        -- nombre de carpeta de esa empresa
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facturas_fts USING fts5(
@@ -70,9 +76,42 @@ class FilaFactura:
     notas: str | None
 
 
-def _normalizar(nombre: str) -> str:
-    """Convierte 'Nogales Distribuidora' → 'nogalesdistribuidora'."""
-    return re.sub(r"[^a-z0-9]", "", nombre.lower())
+# Palabras genéricas de razón social chilena que NO identifican a la empresa.
+# Se ignoran al comparar nombres: "Comercial CCU S.A." y "CCU" deben coincidir.
+_RE_PALABRAS_GENERICAS = re.compile(
+    r"\b("
+    r"s\.?\s*a\.?|s\.?\s*p\.?\s*a\.?|ltda\.?|limitada|ltd|"
+    r"e\.?\s*i\.?\s*r\.?\s*l\.?|cia\.?|"
+    r"comercial(?:izadora)?|compania|distribuidora?|sociedad|"
+    r"importadora|exportadora|industrial|servicios"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _sin_acentos(texto: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", texto)
+        if not unicodedata.combining(c)
+    )
+
+
+def _normalizar_nombre(nombre: str) -> str:
+    """'Comercial CCU S.A.' → 'ccu'. Quita acentos, sufijos/palabras legales
+    y todo lo que no sea alfanumérico, para comparar nombres comerciales."""
+    base = _RE_PALABRAS_GENERICAS.sub(" ", _sin_acentos(nombre).lower())
+    return re.sub(r"[^a-z0-9]", "", base)
+
+
+def _normalizar_rut(rut: str | None) -> str | None:
+    """'99.554.560-8' → '99554560-8'. Devuelve None si no parece un RUT válido.
+    El RUT es el identificador legal único de la empresa emisora."""
+    if not rut:
+        return None
+    limpio = re.sub(r"[^0-9kK]", "", rut).upper()
+    if len(limpio) < 7:
+        return None
+    return f"{limpio[:-1]}-{limpio[-1]}"
 
 
 class Database:
@@ -92,24 +131,54 @@ class Database:
         finally:
             cnx.close()
 
-    def resolver_proveedor(self, nombre_crudo: str) -> str:
-        """Dado un nombre crudo del modelo, devuelve el nombre canónico.
-        Si nunca se ha visto, lo registra como canónico y lo devuelve."""
-        normalizado = _normalizar(nombre_crudo)
-        if not normalizado:
-            return nombre_crudo
+    def resolver_proveedor(self, nombre_crudo: str, rut_emisor: str | None = None) -> str:
+        """Devuelve el nombre canónico (nombre de carpeta) de la empresa emisora.
+
+        Identidad por orden de prioridad:
+          1. RUT del emisor — idéntico en todas las facturas de la misma empresa,
+             aunque el modelo escriba la marca distinta ('CCU' vs 'Comercial CCU').
+          2. Nombre comercial normalizado (sin acentos ni sufijos legales) — respaldo
+             cuando el RUT no es legible.
+
+        La primera factura de una empresa fija su nombre de carpeta. Las siguientes
+        se vinculan a ese mismo nombre, y cada variante nueva de la marca queda
+        aprendida como alias para no volver a fallar."""
+        rut = _normalizar_rut(rut_emisor)
+        nombre_norm = _normalizar_nombre(nombre_crudo)
         with self._conexion() as cnx:
-            row = cnx.execute(
-                "SELECT proveedor_canonico FROM alias_proveedor WHERE alias_normalizado = ?",
-                (normalizado,),
-            ).fetchone()
-            if row:
-                return row["proveedor_canonico"]
-            cnx.execute(
-                "INSERT INTO alias_proveedor (alias_normalizado, proveedor_canonico) VALUES (?, ?)",
-                (normalizado, nombre_crudo),
-            )
-            return nombre_crudo
+            canonico: str | None = None
+
+            if rut is not None:
+                row = cnx.execute(
+                    "SELECT proveedor_canonico FROM empresa_rut WHERE rut = ?", (rut,)
+                ).fetchone()
+                if row:
+                    canonico = row["proveedor_canonico"]
+
+            if canonico is None and nombre_norm:
+                row = cnx.execute(
+                    "SELECT proveedor_canonico FROM alias_proveedor WHERE alias_normalizado = ?",
+                    (nombre_norm,),
+                ).fetchone()
+                if row:
+                    canonico = row["proveedor_canonico"]
+
+            if canonico is None:
+                canonico = nombre_crudo  # empresa nueva: su nombre fija la carpeta
+
+            # Aprender los vínculos: futuras facturas de esta empresa caerán en
+            # la misma carpeta por su RUT o por cualquier variante del nombre ya vista.
+            if rut is not None:
+                cnx.execute(
+                    "INSERT OR IGNORE INTO empresa_rut (rut, proveedor_canonico) VALUES (?, ?)",
+                    (rut, canonico),
+                )
+            if nombre_norm:
+                cnx.execute(
+                    "INSERT OR IGNORE INTO alias_proveedor (alias_normalizado, proveedor_canonico) VALUES (?, ?)",
+                    (nombre_norm, canonico),
+                )
+            return canonico
 
     def registrar_factura(
         self,

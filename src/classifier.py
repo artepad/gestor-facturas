@@ -19,6 +19,9 @@ HERRAMIENTA_FACTURA = {
                 "type": "string",
                 "description": (
                     "Nombre comercial corto de la MARCA visible en el logo de la factura. "
+                    "Usa solo el nombre núcleo de la marca: omite palabras genéricas como "
+                    "'Comercial', 'Compañía', 'Distribuidora' o 'Sociedad' "
+                    "(ej: si el logo dice 'Comercial CCU', responde 'CCU'). "
                     "Sin tildes, puntos ni sufijos legales (S.A., Ltda., EIRL). "
                     "Sin espacios al inicio/fin. Ejemplos: 'CocaCola', 'Soprole', 'MinutoVerde'. "
                     "Esto se usará como nombre de carpeta, así que evita caracteres especiales."
@@ -33,7 +36,11 @@ HERRAMIENTA_FACTURA = {
             },
             "rut_emisor": {
                 "type": ["string", "null"],
-                "description": "RUT del emisor con formato XX.XXX.XXX-X. Null si no es legible.",
+                "description": (
+                    "RUT del emisor con formato XX.XXX.XXX-X. Es el identificador legal "
+                    "único de la empresa: extráelo con máxima precisión, dígito por dígito. "
+                    "Null solo si es realmente ilegible."
+                ),
             },
             "fecha": {
                 "type": "string",
@@ -72,6 +79,9 @@ PROMPT = (
     "Devuelve TANTO la marca comercial visible en el logo (campo `proveedor`) COMO "
     "la razón social legal y RUT del emisor (campos `razon_social` y `rut_emisor`). "
     "Si la marca y la razón social son la misma empresa, igual repite el nombre en ambos campos.\n\n"
+    "El RUT del emisor es el dato MÁS importante: es lo que permite identificar a la "
+    "empresa de forma única aunque la marca aparezca escrita de distintas maneras. "
+    "Léelo con cuidado dígito por dígito.\n\n"
     "Usa la imagen como fuente de verdad si el texto extraído es confuso o está vacío. "
     "Devuelve los datos llamando a la herramienta `registrar_factura`. "
     "Si algún campo no se puede leer con certeza, devuelve null en ese campo y "

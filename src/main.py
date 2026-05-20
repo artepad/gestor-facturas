@@ -85,7 +85,7 @@ def crear_procesador(
             print(f"[procesar] ERROR → {destino}", flush=True)
             return
 
-        canonico = db.resolver_proveedor(datos.proveedor)
+        canonico = db.resolver_proveedor(datos.proveedor, datos.rut_emisor)
         if canonico != datos.proveedor:
             print(f"[procesar] Alias: '{datos.proveedor}' → '{canonico}'", flush=True)
             datos = replace(datos, proveedor=canonico)
@@ -249,7 +249,7 @@ def modo_reindexar(config: dict, clasificador: Clasificador, db: Database) -> No
         try:
             contenido = extraer(pdf)
             datos = clasificador.clasificar(contenido)
-            canonico = db.resolver_proveedor(datos.proveedor)
+            canonico = db.resolver_proveedor(datos.proveedor, datos.rut_emisor)
             datos = replace(datos, proveedor=canonico)
             db.registrar_factura(datos, pdf, contenido.texto)
             nuevos += 1
