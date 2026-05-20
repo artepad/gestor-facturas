@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+data/logs/*.log
+data/*.db
+tests/facturas_ejemplo/*.pdf
+tests/facturas_ejemplo/*.jpg
+tests/facturas_ejemplo/*.png
+.venv/
+venv/

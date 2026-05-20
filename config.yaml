@@ -1,0 +1,47 @@
+# Configuración del sistema de organización de facturas.
+# Puedes cambiar estas rutas sin tocar el código Python.
+
+rutas:
+  # Carpeta donde el escáner Brother DS-640 deposita los PDFs nuevos
+  entrada: C:\Facturas\_entrada
+
+  # Carpeta raíz donde se archivan las facturas organizadas por año/mes/marca
+  archivo: C:\Facturas
+
+  # Facturas que la IA no pudo clasificar con suficiente confianza van aquí
+  # (las revisas manualmente y las archivas tú)
+  revisar: C:\Facturas\_revisar
+
+  # Facturas que fallaron por error técnico (PDF corrupto, sin internet, etc.)
+  errores: C:\Facturas\_errores
+
+  # Facturas reemplazadas: cuando llega un duplicado (mismo número + RUT),
+  # la versión vieja se mueve aquí por seguridad.
+  reemplazadas: C:\Facturas\_reemplazadas
+
+  # Base de datos SQLite con el historial y búsqueda full-text
+  base_datos: C:\Users\del_a\vibecoding\gestor-facturas\data\facturas.db
+
+clasificacion:
+  modelo: claude-haiku-4-5-20251001
+
+  # Si la confianza de la IA es menor a este valor, va a la carpeta _revisar
+  umbral_confianza: 0.70
+
+  # Si la confianza es MENOR a este valor, se marca como "posible escaneo defectuoso"
+  # con un mensaje específico en _revisar sugiriendo re-escanear
+  umbral_escaneo_defectuoso: 0.40
+
+procesamiento:
+  # Segundos a esperar tras detectar un archivo nuevo antes de procesarlo
+  # (el escáner puede tardar en cerrar el archivo)
+  espera_estabilizacion: 2
+
+  # Período de gracia en segundos: tras detectar un archivo estable, el sistema
+  # espera este tiempo antes de procesarlo. Si el archivo se borra de la carpeta
+  # de entrada durante este período (ej: vendedora notó que escaneó mal),
+  # NO se procesa. Aumenta la latencia pero da margen para corregir errores.
+  periodo_gracia: 60
+
+  # Extensiones de archivo que se van a procesar
+  extensiones: [".pdf"]
