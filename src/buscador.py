@@ -66,21 +66,20 @@ class Buscador:
         marco_tabla = ttk.Frame(self.ventana, padding=(10, 5))
         marco_tabla.pack(fill="both", expand=True)
 
-        columnas = ("fecha", "proveedor", "numero", "total", "moneda", "razon_social", "confianza")
+        columnas = ("fecha", "proveedor", "numero", "total", "razon_social", "confianza")
         self.tabla = ttk.Treeview(marco_tabla, columns=columnas, show="headings", height=20)
         encabezados = {
             "fecha": ("Fecha", 90),
             "proveedor": ("Proveedor", 150),
             "numero": ("N° Factura", 110),
-            "total": ("Total", 100),
-            "moneda": ("Mon.", 50),
+            "total": ("Total", 110),
             "razon_social": ("Razón Social", 250),
             "confianza": ("Conf.", 60),
         }
         for col, (titulo, ancho) in encabezados.items():
             self.tabla.heading(col, text=titulo)
             self.tabla.column(col, width=ancho, anchor="w")
-        self.tabla.column("total", anchor="e")
+        self.tabla.column("total", anchor="center")
         self.tabla.column("confianza", anchor="center")
 
         scroll = ttk.Scrollbar(marco_tabla, orient="vertical", command=self.tabla.yview)
@@ -128,11 +127,11 @@ class Buscador:
             self.tabla.delete(iid)
 
         for fila in self.filas:
-            total = f"{fila.total:,.0f}" if fila.total is not None else ""
+            total = f"${fila.total:,.0f}".replace(",", ".") if fila.total is not None else ""
             conf = f"{fila.confianza:.2f}" if fila.confianza is not None else ""
             self.tabla.insert("", "end", values=(
                 fila.fecha, fila.proveedor, fila.numero_factura or "",
-                total, fila.moneda or "", fila.razon_social or "", conf,
+                total, fila.razon_social or "", conf,
             ))
 
         self.etiqueta_estado.config(text=f"{len(self.filas)} resultado(s)")
