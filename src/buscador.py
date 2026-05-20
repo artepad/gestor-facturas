@@ -5,15 +5,16 @@ Uso: py src/buscador.py
 
 from __future__ import annotations
 
-import os
 import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
 import yaml
+from dotenv import load_dotenv
 
 from db import Database
+from ventana_factura import abrir_ventana_factura
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -24,8 +25,9 @@ def cargar_config() -> dict:
 
 
 class Buscador:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, config: dict) -> None:
         self.db = db
+        self.config = config
         self.ventana = tk.Tk()
         self.ventana.title("Buscador de Facturas")
         self.ventana.geometry("1000x600")
@@ -95,7 +97,7 @@ class Buscador:
 
         ttk.Label(
             self.ventana,
-            text="Doble clic en una fila para abrir el PDF.",
+            text="Doble clic en una fila para abrir el detalle de la factura.",
             padding=(10, 0, 10, 10),
             foreground="#666",
         ).pack(fill="x")
@@ -149,14 +151,7 @@ class Buscador:
         if not seleccion:
             return
         indice = self.tabla.index(seleccion[0])
-        ruta = Path(self.filas[indice].ruta_archivo)
-        if not ruta.exists():
-            messagebox.showwarning("No encontrado", f"El archivo ya no está en:\n{ruta}")
-            return
-        try:
-            os.startfile(str(ruta))  # type: ignore[attr-defined]
-        except AttributeError:
-            messagebox.showinfo("Ruta", str(ruta))
+        abrir_ventana_factura(self.ventana, self.filas[indice], self.db, self.config)
 
     def ejecutar(self) -> None:
         self.ventana.mainloop()
@@ -164,8 +159,9 @@ class Buscador:
 
 def main() -> None:
     config = cargar_config()
+    load_dotenv(RAIZ / ".env", override=True)  # ANTHROPIC_API_KEY para el análisis con IA
     db = Database(Path(config["rutas"]["base_datos"]))
-    Buscador(db).ejecutar()
+    Buscador(db, config).ejecutar()
 
 
 if __name__ == "__main__":

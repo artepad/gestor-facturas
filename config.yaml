@@ -32,6 +32,10 @@ clasificacion:
   # con un mensaje específico en _revisar sugiriendo re-escanear
   umbral_escaneo_defectuoso: 0.40
 
+  # Máximo de imágenes que se envían a la IA al extraer el detalle de productos
+  # (una factura larga se divide en franjas; esto acota el costo de la API)
+  max_imagenes_detalle: 24
+
 procesamiento:
   # Segundos a esperar tras detectar un archivo nuevo antes de procesarlo
   # (el escáner puede tardar en cerrar el archivo)
@@ -45,3 +49,9 @@ procesamiento:
 
   # Extensiones de archivo que se van a procesar
   extensiones: [".pdf"]
+
+# Cálculo del precio de venta sugerido para cada producto
+precios:
+  iva: 0.19          # IVA chileno (19%)
+  margen: 0.35       # margen de ganancia sobre el costo (35%)
+  redondear_a: 100   # redondea el precio sugerido hacia arriba a este múltiplo

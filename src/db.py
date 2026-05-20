@@ -11,7 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
-from classifier import DatosFactura
+from classifier import DatosFactura, DetalleFactura
+from precios import precio_sugerido
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS facturas (
@@ -43,6 +44,31 @@ CREATE TABLE IF NOT EXISTS empresa_rut (
   rut                TEXT PRIMARY KEY,    -- RUT normalizado: sin puntos, con guion, DV en mayúscula
   proveedor_canonico TEXT NOT NULL        -- nombre de carpeta de esa empresa
 );
+
+-- Metadatos del análisis de detalle de una factura (un registro por factura analizada)
+CREATE TABLE IF NOT EXISTS detalle_factura (
+  factura_id           INTEGER PRIMARY KEY REFERENCES facturas(id) ON DELETE CASCADE,
+  precios_incluyen_iva INTEGER NOT NULL DEFAULT 0,   -- 0/1
+  confianza            REAL,
+  notas                TEXT,
+  analizado_en         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Productos extraídos de una factura (línea por línea)
+CREATE TABLE IF NOT EXISTS producto (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  factura_id      INTEGER NOT NULL REFERENCES facturas(id) ON DELETE CASCADE,
+  orden           INTEGER NOT NULL DEFAULT 0,       -- orden de aparición en la factura
+  descripcion     TEXT NOT NULL,
+  cantidad        REAL,
+  precio_unitario REAL,
+  descuento       REAL,
+  monto           REAL,
+  afecto_iva      INTEGER NOT NULL DEFAULT 1,       -- 0/1
+  precio_sugerido REAL,                             -- se calcula en la fase de precios
+  editado_manual  INTEGER NOT NULL DEFAULT 0        -- 0/1
+);
+CREATE INDEX IF NOT EXISTS idx_producto_factura ON producto(factura_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facturas_fts USING fts5(
   proveedor, razon_social, numero_factura, texto_completo,
@@ -103,6 +129,19 @@ def _normalizar_nombre(nombre: str) -> str:
     return re.sub(r"[^a-z0-9]", "", base)
 
 
+@dataclass(frozen=True)
+class FilaProducto:
+    id: int
+    descripcion: str
+    cantidad: float | None
+    precio_unitario: float | None
+    descuento: float | None
+    monto: float | None
+    afecto_iva: bool
+    precio_sugerido: float | None
+    editado_manual: bool
+
+
 def _normalizar_rut(rut: str | None) -> str | None:
     """'99.554.560-8' → '99554560-8'. Devuelve None si no parece un RUT válido.
     El RUT es el identificador legal único de la empresa emisora."""
@@ -125,6 +164,7 @@ class Database:
     def _conexion(self) -> Iterator[sqlite3.Connection]:
         cnx = sqlite3.connect(self.ruta)
         cnx.row_factory = sqlite3.Row
+        cnx.execute("PRAGMA foreign_keys = ON")  # activa el borrado en cascada
         try:
             yield cnx
             cnx.commit()
@@ -299,3 +339,109 @@ class Database:
     def eliminar(self, id_factura: int) -> None:
         with self._conexion() as cnx:
             cnx.execute("DELETE FROM facturas WHERE id = ?", (id_factura,))
+
+    # --- Detalle de productos ---
+
+    def guardar_detalle(self, factura_id: int, detalle: DetalleFactura) -> None:
+        """Guarda el detalle de productos de una factura, reemplazando lo anterior."""
+        with self._conexion() as cnx:
+            cnx.execute("DELETE FROM producto WHERE factura_id = ?", (factura_id,))
+            cnx.execute(
+                """
+                INSERT OR REPLACE INTO detalle_factura
+                  (factura_id, precios_incluyen_iva, confianza, notas, analizado_en)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    factura_id, int(detalle.precios_incluyen_iva),
+                    detalle.confianza, detalle.notas,
+                ),
+            )
+            for orden, p in enumerate(detalle.productos):
+                cnx.execute(
+                    """
+                    INSERT INTO producto
+                      (factura_id, orden, descripcion, cantidad, precio_unitario,
+                       descuento, monto, afecto_iva)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        factura_id, orden, p.descripcion, p.cantidad,
+                        p.precio_unitario, p.descuento, p.monto, int(p.afecto_iva),
+                    ),
+                )
+
+    def tiene_detalle(self, factura_id: int) -> bool:
+        with self._conexion() as cnx:
+            row = cnx.execute(
+                "SELECT 1 FROM detalle_factura WHERE factura_id = ?", (factura_id,)
+            ).fetchone()
+            return row is not None
+
+    def obtener_meta_detalle(self, factura_id: int) -> dict | None:
+        """Devuelve los metadatos del análisis de detalle, o None si no se ha analizado."""
+        with self._conexion() as cnx:
+            row = cnx.execute(
+                "SELECT * FROM detalle_factura WHERE factura_id = ?", (factura_id,)
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "precios_incluyen_iva": bool(row["precios_incluyen_iva"]),
+                "confianza": row["confianza"],
+                "notas": row["notas"],
+                "analizado_en": row["analizado_en"],
+            }
+
+    def actualizar_producto(self, producto_id: int, **campos: object) -> None:
+        """Actualiza columnas de un producto. Las claves deben ser nombres de
+        columna válidos de la tabla `producto` (controlados por el código)."""
+        if not campos:
+            return
+        asignaciones = ", ".join(f"{col} = ?" for col in campos)
+        valores = [*campos.values(), producto_id]
+        with self._conexion() as cnx:
+            cnx.execute(f"UPDATE producto SET {asignaciones} WHERE id = ?", valores)
+
+    def recalcular_precios(
+        self, factura_id: int, iva: float, margen: float, redondear_a: int
+    ) -> None:
+        """Recalcula y guarda el precio sugerido de cada producto de la factura."""
+        meta = self.obtener_meta_detalle(factura_id)
+        incluyen_iva = bool(meta["precios_incluyen_iva"]) if meta else False
+        with self._conexion() as cnx:
+            rows = cnx.execute(
+                "SELECT id, cantidad, precio_unitario, monto, afecto_iva "
+                "FROM producto WHERE factura_id = ?",
+                (factura_id,),
+            ).fetchall()
+            for r in rows:
+                sugerido = precio_sugerido(
+                    monto=r["monto"], cantidad=r["cantidad"],
+                    precio_unitario=r["precio_unitario"],
+                    afecto_iva=bool(r["afecto_iva"]),
+                    precios_incluyen_iva=incluyen_iva,
+                    iva=iva, margen=margen, redondear_a=redondear_a,
+                )
+                cnx.execute(
+                    "UPDATE producto SET precio_sugerido = ? WHERE id = ?",
+                    (sugerido, r["id"]),
+                )
+
+    def obtener_productos(self, factura_id: int) -> list[FilaProducto]:
+        with self._conexion() as cnx:
+            rows = cnx.execute(
+                "SELECT * FROM producto WHERE factura_id = ? ORDER BY orden, id",
+                (factura_id,),
+            ).fetchall()
+            return [
+                FilaProducto(
+                    id=r["id"], descripcion=r["descripcion"],
+                    cantidad=r["cantidad"], precio_unitario=r["precio_unitario"],
+                    descuento=r["descuento"], monto=r["monto"],
+                    afecto_iva=bool(r["afecto_iva"]),
+                    precio_sugerido=r["precio_sugerido"],
+                    editado_manual=bool(r["editado_manual"]),
+                )
+                for r in rows
+            ]
