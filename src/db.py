@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS empresa_rut (
   proveedor_canonico TEXT NOT NULL        -- nombre de carpeta de esa empresa
 );
 
+-- Instrucciones aprendidas para interpretar el detalle de las facturas de un
+-- proveedor. Se reutilizan automáticamente en futuras facturas del mismo RUT.
+CREATE TABLE IF NOT EXISTS instruccion_proveedor (
+  rut            TEXT PRIMARY KEY,        -- RUT normalizado del emisor
+  instrucciones  TEXT NOT NULL,
+  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Metadatos del análisis de detalle de una factura (un registro por factura analizada)
 CREATE TABLE IF NOT EXISTS detalle_factura (
   factura_id           INTEGER PRIMARY KEY REFERENCES facturas(id) ON DELETE CASCADE,
@@ -427,6 +435,41 @@ class Database:
                     "UPDATE producto SET precio_sugerido = ? WHERE id = ?",
                     (sugerido, r["id"]),
                 )
+
+    # --- Memoria de instrucciones por proveedor ---
+
+    def guardar_instrucciones(self, rut_emisor: str | None, instrucciones: str) -> None:
+        """Recuerda las instrucciones de extracción de un proveedor (por RUT).
+        Si el texto viene vacío, borra lo que hubiera guardado."""
+        rut = _normalizar_rut(rut_emisor)
+        if rut is None:
+            return
+        texto = instrucciones.strip()
+        with self._conexion() as cnx:
+            if texto:
+                cnx.execute(
+                    """
+                    INSERT INTO instruccion_proveedor (rut, instrucciones, actualizado_en)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(rut) DO UPDATE SET
+                      instrucciones = excluded.instrucciones,
+                      actualizado_en = CURRENT_TIMESTAMP
+                    """,
+                    (rut, texto),
+                )
+            else:
+                cnx.execute("DELETE FROM instruccion_proveedor WHERE rut = ?", (rut,))
+
+    def obtener_instrucciones(self, rut_emisor: str | None) -> str | None:
+        """Devuelve las instrucciones aprendidas para el proveedor, o None."""
+        rut = _normalizar_rut(rut_emisor)
+        if rut is None:
+            return None
+        with self._conexion() as cnx:
+            row = cnx.execute(
+                "SELECT instrucciones FROM instruccion_proveedor WHERE rut = ?", (rut,)
+            ).fetchone()
+            return row["instrucciones"] if row else None
 
     def obtener_productos(self, factura_id: int) -> list[FilaProducto]:
         with self._conexion() as cnx:

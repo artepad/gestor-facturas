@@ -215,7 +215,9 @@ class PanelDetalle(ttk.Frame):
         self.lbl_estado = ttk.Label(self, text="", foreground="#666", wraplength=430)
         self.lbl_estado.pack(anchor="w", pady=(6, 1))
         ttk.Label(self, text="Doble clic en una celda para corregir un valor.",
-                  foreground="#999").pack(anchor="w", pady=(0, 4))
+                  foreground="#999").pack(anchor="w", pady=(0, 1))
+        self.lbl_memoria = ttk.Label(self, text="", foreground="#1a7a3a", wraplength=430)
+        self.lbl_memoria.pack(anchor="w", pady=(0, 4))
 
         # --- Tabla de productos ---
         marco = ttk.Frame(self)
@@ -257,6 +259,16 @@ class PanelDetalle(ttk.Frame):
         else:
             self.lbl_estado.config(
                 text="Aún sin analizar. Presiona el botón para extraer los productos con IA.")
+        self._actualizar_memoria()
+
+    def _actualizar_memoria(self) -> None:
+        """Muestra si el sistema ya aprendió instrucciones para este proveedor."""
+        if self.db.obtener_instrucciones(self.fila.rut_emisor):
+            self.lbl_memoria.config(
+                text=f"Memoria activa: hay instrucciones aprendidas para "
+                     f"{self.fila.proveedor}; se aplican solas al analizar.")
+        else:
+            self.lbl_memoria.config(text="")
 
     def _refrescar(self) -> None:
         """Vuelve a leer los productos de la BD y repuebla la tabla."""
@@ -294,11 +306,16 @@ class PanelDetalle(ttk.Frame):
     # --- Análisis con IA ---
 
     def _iniciar_analisis(self) -> None:
-        instrucciones: str | None = None
+        aprendidas = self.db.obtener_instrucciones(self.fila.rut_emisor)
         if self.db.tiene_detalle(self.fila.id):
-            instrucciones = self._pedir_instrucciones()
+            # Re-análisis: el usuario ve/ajusta lo aprendido y se vuelve a guardar
+            instrucciones = self._pedir_instrucciones(aprendidas or "")
             if instrucciones is None:  # el usuario canceló
                 return
+            self.db.guardar_instrucciones(self.fila.rut_emisor, instrucciones)
+        else:
+            # Primer análisis: aplica automáticamente lo aprendido del proveedor
+            instrucciones = aprendidas
         self.btn_analizar.config(state="disabled")
         self.lbl_estado.config(
             text="Analizando la factura con IA… esto puede tardar unos segundos.")
@@ -337,27 +354,37 @@ class PanelDetalle(ttk.Frame):
             return
         self.btn_analizar.config(text="Re-analizar con IA")
         self._refrescar()
+        self._actualizar_memoria()
         if dato.notas:  # type: ignore[attr-defined]
             messagebox.showinfo(
                 "Observaciones de la IA", dato.notas, parent=self)  # type: ignore[attr-defined]
 
-    def _pedir_instrucciones(self) -> str | None:
-        """Diálogo modal para una pista opcional a la IA antes de re-analizar.
-        Devuelve el texto escrito (puede ser '') o None si el usuario cancela."""
+    def _pedir_instrucciones(self, texto_inicial: str = "") -> str | None:
+        """Diálogo modal para las instrucciones de la IA antes de re-analizar.
+        Llega con lo aprendido para este proveedor ya escrito (si hay).
+        Devuelve el texto (puede ser '') o None si el usuario cancela."""
         dlg = tk.Toplevel(self)
         dlg.title("Re-analizar con IA")
         dlg.transient(self.winfo_toplevel())
         dlg.resizable(False, False)
-        ttk.Label(dlg, text="Instrucción para la IA (opcional):",
+        ttk.Label(dlg, text="Instrucciones para la IA:",
                   font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=12, pady=(12, 2))
         ttk.Label(
             dlg, foreground="#666", justify="left",
-            text="Si la factura tiene un formato difícil, escribe una pista.\n"
+            text="Explícale cómo interpretar esta factura.\n"
                  "Ejemplos: 'el monto real está en la última columna',\n"
                  "'los precios ya incluyen IVA', 'ignora la fila de flete'.",
         ).pack(anchor="w", padx=12, pady=(0, 6))
-        caja = tk.Text(dlg, height=4, width=54, wrap="word")
+        caja = tk.Text(dlg, height=5, width=54, wrap="word")
         caja.pack(padx=12)
+        if texto_inicial:
+            caja.insert("1.0", texto_inicial)
+        ttk.Label(
+            dlg, foreground="#1a7a3a", justify="left", wraplength=390,
+            text=f"Estas instrucciones se guardan para {self.fila.proveedor} y se "
+                 f"aplicarán automáticamente a sus próximas facturas. "
+                 f"Si dejas el cuadro vacío, se borra lo aprendido.",
+        ).pack(anchor="w", padx=12, pady=(8, 0))
         resultado: dict[str, str] = {}
         botones = ttk.Frame(dlg, padding=12)
         botones.pack(fill="x")
