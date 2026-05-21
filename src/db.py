@@ -13,6 +13,7 @@ from typing import Iterator
 
 from classifier import DatosFactura, DetalleFactura
 from precios import precio_sugerido
+from validacion import validar_datos_factura
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS facturas (
@@ -235,6 +236,17 @@ class Database:
         texto_completo: str,
     ) -> int:
         """Inserta una factura. Devuelve el id. Si la ruta ya existe, no hace nada."""
+        validacion = validar_datos_factura(datos)
+        advertencias_bloqueantes = [
+            adv for adv in validacion.advertencias
+            if "Monto CLP sospechosamente bajo" in adv
+        ]
+        if not validacion.ok or advertencias_bloqueantes:
+            raise ValueError(
+                "Datos críticos inválidos; no se registró la factura: "
+                + " | ".join([*validacion.errores, *advertencias_bloqueantes])
+            )
+        datos = validacion.datos
         fecha_iso = datetime.strptime(datos.fecha, "%d-%m-%Y").strftime("%Y-%m-%d")
         with self._conexion() as cnx:
             cur = cnx.execute(

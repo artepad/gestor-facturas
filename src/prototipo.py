@@ -38,16 +38,24 @@ HERRAMIENTA_FACTURA = {
                 ),
             },
             "fecha": {
-                "type": "string",
-                "description": "Fecha de emisión en formato DD-MM-YYYY. Null si no es legible.",
+                "type": ["string", "null"],
+                "description": (
+                    "Fecha de EMISIÓN de la factura en formato DD-MM-YYYY. "
+                    "No uses fecha de vencimiento, recepción, timbre electrónico, "
+                    "resolución del SII, autorización, acuse ni despacho."
+                ),
             },
             "numero_factura": {
                 "type": ["string", "null"],
                 "description": "Número o folio de la factura. Null si no es legible.",
             },
             "total": {
-                "type": ["number", "null"],
-                "description": "Monto total a pagar, solo número sin símbolos ni puntos de miles.",
+                "type": ["string", "null"],
+                "description": (
+                    "Monto total a pagar. Para CLP conserva el texto del monto tal como aparece "
+                    "en la factura, incluyendo puntos de miles si existen (ej: '221.713'). "
+                    "No lo conviertas a decimal, no quites ceros y no redondees."
+                ),
             },
             "moneda": {
                 "type": ["string", "null"],
@@ -71,6 +79,10 @@ PROMPT = (
     "Te entrego el texto extraído del PDF (puede contener errores de OCR) y la imagen "
     "de la primera página de la factura.\n\n"
     "Identifica los datos del PROVEEDOR que emite la factura (NO del cliente que la recibe). "
+    "La fecha debe ser la fecha de emisión: no la confundas con vencimiento, recepción, "
+    "resolución/autorización SII, timbre electrónico ni vencimiento del CAF. "
+    "En montos CLP, el punto separa miles: '221.713' significa 221713 pesos. "
+    "Si ves '12.800' o '178.510', responde exactamente ese texto, no 12.8 ni 178.51. "
     "Usa la imagen como fuente de verdad si el texto extraído es confuso o está vacío.\n\n"
     "Devuelve los datos llamando a la herramienta `registrar_factura`. "
     "Si algún campo no se puede leer con certeza, devuelve null en ese campo y "

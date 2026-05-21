@@ -34,6 +34,7 @@ from db import Database
 from estado import Estado
 from extractor import extraer
 from organizer import archivar, mover_a_errores, mover_a_reemplazadas, mover_a_revisar
+from validacion import validar_datos_factura
 from watcher import ManejadorFacturas, vigilar
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -49,6 +50,53 @@ def _resumir(datos: DatosFactura) -> str:
     if datos.total is not None and datos.moneda:
         partes.append(f"${datos.total:,.0f} {datos.moneda}")
     return " | ".join(partes)
+
+
+def _tiene_fecha_futura(errores: tuple[str, ...]) -> bool:
+    return any("Fecha de emisión futura" in error for error in errores)
+
+
+def _tiene_total_sospechoso(advertencias: tuple[str, ...]) -> bool:
+    return any("Monto CLP sospechosamente bajo" in adv for adv in advertencias)
+
+
+def _verificar_total_sospechoso(
+    clasificador: Clasificador,
+    contenido,
+    datos: DatosFactura,
+):
+    validacion = validar_datos_factura(datos)
+    datos = validacion.datos
+    if not _tiene_total_sospechoso(validacion.advertencias):
+        return validacion
+
+    try:
+        total, confianza_total, evidencia = clasificador.verificar_total(
+            contenido, total_previo=datos.total
+        )
+        if total and confianza_total >= 0.75:
+            notas = datos.notas or ""
+            extra = (
+                "Total corregido por segunda lectura enfocada: "
+                f"{total} (confianza {confianza_total:.2f}"
+                + (f", evidencia: {evidencia}" if evidencia else "")
+                + ")."
+            )
+            datos = replace(datos, total=total, notas=f"{notas}\n{extra}".strip())
+            validacion = validar_datos_factura(datos)
+            print(f"[procesar] Total corregido por verificación: {total}", flush=True)
+            return validacion
+    except Exception as exc:
+        print(f"[procesar] No se pudo verificar total sospechoso: {exc}", flush=True)
+
+    datos = replace(
+        datos,
+        notas=(
+            (datos.notas or "")
+            + "\nValidación local: total CLP sospechosamente bajo y no se pudo verificar."
+        ).strip(),
+    )
+    return replace(validacion, datos=datos, errores=(*validacion.errores, *validacion.advertencias))
 
 
 def crear_procesador(
@@ -84,6 +132,51 @@ def crear_procesador(
             _contar("error")
             print(f"[procesar] ERROR → {destino}", flush=True)
             return
+
+        validacion = _verificar_total_sospechoso(clasificador, contenido, datos)
+        datos = validacion.datos
+        if not validacion.ok and _tiene_fecha_futura(validacion.errores):
+            try:
+                fecha, confianza_fecha, evidencia = clasificador.verificar_fecha(
+                    contenido, fecha_previa=datos.fecha
+                )
+                if fecha and confianza_fecha >= 0.75:
+                    notas = datos.notas or ""
+                    extra = (
+                        "Fecha corregida por segunda lectura enfocada: "
+                        f"{fecha} (confianza {confianza_fecha:.2f}"
+                        + (f", evidencia: {evidencia}" if evidencia else "")
+                        + ")."
+                    )
+                    datos = replace(datos, fecha=fecha, notas=f"{notas}\n{extra}".strip())
+                    validacion = _verificar_total_sospechoso(clasificador, contenido, datos)
+                    datos = validacion.datos
+                    print(
+                        f"[procesar] Fecha corregida por verificación: {fecha}",
+                        flush=True,
+                    )
+            except Exception as exc:
+                print(f"[procesar] No se pudo verificar fecha futura: {exc}", flush=True)
+
+        if not validacion.ok:
+            motivo = (
+                "Datos críticos inválidos detectados antes de archivar.\n"
+                "La factura se deja para revisión manual para evitar archivarla "
+                "con fecha o monto incorrecto.\n\n"
+                "Problemas:\n"
+                + "\n".join(f"- {e}" for e in validacion.errores)
+                + f"\n\nDatos extraídos:\n{json.dumps(datos.__dict__, indent=2, ensure_ascii=False)}"
+            )
+            destino = mover_a_revisar(ruta_pdf, carpeta_revisar, motivo)
+            _contar("revisar")
+            print(f"[procesar] → REVISAR (validación crítica): {destino}", flush=True)
+            return
+        if validacion.advertencias:
+            print(
+                "[procesar] Advertencia de validación: "
+                + " | ".join(validacion.advertencias),
+                flush=True,
+            )
 
         canonico = db.resolver_proveedor(datos.proveedor, datos.rut_emisor)
         if canonico != datos.proveedor:
@@ -249,6 +342,29 @@ def modo_reindexar(config: dict, clasificador: Clasificador, db: Database) -> No
         try:
             contenido = extraer(pdf)
             datos = clasificador.clasificar(contenido)
+            validacion = _verificar_total_sospechoso(clasificador, contenido, datos)
+            datos = validacion.datos
+            if not validacion.ok and _tiene_fecha_futura(validacion.errores):
+                try:
+                    fecha, confianza_fecha, evidencia = clasificador.verificar_fecha(
+                        contenido, fecha_previa=datos.fecha
+                    )
+                    if fecha and confianza_fecha >= 0.75:
+                        notas = datos.notas or ""
+                        extra = (
+                            "Fecha corregida por segunda lectura enfocada: "
+                            f"{fecha} (confianza {confianza_fecha:.2f}"
+                            + (f", evidencia: {evidencia}" if evidencia else "")
+                            + ")."
+                        )
+                        datos = replace(datos, fecha=fecha, notas=f"{notas}\n{extra}".strip())
+                        validacion = _verificar_total_sospechoso(clasificador, contenido, datos)
+                        datos = validacion.datos
+                except Exception as exc:
+                    print(f"  ! No se pudo verificar fecha futura: {exc}", flush=True)
+            if not validacion.ok:
+                print("  ✗ REVISAR: " + " | ".join(validacion.errores), flush=True)
+                continue
             canonico = db.resolver_proveedor(datos.proveedor, datos.rut_emisor)
             datos = replace(datos, proveedor=canonico)
             db.registrar_factura(datos, pdf, contenido.texto)

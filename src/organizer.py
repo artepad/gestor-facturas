@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from classifier import DatosFactura
@@ -27,7 +27,14 @@ def sanitizar(nombre: str) -> str:
 
 def parsear_fecha(fecha_str: str) -> datetime:
     """Acepta DD-MM-YYYY (formato esperado) y devuelve datetime."""
-    return datetime.strptime(fecha_str, "%d-%m-%Y")
+    fecha = datetime.strptime(fecha_str, "%d-%m-%Y")
+    limite_futuro = datetime.now() + timedelta(days=1)
+    if fecha.date() > limite_futuro.date():
+        raise ValueError(
+            f"Fecha de emisión futura no permitida: {fecha:%d-%m-%Y}. "
+            f"Revisar antes de archivar."
+        )
+    return fecha
 
 
 def ruta_destino(raiz_archivo: Path, datos: DatosFactura) -> Path:

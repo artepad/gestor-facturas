@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from anthropic import Anthropic
@@ -43,16 +44,26 @@ HERRAMIENTA_FACTURA = {
                 ),
             },
             "fecha": {
-                "type": "string",
-                "description": "Fecha de emisión en formato DD-MM-YYYY. Null si no es legible.",
+                "type": ["string", "null"],
+                "description": (
+                    "Fecha de EMISIÓN de la factura en formato DD-MM-YYYY. "
+                    "No uses fecha de vencimiento, recepción, timbre electrónico, "
+                    "resolución del SII, autorización, acuse ni despacho. "
+                    "Null si no es legible."
+                ),
             },
             "numero_factura": {
                 "type": ["string", "null"],
                 "description": "Número o folio de la factura. Null si no es legible.",
             },
             "total": {
-                "type": ["number", "null"],
-                "description": "Monto total a pagar, solo número sin símbolos ni puntos de miles.",
+                "type": ["string", "null"],
+                "description": (
+                    "Monto total a pagar. Para CLP conserva el texto del monto tal como aparece "
+                    "en la factura, incluyendo puntos de miles si existen (ej: '221.713'). "
+                    "No lo conviertas a decimal, no quites ceros y no redondees. "
+                    "Si ves '178.510', responde exactamente '178.510', no 178.51."
+                ),
             },
             "moneda": {
                 "type": ["string", "null"],
@@ -71,6 +82,64 @@ HERRAMIENTA_FACTURA = {
     },
 }
 
+HERRAMIENTA_FECHA = {
+    "name": "verificar_fecha_emision",
+    "description": "Verifica la fecha de emisión visible en una factura chilena.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "fecha": {
+                "type": ["string", "null"],
+                "description": (
+                    "Fecha de EMISIÓN en formato DD-MM-YYYY. No uses fecha de "
+                    "vencimiento, referencia, recepción, timbre, resolución ni CAF."
+                ),
+            },
+            "evidencia": {
+                "type": ["string", "null"],
+                "description": (
+                    "Texto o zona visible que respalda la fecha, por ejemplo "
+                    "'FECHA EMISION: 27-02-2026'."
+                ),
+            },
+            "confianza": {
+                "type": "number",
+                "description": "Certeza de 0.0 a 1.0 solo para la fecha.",
+            },
+        },
+        "required": ["fecha", "confianza"],
+    },
+}
+
+HERRAMIENTA_TOTAL = {
+    "name": "verificar_total_factura",
+    "description": "Verifica el monto total visible en una factura chilena.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "total": {
+                "type": ["string", "null"],
+                "description": (
+                    "Monto TOTAL final tal como aparece en la factura. Conserva puntos "
+                    "de miles y ceros finales. Ej: '12.800' o '178.510'."
+                ),
+            },
+            "evidencia": {
+                "type": ["string", "null"],
+                "description": (
+                    "Texto o zona visible que respalda el total, por ejemplo "
+                    "'TOTAL FACTURA 12.800'."
+                ),
+            },
+            "confianza": {
+                "type": "number",
+                "description": "Certeza de 0.0 a 1.0 solo para el total.",
+            },
+        },
+        "required": ["total", "confianza"],
+    },
+}
+
 PROMPT = (
     "Eres un asistente experto en extraer datos de facturas comerciales chilenas. "
     "Te entrego el texto extraído del PDF (puede contener errores de OCR) y la imagen "
@@ -82,10 +151,44 @@ PROMPT = (
     "El RUT del emisor es el dato MÁS importante: es lo que permite identificar a la "
     "empresa de forma única aunque la marca aparezca escrita de distintas maneras. "
     "Léelo con cuidado dígito por dígito.\n\n"
+    "La fecha debe ser la FECHA DE EMISIÓN de la factura. No confundas esa fecha con "
+    "fechas de vencimiento, recepción, despacho, resolución/autorización SII, timbre "
+    "electrónico, acuse de recibo ni vencimiento del CAF. Si una fecha parece estar en "
+    "el futuro respecto de la fecha actual indicada por el sistema, no la uses como "
+    "fecha de emisión salvo que el documento diga claramente que lo es.\n\n"
+    "Para montos en pesos chilenos, el punto normalmente separa miles y la coma separa "
+    "decimales. Por ejemplo, '221.713' son doscientos veintiún mil setecientos trece "
+    "pesos, no 221,713. Conserva el total como texto exacto si aparece con separadores. "
+    "Si el total dice '12.800' o '178.510', responde exactamente ese texto; no respondas "
+    "12.8, 178.51, 13 ni 179.\n\n"
     "Usa la imagen como fuente de verdad si el texto extraído es confuso o está vacío. "
     "Devuelve los datos llamando a la herramienta `registrar_factura`. "
     "Si algún campo no se puede leer con certeza, devuelve null en ese campo y "
     "menciónalo en `notas`. La confianza debe reflejar honestamente qué tan seguro estás."
+)
+
+PROMPT_FECHA = (
+    "Eres un verificador estricto de fechas en facturas chilenas escaneadas. "
+    "Tu única tarea es leer la FECHA DE EMISIÓN visible en la factura.\n\n"
+    "No uses fecha de vencimiento, referencia, recepción, despacho, resolución SII, "
+    "timbre electrónico, CAF, acuse, orden de compra ni fecha del archivo. "
+    "Si hay varias fechas, elige solamente la que esté rotulada como emisión, "
+    "emisión factura, fecha factura o equivalente.\n\n"
+    "Si una lectura previa aparece como futura respecto de la fecha actual indicada, "
+    "sospecha de error de lectura del año y vuelve a mirar dígito por dígito en la imagen. "
+    "Devuelve la respuesta llamando a `verificar_fecha_emision`."
+)
+
+PROMPT_TOTAL = (
+    "Eres un verificador estricto de montos en facturas chilenas escaneadas. "
+    "Tu única tarea es leer el monto TOTAL FINAL de la factura.\n\n"
+    "En Chile, el punto separa miles en pesos: '12.800' significa doce mil ochocientos "
+    "pesos, y '178.510' significa ciento setenta y ocho mil quinientos diez pesos. "
+    "No interpretes el punto como decimal, no redondees y no quites ceros finales. "
+    "Devuelve el total como texto exactamente como aparece en la factura.\n\n"
+    "No uses subtotal, neto, IVA, descuentos, retenciones, total unidades ni valores "
+    "de líneas. Si hay varios montos, elige el rotulado TOTAL, TOTAL FACTURA o "
+    "monto final equivalente. Devuelve la respuesta llamando a `verificar_total_factura`."
 )
 
 
@@ -218,12 +321,12 @@ class DetalleFactura:
 @dataclass(frozen=True)
 class DatosFactura:
     proveedor: str
-    fecha: str
+    fecha: str | None
     confianza: float
     razon_social: str | None = None
     rut_emisor: str | None = None
     numero_factura: str | None = None
-    total: float | None = None
+    total: float | str | None = None
     moneda: str | None = None
     notas: str | None = None
 
@@ -248,6 +351,7 @@ class Clasificador:
         self.cliente = cliente or Anthropic()
 
     def clasificar(self, contenido: ContenidoPDF) -> DatosFactura:
+        hoy = date.today().strftime("%d-%m-%Y")
         contenido_usuario = [
             {
                 "type": "image",
@@ -259,7 +363,10 @@ class Clasificador:
             },
             {
                 "type": "text",
-                "text": f"Texto extraído del PDF (puede tener errores):\n\n{contenido.texto[:8000]}",
+                "text": (
+                    f"Fecha actual del sistema: {hoy}.\n\n"
+                    f"Texto extraído del PDF (puede tener errores):\n\n{contenido.texto[:8000]}"
+                ),
             },
         ]
 
@@ -275,6 +382,110 @@ class Clasificador:
         for bloque in respuesta.content:
             if bloque.type == "tool_use" and bloque.name == "registrar_factura":
                 return DatosFactura.desde_dict(bloque.input)
+
+        raise RuntimeError(f"El modelo no devolvió tool_use. Respuesta: {respuesta}")
+
+    def verificar_fecha(
+        self,
+        contenido: ContenidoPDF,
+        *,
+        fecha_previa: str | None = None,
+    ) -> tuple[str | None, float, str | None]:
+        """Hace una segunda lectura enfocada solo en la fecha de emisión."""
+        hoy = date.today().strftime("%d-%m-%Y")
+        texto_previo = (
+            f"La lectura previa fue {fecha_previa}. "
+            "Revísala contra la imagen antes de responder.\n\n"
+            if fecha_previa
+            else ""
+        )
+        contenido_usuario = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": contenido.imagen_b64,
+                },
+            },
+            {
+                "type": "text",
+                "text": (
+                    f"Fecha actual del sistema: {hoy}.\n\n"
+                    f"{texto_previo}"
+                    f"Texto extraído del PDF (puede tener errores):\n\n{contenido.texto[:8000]}"
+                ),
+            },
+        ]
+
+        respuesta = self.cliente.messages.create(
+            model=self.modelo,
+            max_tokens=512,
+            system=PROMPT_FECHA,
+            tools=[HERRAMIENTA_FECHA],
+            tool_choice={"type": "tool", "name": "verificar_fecha_emision"},
+            messages=[{"role": "user", "content": contenido_usuario}],
+        )
+
+        for bloque in respuesta.content:
+            if bloque.type == "tool_use" and bloque.name == "verificar_fecha_emision":
+                entrada = bloque.input
+                return (
+                    entrada.get("fecha"),
+                    float(entrada.get("confianza", 0.0)),
+                    entrada.get("evidencia"),
+                )
+
+        raise RuntimeError(f"El modelo no devolvió tool_use. Respuesta: {respuesta}")
+
+    def verificar_total(
+        self,
+        contenido: ContenidoPDF,
+        *,
+        total_previo: float | str | None = None,
+    ) -> tuple[str | None, float, str | None]:
+        """Hace una segunda lectura enfocada solo en el total final."""
+        texto_previo = (
+            f"La lectura previa fue {total_previo}. "
+            "Si parece menor a mil pesos, sospecha que se interpretó mal el punto de miles.\n\n"
+            if total_previo is not None
+            else ""
+        )
+        contenido_usuario = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": contenido.imagen_b64,
+                },
+            },
+            {
+                "type": "text",
+                "text": (
+                    f"{texto_previo}"
+                    f"Texto extraído del PDF (puede tener errores):\n\n{contenido.texto[:8000]}"
+                ),
+            },
+        ]
+
+        respuesta = self.cliente.messages.create(
+            model=self.modelo,
+            max_tokens=512,
+            system=PROMPT_TOTAL,
+            tools=[HERRAMIENTA_TOTAL],
+            tool_choice={"type": "tool", "name": "verificar_total_factura"},
+            messages=[{"role": "user", "content": contenido_usuario}],
+        )
+
+        for bloque in respuesta.content:
+            if bloque.type == "tool_use" and bloque.name == "verificar_total_factura":
+                entrada = bloque.input
+                return (
+                    entrada.get("total"),
+                    float(entrada.get("confianza", 0.0)),
+                    entrada.get("evidencia"),
+                )
 
         raise RuntimeError(f"El modelo no devolvió tool_use. Respuesta: {respuesta}")
 
