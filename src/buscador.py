@@ -36,8 +36,9 @@ def _fecha_dmy(fecha_iso: str) -> str:
 
 
 class Buscador:
-    _ANCHO = 900
-    _ALTO = 690
+    _TITULO = "Administrador de Facturas"
+    _ANCHO = 1080
+    _ALTO = 828
     # Íconos de la columna Acciones (por ahora solo visuales)
     _ICONO_VER = "🔍"
     _ICONO_EDITAR = "📝"
@@ -49,9 +50,11 @@ class Buscador:
         self.filas: list = []
         self._pantalla_completa = False
         self.ventana = tk.Tk()
-        self.ventana.title("Buscador de Facturas")
-        self.ventana.minsize(780, 520)
-        estilos.aplicar_tema(self.ventana)
+        self.ventana.title(self._TITULO)
+        self.ventana.minsize(936, 624)
+        self.style = estilos.aplicar_tema(self.ventana)
+        self.style.configure("App.Treeview", rowheight=36)
+        self.style.configure("App.Treeview.Heading", padding=8)
         self._centrar()
         self._construir_ui()
         self._refrescar_proveedores()
@@ -69,12 +72,14 @@ class Buscador:
     # --- Construcción de la interfaz ---
 
     def _construir_ui(self) -> None:
-        estilos.cabecera(self.ventana, "Buscador de Facturas")
-        estilos.pie(self.ventana, "Gestor de Facturas")
+        estilos.cabecera(
+            self.ventana, self._TITULO,
+            alto=84, franja=6, fuente_titulo=("Segoe UI", 24, "bold"))
+        estilos.pie(self.ventana, "Gestor de Facturas", alto=46, franja=6)
         self._construir_barra_inferior()
 
         cont = tk.Frame(self.ventana, bg=estilos.FONDO)
-        cont.pack(fill="both", expand=True, padx=24, pady=(14, 8))
+        cont.pack(fill="both", expand=True, padx=29, pady=(17, 10))
         self._construir_filtros(cont)
         self._construir_tabla(cont)
 
@@ -87,14 +92,14 @@ class Buscador:
         fila1.pack(fill="x")
         tk.Label(fila1, text="Búsqueda libre:", font=estilos.F_BODY,
                  bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
-        self.entrada_texto = estilos.entrada(fila1, width=26)
-        self.entrada_texto.pack(side="left", padx=(8, 16))
+        self.entrada_texto = estilos.entrada(fila1, width=31)
+        self.entrada_texto.pack(side="left", padx=(10, 19))
         self.entrada_texto.bind("<Return>", lambda _e: self.buscar())
 
         tk.Label(fila1, text="Proveedor:", font=estilos.F_BODY,
                  bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
-        self.combo_proveedor = ttk.Combobox(fila1, width=18, state="readonly")
-        self.combo_proveedor.pack(side="left", padx=(8, 16))
+        self.combo_proveedor = ttk.Combobox(fila1, width=22, state="readonly")
+        self.combo_proveedor.pack(side="left", padx=(10, 19))
         self.combo_proveedor.bind("<<ComboboxSelected>>", lambda _e: self.buscar())
 
         self.usar_fecha = tk.BooleanVar(value=False)
@@ -110,23 +115,23 @@ class Buscador:
         tk.Label(self.marco_fechas, text="Desde:", font=estilos.F_BODY,
                  bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
         self.fecha_desde = self._crear_calendario(self.marco_fechas)
-        self.fecha_desde.pack(side="left", padx=(6, 18))
+        self.fecha_desde.pack(side="left", padx=(7, 22))
         tk.Label(self.marco_fechas, text="Hasta:", font=estilos.F_BODY,
                  bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
         self.fecha_hasta = self._crear_calendario(self.marco_fechas)
-        self.fecha_hasta.pack(side="left", padx=6)
+        self.fecha_hasta.pack(side="left", padx=7)
 
         # Fila de botones
         self.fila_botones = tk.Frame(filtros, bg=estilos.FONDO)
-        self.fila_botones.pack(fill="x", pady=(12, 2))
+        self.fila_botones.pack(fill="x", pady=(14, 2))
         estilos.boton(self.fila_botones, "Buscar", self.buscar, "azul").pack(side="left")
         estilos.boton(self.fila_botones, "Limpiar filtros", self.limpiar,
-                      "gris").pack(side="left", padx=8)
+                      "gris").pack(side="left", padx=10)
 
     def _crear_calendario(self, parent: tk.Misc) -> DateEntry:
         """Campo de fecha con calendario visual desplegable."""
         cal = DateEntry(
-            parent, width=11, date_pattern="yyyy-mm-dd", locale="es_CL",
+            parent, width=13, date_pattern="yyyy-mm-dd", locale="es_CL",
             font=estilos.F_BODY, justify="center", borderwidth=2,
             background=estilos.HEADER_BG, foreground="white",
             headersbackground=estilos.HEADER_BG, headersforeground="white",
@@ -139,20 +144,20 @@ class Buscador:
 
     def _construir_tabla(self, parent: tk.Misc) -> None:
         marco = tk.Frame(parent, bg=estilos.FONDO)
-        marco.pack(fill="both", expand=True, pady=(14, 0))
+        marco.pack(fill="both", expand=True, pady=(17, 0))
 
         columnas = ("fecha", "proveedor", "numero", "total", "razon_social",
                     "confianza", "acciones")
         self.tabla = ttk.Treeview(marco, columns=columnas, show="headings",
                                   style="App.Treeview")
         encabezados = {
-            "fecha": ("Fecha", 92),
-            "proveedor": ("Proveedor", 128),
-            "numero": ("N° Factura", 98),
-            "total": ("Total", 98),
-            "razon_social": ("Razón Social", 210),
-            "confianza": ("Conf.", 54),
-            "acciones": ("Acciones", 120),
+            "fecha": ("Fecha", 110),
+            "proveedor": ("Proveedor", 154),
+            "numero": ("N° Factura", 118),
+            "total": ("Total", 118),
+            "razon_social": ("Razón Social", 252),
+            "confianza": ("Conf.", 65),
+            "acciones": ("Acciones", 144),
         }
         for col, (titulo, ancho) in encabezados.items():
             self.tabla.heading(col, text=titulo, anchor="center")
@@ -174,22 +179,22 @@ class Buscador:
         self.etiqueta_estado = tk.Label(
             parent, text="", font=estilos.F_SMALL,
             bg=estilos.FONDO, fg=estilos.TEXTO_SEC)
-        self.etiqueta_estado.pack(anchor="w", pady=(8, 0))
+        self.etiqueta_estado.pack(anchor="w", pady=(10, 0))
         tk.Label(parent, text="Doble clic en una fila para abrir el detalle de la factura.",
                  font=estilos.F_HINT, bg=estilos.FONDO,
                  fg=estilos.TEXTO_TENUE).pack(anchor="w")
 
     def _construir_barra_inferior(self) -> None:
-        barra = tk.Frame(self.ventana, bg=estilos.FONDO, height=60)
+        barra = tk.Frame(self.ventana, bg=estilos.FONDO, height=72)
         barra.pack(fill="x", side="bottom")
         barra.pack_propagate(False)
         centro = tk.Frame(barra, bg=estilos.FONDO)
         centro.place(relx=0.5, rely=0.5, anchor="center")
-        estilos.boton(centro, "Cerrar", self._cerrar, "gris").pack(side="left", padx=8)
+        estilos.boton(centro, "Cerrar", self._cerrar, "gris").pack(side="left", padx=10)
         self.btn_pantalla = estilos.boton(
             centro, "Modo pantalla completa",
             self._alternar_pantalla_completa, "verde")
-        self.btn_pantalla.pack(side="left", padx=8)
+        self.btn_pantalla.pack(side="left", padx=10)
 
     # --- Acciones ---
 

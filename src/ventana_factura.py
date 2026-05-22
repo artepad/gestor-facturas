@@ -14,6 +14,7 @@ from tkinter import messagebox, ttk
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 
+import estilos
 from db import Database, FilaFactura
 
 
@@ -42,7 +43,7 @@ def _parsear_numero(texto: str) -> float | None:
     return float(limpio.replace(".", "").replace(",", "."))
 
 
-class VisorPDF(ttk.Frame):
+class VisorPDF(tk.Frame):
     """Muestra todas las páginas de un PDF en un área con scroll y zoom."""
 
     _MARGEN = 12
@@ -51,24 +52,29 @@ class VisorPDF(ttk.Frame):
     _ZOOM_PASO = 0.25
 
     def __init__(self, master: tk.Misc, ruta_pdf: Path) -> None:
-        super().__init__(master)
+        super().__init__(master, bg=estilos.FONDO)
         self.ruta_pdf = ruta_pdf
         self.zoom = 1.3
         self._imagenes: list[ImageTk.PhotoImage] = []  # refs vivas (evita que el GC las borre)
         self.doc: fitz.Document | None = None
 
         # Barra de herramientas (zoom)
-        barra = ttk.Frame(self)
-        barra.pack(fill="x")
-        ttk.Button(barra, text="−", width=3, command=self.alejar).pack(side="left", padx=(2, 0), pady=2)
-        ttk.Button(barra, text="+", width=3, command=self.acercar).pack(side="left", padx=2, pady=2)
-        self.lbl_zoom = ttk.Label(barra, text="")
+        barra = tk.Frame(self, bg=estilos.FONDO)
+        barra.pack(fill="x", pady=(0, 8))
+        estilos.boton(barra, "−", self.alejar, "gris", grande=False).pack(
+            side="left", padx=(0, 6))
+        estilos.boton(barra, "+", self.acercar, "gris", grande=False).pack(
+            side="left", padx=(0, 10))
+        self.lbl_zoom = tk.Label(barra, text="", font=estilos.F_SMALL,
+                                 bg=estilos.FONDO, fg=estilos.TEXTO)
         self.lbl_zoom.pack(side="left", padx=8)
-        ttk.Label(barra, text="(Ctrl + rueda del mouse para hacer zoom donde apuntes)",
-                  foreground="#999").pack(side="left", padx=4)
+        tk.Label(
+            barra, text="Ctrl + rueda para hacer zoom donde apuntes",
+            font=estilos.F_HINT, bg=estilos.FONDO,
+            fg=estilos.TEXTO_TENUE).pack(side="left", padx=4)
 
         # Área de visualización: canvas con scroll vertical
-        cont = ttk.Frame(self)
+        cont = tk.Frame(self, bg=estilos.FONDO)
         cont.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(cont, background="#3c3c3c", highlightthickness=0)
         scroll = ttk.Scrollbar(cont, orient="vertical", command=self.canvas.yview)
@@ -166,7 +172,7 @@ class VisorPDF(ttk.Frame):
             self.doc = None
 
 
-class PanelDetalle(ttk.Frame):
+class PanelDetalle(tk.Frame):
     """Panel derecho: datos de la factura, productos extraídos por IA y el
     precio de venta sugerido de cada uno. Permite corregir los valores a mano."""
 
@@ -182,7 +188,7 @@ class PanelDetalle(ttk.Frame):
     def __init__(
         self, master: tk.Misc, fila: FilaFactura, db: Database, config: dict
     ) -> None:
-        super().__init__(master, padding=12)
+        super().__init__(master, bg=estilos.FONDO, padx=14, pady=14)
         self.fila = fila
         self.db = db
         self.config = config
@@ -193,36 +199,49 @@ class PanelDetalle(ttk.Frame):
         self._productos: dict[int, object] = {}
 
         # --- Información de la factura: todo en una línea, dentro de un contenedor ---
-        info = ttk.LabelFrame(self, text="Información de la factura", padding=8)
-        info.pack(fill="x", pady=(0, 10))
-        ttk.Label(info, text="Proveedor:", foreground="#666").pack(side="left")
-        ttk.Label(info, text=fila.proveedor,
-                  font=("Segoe UI", 9, "bold")).pack(side="left", padx=(4, 18))
-        ttk.Label(info, text="RUT:", foreground="#666").pack(side="left")
-        ttk.Label(info, text=fila.rut_emisor or "—").pack(side="left", padx=(4, 18))
-        ttk.Label(info, text="Fecha:", foreground="#666").pack(side="left")
-        ttk.Label(info, text=fila.fecha).pack(side="left", padx=(4, 0))
+        info = estilos.panel(self, "Información de la factura")
+        info.pack(fill="x", pady=(0, 12))
+        tk.Label(info, text="Proveedor:", font=estilos.F_BODY,
+                 bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(side="left")
+        tk.Label(info, text=fila.proveedor, font=estilos.F_BODY_BOLD,
+                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left", padx=(4, 18))
+        tk.Label(info, text="RUT:", font=estilos.F_BODY,
+                 bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(side="left")
+        tk.Label(info, text=fila.rut_emisor or "—", font=estilos.F_BODY,
+                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left", padx=(4, 18))
+        tk.Label(info, text="Fecha:", font=estilos.F_BODY,
+                 bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(side="left")
+        tk.Label(info, text=fila.fecha, font=estilos.F_BODY,
+                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left", padx=(4, 0))
 
         # --- Encabezado de la sección de productos ---
-        cabecera = ttk.Frame(self)
+        cabecera = tk.Frame(self, bg=estilos.FONDO)
         cabecera.pack(fill="x")
-        ttk.Label(cabecera, text="Productos y precios sugeridos",
-                  font=("Segoe UI", 11, "bold")).pack(side="left")
-        self.btn_analizar = ttk.Button(
-            cabecera, text="Analizar productos con IA", command=self._iniciar_analisis)
+        tk.Label(cabecera, text="Productos y precios sugeridos",
+                 font=estilos.F_H4, bg=estilos.FONDO,
+                 fg=estilos.TEXTO).pack(side="left")
+        self.btn_analizar = estilos.boton(
+            cabecera, "Analizar productos con IA", self._iniciar_analisis,
+            "azul", grande=False)
         self.btn_analizar.pack(side="right")
 
-        self.lbl_estado = ttk.Label(self, text="", foreground="#666", wraplength=430)
+        self.lbl_estado = tk.Label(
+            self, text="", font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=390, justify="left")
         self.lbl_estado.pack(anchor="w", pady=(6, 1))
-        ttk.Label(self, text="Doble clic en una celda para corregir un valor.",
-                  foreground="#999").pack(anchor="w", pady=(0, 1))
-        self.lbl_memoria = ttk.Label(self, text="", foreground="#1a7a3a", wraplength=430)
+        tk.Label(self, text="Doble clic en una celda para corregir un valor.",
+                 font=estilos.F_HINT, bg=estilos.FONDO,
+                 fg=estilos.TEXTO_TENUE).pack(anchor="w", pady=(0, 1))
+        self.lbl_memoria = tk.Label(
+            self, text="", font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.VERDE_OK, wraplength=390, justify="left")
         self.lbl_memoria.pack(anchor="w", pady=(0, 4))
 
         # --- Tabla de productos ---
-        marco = ttk.Frame(self)
+        marco = tk.Frame(self, bg=estilos.FONDO)
         marco.pack(fill="both", expand=True)
-        self.tabla = ttk.Treeview(marco, columns=self._COLUMNAS, show="headings")
+        self.tabla = ttk.Treeview(
+            marco, columns=self._COLUMNAS, show="headings", style="App.Treeview")
         encabezados = {
             "descripcion": ("Producto", 150),
             "cantidad": ("Cant.", 45),
@@ -238,6 +257,8 @@ class PanelDetalle(ttk.Frame):
         self.tabla.column("iva", anchor="center")
         for col in ("precio", "monto", "sugerido"):
             self.tabla.column(col, anchor="e")
+        self.tabla.tag_configure("par", background="white")
+        self.tabla.tag_configure("impar", background="#eef2f6")
         self.tabla.tag_configure("editado", background="#fff6d5")
         scroll = ttk.Scrollbar(marco, orient="vertical", command=self.tabla.yview)
         self.tabla.configure(yscrollcommand=scroll.set)
@@ -275,11 +296,12 @@ class PanelDetalle(ttk.Frame):
         productos = self.db.obtener_productos(self.fila.id)
         self._productos = {p.id: p for p in productos}
         self.tabla.delete(*self.tabla.get_children())
-        for p in productos:
+        for indice, p in enumerate(productos):
+            etiqueta = "par" if indice % 2 == 0 else "impar"
             self.tabla.insert(
                 "", "end", iid=str(p.id),
                 values=self._valores_fila(p),
-                tags=("editado",) if p.editado_manual else (),
+                tags=("editado",) if p.editado_manual else (etiqueta,),
             )
         meta = self.db.obtener_meta_detalle(self.fila.id)
         self.lbl_estado.config(text=self._texto_estado(len(productos), meta))
@@ -366,35 +388,122 @@ class PanelDetalle(ttk.Frame):
         dlg = tk.Toplevel(self)
         dlg.title("Re-analizar con IA")
         dlg.transient(self.winfo_toplevel())
-        dlg.resizable(False, False)
-        ttk.Label(dlg, text="Instrucciones para la IA:",
-                  font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=12, pady=(12, 2))
-        ttk.Label(
-            dlg, foreground="#666", justify="left",
-            text="Explícale cómo interpretar esta factura.\n"
-                 "Ejemplos: 'el monto real está en la última columna',\n"
-                 "'los precios ya incluyen IVA', 'ignora la fila de flete'.",
-        ).pack(anchor="w", padx=12, pady=(0, 6))
-        caja = tk.Text(dlg, height=5, width=54, wrap="word")
-        caja.pack(padx=12)
-        if texto_inicial:
-            caja.insert("1.0", texto_inicial)
-        ttk.Label(
-            dlg, foreground="#1a7a3a", justify="left", wraplength=390,
-            text=f"Estas instrucciones se guardan para {self.fila.proveedor} y se "
-                 f"aplicarán automáticamente a sus próximas facturas. "
-                 f"Si dejas el cuadro vacío, se borra lo aprendido.",
-        ).pack(anchor="w", padx=12, pady=(8, 0))
+        dlg.resizable(True, True)
+        dlg.minsize(920, 680)
+        dlg.configure(bg=estilos.FONDO)
+        estilos.aplicar_tema(dlg)
+
+        ancho, alto = 920, 700
+        padre = self.winfo_toplevel()
+        padre.update_idletasks()
+        x = padre.winfo_rootx() + (padre.winfo_width() - ancho) // 2
+        y = padre.winfo_rooty() + (padre.winfo_height() - alto) // 2
+        x = max(0, min(x, dlg.winfo_screenwidth() - ancho))
+        y = max(0, min(y, dlg.winfo_screenheight() - alto))
+        dlg.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+        estilos.cabecera(
+            dlg, "Re-analizar con IA",
+            "Configuración visual para una lectura más precisa de productos y precios",
+            alto=78, franja=6)
+
         resultado: dict[str, str] = {}
-        botones = ttk.Frame(dlg, padding=12)
-        botones.pack(fill="x")
 
         def aceptar() -> None:
             resultado["valor"] = caja.get("1.0", "end").strip()
             dlg.destroy()
 
-        ttk.Button(botones, text="Analizar", command=aceptar).pack(side="right")
-        ttk.Button(botones, text="Cancelar", command=dlg.destroy).pack(side="right", padx=6)
+        botones = tk.Frame(dlg, bg=estilos.FONDO, height=82)
+        botones.pack(fill="x", side="bottom")
+        botones.pack_propagate(False)
+        tk.Frame(botones, bg=estilos.BORDE, height=2).pack(fill="x", pady=(0, 12))
+        centro = tk.Frame(botones, bg=estilos.FONDO)
+        centro.pack(anchor="center")
+        estilos.boton(centro, "Cancelar", dlg.destroy, "gris").pack(side="left", padx=12)
+        estilos.boton(centro, "Analizar con IA", aceptar, "verde").pack(side="left", padx=12)
+
+        cuerpo = tk.Frame(dlg, bg=estilos.FONDO)
+        cuerpo.pack(fill="both", expand=True, padx=28, pady=(18, 8))
+
+        configuracion = estilos.panel(cuerpo, "Configuración de precios")
+        configuracion.pack(fill="x", pady=(0, 16))
+        configuracion.columnconfigure(0, weight=1)
+        configuracion.columnconfigure(1, weight=1)
+
+        margen_col = tk.Frame(configuracion, bg=estilos.FONDO)
+        margen_col.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        tk.Label(
+            margen_col, text="Margen de ganancia sugerido",
+            font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+            fg=estilos.TEXTO).pack(anchor="w")
+        tk.Label(
+            margen_col, text="Porcentaje base para proyectar precios de venta.",
+            font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=330,
+            justify="left").pack(anchor="w", pady=(4, 10))
+        margen_var = tk.StringVar(value="35%")
+        ttk.Combobox(
+            margen_col, textvariable=margen_var,
+            values=("30%", "35%", "40%", "45%", "50%"),
+            state="normal", width=12, font=estilos.F_BODY,
+            justify="center").pack(anchor="w")
+        tk.Label(
+            margen_col,
+            text="Puedes escribir un porcentaje personalizado si el proveedor requiere otro margen.",
+            font=estilos.F_HINT, bg=estilos.FONDO,
+            fg=estilos.TEXTO_TENUE, wraplength=330,
+            justify="left").pack(anchor="w", pady=(8, 0))
+
+        iva_col = tk.Frame(configuracion, bg=estilos.FONDO)
+        iva_col.grid(row=0, column=1, sticky="nsew", padx=(18, 0))
+        tk.Label(
+            iva_col, text="Detalle de IVA",
+            font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+            fg=estilos.TEXTO).pack(anchor="w")
+        tk.Label(
+            iva_col,
+            text="Indica cómo vienen los valores del detalle para orientar el análisis.",
+            font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=330,
+            justify="left").pack(anchor="w", pady=(4, 10))
+        incluye_iva = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            iva_col, text="Los valores del detalle incluyen IVA",
+            variable=incluye_iva, font=estilos.F_BODY_BOLD,
+            bg=estilos.FONDO, fg=estilos.TEXTO,
+            activebackground=estilos.FONDO, activeforeground=estilos.TEXTO,
+            selectcolor="white", cursor="hand2").pack(anchor="w")
+        tk.Label(
+            iva_col,
+            text="Por ahora es una guía visual y no modifica el cálculo real.",
+            font=estilos.F_HINT, bg=estilos.FONDO,
+            fg=estilos.TEXTO_TENUE, wraplength=330,
+            justify="left").pack(anchor="w", pady=(6, 0))
+
+        instrucciones_panel = estilos.panel(cuerpo, "Instrucciones para la IA")
+        instrucciones_panel.pack(fill="both", expand=True)
+        tk.Label(
+            instrucciones_panel,
+            text="Describe columnas especiales, descuentos, filas que ignorar o reglas del proveedor.",
+            font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=330,
+            justify="left").pack(anchor="w", pady=(0, 8))
+        caja = tk.Text(
+            instrucciones_panel, height=10, wrap="word", font=estilos.F_BODY,
+            bg="white", fg=estilos.TEXTO, relief="flat",
+            highlightthickness=2, highlightbackground=estilos.BORDE,
+            highlightcolor=estilos.ENTRY_BORDE_ACTIVO,
+            insertbackground=estilos.TEXTO)
+        caja.pack(fill="both", expand=True)
+        if texto_inicial:
+            caja.insert("1.0", texto_inicial)
+        tk.Label(
+            instrucciones_panel,
+            text=f"Estas instrucciones se guardan para {self.fila.proveedor}. "
+                 "Si dejas el cuadro vacío, se borra lo aprendido.",
+            font=estilos.F_HINT, bg=estilos.FONDO, fg=estilos.VERDE_OK,
+            wraplength=330, justify="left").pack(anchor="w", pady=(8, 0))
+
         caja.focus_set()
         dlg.grab_set()
         self.wait_window(dlg)
@@ -484,13 +593,21 @@ class PanelDetalle(ttk.Frame):
 class VentanaFactura(tk.Toplevel):
     """Ventana con el PDF y los datos de una factura, lado a lado."""
 
+    _ANCHO = 1080
+    _ALTO = 828
+
     def __init__(
         self, master: tk.Misc, fila: FilaFactura, db: Database, config: dict
     ) -> None:
         super().__init__(master)
-        self.title(f"Factura  ·  {fila.proveedor}  ·  {fila.fecha}")
-        self.geometry("1150x720")
-        self.minsize(700, 450)
+        self._pantalla_completa = False
+        self.title(f"Detalle de Factura · {fila.proveedor} · {fila.fecha}")
+        self.minsize(936, 624)
+        self.configure(bg=estilos.FONDO)
+        self.style = estilos.aplicar_tema(self)
+        self.style.configure("App.Treeview", rowheight=32)
+        self.style.configure("App.Treeview.Heading", padding=7)
+        self._centrar()
 
         ruta = Path(fila.ruta_archivo)
         if not ruta.exists():
@@ -500,7 +617,14 @@ class VentanaFactura(tk.Toplevel):
             self.destroy()
             return
 
-        panel = ttk.PanedWindow(self, orient="horizontal")
+        estilos.cabecera(self, "Detalle de Factura", alto=72, franja=6)
+        estilos.pie(self, "Gestor de Facturas", alto=42, franja=6)
+        self._construir_barra_inferior()
+
+        contenedor = tk.Frame(self, bg=estilos.FONDO)
+        contenedor.pack(fill="both", expand=True, padx=20, pady=(14, 8))
+
+        panel = ttk.PanedWindow(contenedor, orient="horizontal")
         panel.pack(fill="both", expand=True)
 
         self.visor = VisorPDF(panel, ruta)
@@ -510,8 +634,39 @@ class VentanaFactura(tk.Toplevel):
         panel.add(self.panel_detalle, weight=1)
 
         self.protocol("WM_DELETE_WINDOW", self._cerrar)
+        self.bind("<Escape>", lambda _e: self._salir_pantalla_completa())
         # Dividir la ventana 50/50 una vez que ya tiene su tamaño real
         self.after(120, lambda: panel.sashpos(0, self.winfo_width() // 2))
+
+    def _centrar(self) -> None:
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = (sw - self._ANCHO) // 2
+        y = (sh - self._ALTO) // 2
+        self.geometry(f"{self._ANCHO}x{self._ALTO}+{x}+{y}")
+
+    def _construir_barra_inferior(self) -> None:
+        barra = tk.Frame(self, bg=estilos.FONDO, height=62)
+        barra.pack(fill="x", side="bottom")
+        barra.pack_propagate(False)
+        centro = tk.Frame(barra, bg=estilos.FONDO)
+        centro.place(relx=0.5, rely=0.5, anchor="center")
+        estilos.boton(centro, "Cerrar", self._cerrar, "gris").pack(side="left", padx=10)
+        self.btn_pantalla = estilos.boton(
+            centro, "Modo pantalla completa",
+            self._alternar_pantalla_completa, "verde")
+        self.btn_pantalla.pack(side="left", padx=10)
+
+    def _alternar_pantalla_completa(self) -> None:
+        self._pantalla_completa = not self._pantalla_completa
+        self.attributes("-fullscreen", self._pantalla_completa)
+        self.btn_pantalla.config(
+            text="Salir de pantalla completa" if self._pantalla_completa
+            else "Modo pantalla completa")
+
+    def _salir_pantalla_completa(self) -> None:
+        if self._pantalla_completa:
+            self._alternar_pantalla_completa()
 
     def _cerrar(self) -> None:
         self.visor.cerrar()

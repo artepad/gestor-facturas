@@ -63,25 +63,39 @@ def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
     return style
 
 
-def cabecera(parent: tk.Misc, titulo: str, subtitulo: str | None = None) -> tk.Frame:
+def cabecera(
+    parent: tk.Misc,
+    titulo: str,
+    subtitulo: str | None = None,
+    *,
+    alto: int = 70,
+    franja: int = 5,
+    fuente_titulo=F_H2,
+) -> tk.Frame:
     """Franja verde superior + header oscuro con el título centrado."""
-    tk.Frame(parent, bg=ACENTO_VERDE, height=5).pack(fill="x")
-    header = tk.Frame(parent, bg=HEADER_BG, height=70)
+    tk.Frame(parent, bg=ACENTO_VERDE, height=franja).pack(fill="x")
+    header = tk.Frame(parent, bg=HEADER_BG, height=alto)
     header.pack(fill="x")
     header.pack_propagate(False)
     centro = tk.Frame(header, bg=HEADER_BG)
     centro.place(relx=0.5, rely=0.5, anchor="center")
-    tk.Label(centro, text=titulo, font=F_H2, bg=HEADER_BG, fg="white").pack()
+    tk.Label(centro, text=titulo, font=fuente_titulo, bg=HEADER_BG, fg="white").pack()
     if subtitulo:
         tk.Label(centro, text=subtitulo, font=F_BODY, bg=HEADER_BG,
                  fg=SUBTITULO).pack()
     return header
 
 
-def pie(parent: tk.Misc, texto: str) -> tk.Frame:
+def pie(
+    parent: tk.Misc,
+    texto: str,
+    *,
+    alto: int = 38,
+    franja: int = 5,
+) -> tk.Frame:
     """Footer con el nombre del sistema + franja azul inferior."""
-    tk.Frame(parent, bg=ACENTO_AZUL, height=5).pack(fill="x", side="bottom")
-    footer = tk.Frame(parent, bg=FONDO, height=38)
+    tk.Frame(parent, bg=ACENTO_AZUL, height=franja).pack(fill="x", side="bottom")
+    footer = tk.Frame(parent, bg=FONDO, height=alto)
     footer.pack(fill="x", side="bottom")
     footer.pack_propagate(False)
     tk.Frame(footer, bg=BORDE, height=2).pack(fill="x", pady=(8, 6))
