@@ -5,7 +5,9 @@ Uso: py src/buscador.py
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
+import unicodedata
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -14,7 +16,10 @@ from dotenv import load_dotenv
 from tkcalendar import DateEntry
 
 import estilos
+from classifier import DatosFactura
 from db import Database
+from organizer import nombre_archivo, ruta_destino
+from validacion import validar_datos_factura
 from ventana_factura import abrir_ventana_factura
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -35,6 +40,177 @@ def _fecha_dmy(fecha_iso: str) -> str:
     return fecha_iso or ""
 
 
+def _texto_simple(texto: str) -> str:
+    """Texto en minúsculas y sin acentos para detectar advertencias."""
+    normalizado = unicodedata.normalize("NFKD", texto.lower())
+    return "".join(c for c in normalizado if not unicodedata.combining(c))
+
+
+class TooltipTabla:
+    """Tooltip simple para explicar estados dentro de la tabla."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        self.parent = parent
+        self._ventana: tk.Toplevel | None = None
+        self._texto: str | None = None
+
+    def mostrar(self, texto: str, x: int, y: int) -> None:
+        if self._ventana and self._texto == texto:
+            self._ventana.geometry(f"+{x + 14}+{y + 18}")
+            return
+        self.ocultar()
+        self._texto = texto
+        self._ventana = tk.Toplevel(self.parent)
+        self._ventana.wm_overrideredirect(True)
+        self._ventana.configure(bg=estilos.HEADER_BG)
+        tk.Label(
+            self._ventana, text=texto, font=estilos.F_SMALL,
+            bg=estilos.HEADER_BG, fg="white", padx=10, pady=6,
+            justify="left", wraplength=280,
+        ).pack()
+        self._ventana.geometry(f"+{x + 14}+{y + 18}")
+
+    def ocultar(self) -> None:
+        if self._ventana:
+            self._ventana.destroy()
+            self._ventana = None
+        self._texto = None
+
+
+class DialogoEditarFactura(tk.Toplevel):
+    """Ventana modal para corregir los datos principales de una factura."""
+
+    _ANCHO = 720
+    _ALTO = 560
+
+    def __init__(self, master: tk.Misc, fila) -> None:
+        super().__init__(master)
+        self.fila = fila
+        self.resultado: DatosFactura | None = None
+        self.title("Editar Factura")
+        self.transient(master.winfo_toplevel())
+        self.resizable(False, False)
+        self.configure(bg=estilos.FONDO)
+        estilos.aplicar_tema(self)
+        self._centrar()
+
+        estilos.cabecera(
+            self, "Editar Factura",
+            "Corrige los datos principales antes de guardar",
+            alto=78, franja=6)
+        self._construir_barra_inferior()
+
+        cuerpo = tk.Frame(self, bg=estilos.FONDO)
+        cuerpo.pack(fill="both", expand=True, padx=28, pady=(18, 8))
+        panel = estilos.panel(cuerpo, "Datos de la factura")
+        panel.pack(fill="both", expand=True)
+        panel.columnconfigure(1, weight=1)
+        panel.columnconfigure(3, weight=1)
+
+        self.proveedor = self._campo(panel, "Proveedor:", fila.proveedor, 0, 0)
+        self.rut = self._campo(panel, "RUT:", fila.rut_emisor or "", 0, 2)
+        self.razon_social = self._campo(panel, "Razón social:", fila.razon_social or "", 1, 0, colspan=3)
+        self.fecha = self._campo(panel, "Fecha:", _fecha_dmy(fila.fecha), 2, 0)
+        self.numero = self._campo(panel, "N° factura:", fila.numero_factura or "", 2, 2)
+        total = f"{fila.total:,.0f}".replace(",", ".") if fila.total is not None else ""
+        self.total = self._campo(panel, "Total:", total, 3, 0)
+        self.moneda = self._campo(panel, "Moneda:", fila.moneda or "CLP", 3, 2)
+
+        tk.Label(
+            panel, text="Notas:", font=estilos.F_BODY,
+            bg=estilos.FONDO, fg=estilos.TEXTO_SEC,
+        ).grid(row=4, column=0, sticky="nw", padx=(0, 8), pady=(14, 4))
+        self.notas = tk.Text(
+            panel, height=5, wrap="word", font=estilos.F_BODY,
+            bg="white", fg=estilos.TEXTO, relief="flat",
+            highlightthickness=2, highlightbackground=estilos.BORDE,
+            highlightcolor=estilos.ENTRY_BORDE_ACTIVO,
+            insertbackground=estilos.TEXTO)
+        self.notas.grid(row=4, column=1, columnspan=3, sticky="nsew", pady=(12, 4))
+        if fila.notas:
+            self.notas.insert("1.0", fila.notas)
+
+        tk.Label(
+            panel, text="Formato de fecha: DD-MM-YYYY. El total acepta formato chileno, por ejemplo 221.713.",
+            font=estilos.F_HINT, bg=estilos.FONDO, fg=estilos.TEXTO_TENUE,
+        ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(10, 0))
+
+        self.protocol("WM_DELETE_WINDOW", self._cancelar)
+        self.proveedor.focus_set()
+        self.grab_set()
+
+    def _centrar(self) -> None:
+        padre = self.master.winfo_toplevel()
+        padre.update_idletasks()
+        x = padre.winfo_rootx() + (padre.winfo_width() - self._ANCHO) // 2
+        y = padre.winfo_rooty() + (padre.winfo_height() - self._ALTO) // 2
+        x = max(0, min(x, self.winfo_screenwidth() - self._ANCHO))
+        y = max(0, min(y, self.winfo_screenheight() - self._ALTO))
+        self.geometry(f"{self._ANCHO}x{self._ALTO}+{x}+{y}")
+
+    def _campo(
+        self,
+        parent: tk.Misc,
+        etiqueta: str,
+        valor: str,
+        fila: int,
+        columna: int,
+        *,
+        colspan: int = 1,
+    ) -> tk.Entry:
+        tk.Label(
+            parent, text=etiqueta, font=estilos.F_BODY,
+            bg=estilos.FONDO, fg=estilos.TEXTO_SEC,
+        ).grid(row=fila, column=columna, sticky="w", padx=(0, 8), pady=7)
+        entrada = estilos.entrada(parent)
+        entrada.insert(0, valor)
+        entrada.grid(
+            row=fila, column=columna + 1, columnspan=colspan,
+            sticky="ew", padx=(0, 18), pady=7)
+        return entrada
+
+    def _construir_barra_inferior(self) -> None:
+        botones = tk.Frame(self, bg=estilos.FONDO, height=82)
+        botones.pack(fill="x", side="bottom")
+        botones.pack_propagate(False)
+        tk.Frame(botones, bg=estilos.BORDE, height=2).pack(fill="x", pady=(0, 12))
+        centro = tk.Frame(botones, bg=estilos.FONDO)
+        centro.pack(anchor="center")
+        estilos.boton(centro, "Cancelar", self._cancelar, "gris").pack(side="left", padx=12)
+        estilos.boton(centro, "Guardar cambios", self._aceptar, "verde").pack(side="left", padx=12)
+
+    def _aceptar(self) -> None:
+        datos = DatosFactura(
+            proveedor=self.proveedor.get().strip(),
+            fecha=self.fecha.get().strip(),
+            confianza=self.fila.confianza or 1.0,
+            razon_social=self.razon_social.get().strip() or None,
+            rut_emisor=self.rut.get().strip() or None,
+            numero_factura=self.numero.get().strip() or None,
+            total=self.total.get().strip() or None,
+            moneda=self.moneda.get().strip() or "CLP",
+            notas=self.notas.get("1.0", "end").strip() or None,
+        )
+        if not datos.proveedor:
+            messagebox.showwarning("Dato obligatorio", "Ingresa el proveedor.", parent=self)
+            return
+        validacion = validar_datos_factura(datos)
+        if not validacion.ok:
+            messagebox.showwarning(
+                "Datos inválidos", "\n".join(validacion.errores), parent=self)
+            return
+        self.resultado = validacion.datos
+        self.destroy()
+
+    def _cancelar(self) -> None:
+        self.resultado = None
+        self.destroy()
+
+    def mostrar(self) -> DatosFactura | None:
+        self.wait_window()
+        return self.resultado
+
+
 class Buscador:
     _TITULO = "Administrador de Facturas"
     _ANCHO = 1080
@@ -48,8 +224,10 @@ class Buscador:
         self.db = db
         self.config = config
         self.filas: list = []
+        self._puntos_estado: list[tk.Label] = []
         self._pantalla_completa = False
         self.ventana = tk.Tk()
+        self.tooltip = TooltipTabla(self.ventana)
         self.ventana.title(self._TITULO)
         self.ventana.minsize(936, 624)
         self.style = estilos.aplicar_tema(self.ventana)
@@ -147,7 +325,7 @@ class Buscador:
         marco.pack(fill="both", expand=True, pady=(17, 0))
 
         columnas = ("fecha", "proveedor", "numero", "total", "razon_social",
-                    "confianza", "acciones")
+                    "estado", "acciones")
         self.tabla = ttk.Treeview(marco, columns=columnas, show="headings",
                                   style="App.Treeview")
         encabezados = {
@@ -156,24 +334,40 @@ class Buscador:
             "numero": ("N° Factura", 118),
             "total": ("Total", 118),
             "razon_social": ("Razón Social", 252),
-            "confianza": ("Conf.", 65),
+            "estado": ("Estado", 105),
             "acciones": ("Acciones", 144),
         }
         for col, (titulo, ancho) in encabezados.items():
             self.tabla.heading(col, text=titulo, anchor="center")
             self.tabla.column(col, width=ancho, anchor="w", stretch=False)
         self.tabla.column("razon_social", stretch=True)
-        self.tabla.column("confianza", anchor="center")
+        self.tabla.column("estado", anchor="center")
         self.tabla.column("acciones", anchor="center")
 
         # Filas alternadas (efecto cebra) para mejorar la lectura
         self.tabla.tag_configure("par", background="white")
         self.tabla.tag_configure("impar", background="#eef2f6")
 
-        scroll = ttk.Scrollbar(marco, orient="vertical", command=self.tabla.yview)
-        self.tabla.configure(yscrollcommand=scroll.set)
+        scroll = ttk.Scrollbar(marco, orient="vertical")
+
+        def desplazar(*args) -> None:
+            self.tabla.yview(*args)
+            self._programar_puntos_estado()
+
+        def actualizar_scroll(*args) -> None:
+            scroll.set(*args)
+            self._programar_puntos_estado()
+
+        scroll.configure(command=desplazar)
+        self.tabla.configure(yscrollcommand=actualizar_scroll)
         self.tabla.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
+        self.tabla.bind("<ButtonRelease-1>", self._clic_acciones)
+        self.tabla.bind("<Motion>", self._mover_sobre_tabla)
+        self.tabla.bind("<Leave>", lambda _e: self.tooltip.ocultar())
+        self.tabla.bind("<Configure>", lambda _e: self._programar_puntos_estado())
+        self.tabla.bind("<MouseWheel>", lambda _e: self._programar_puntos_estado())
+        self.tabla.bind("<<TreeviewSelect>>", lambda _e: self._programar_puntos_estado())
         self.tabla.bind("<Double-1>", self._abrir_seleccionado)
 
         self.etiqueta_estado = tk.Label(
@@ -247,16 +441,17 @@ class Buscador:
 
         for indice, fila in enumerate(self.filas):
             total = f"${fila.total:,.0f}".replace(",", ".") if fila.total is not None else ""
-            conf = f"{fila.confianza:.2f}" if fila.confianza is not None else ""
+            estado, _tooltip, _color = self._estado_factura(fila)
             etiqueta = "par" if indice % 2 == 0 else "impar"
             iconos = f"{self._ICONO_VER}    {self._ICONO_EDITAR}    {self._ICONO_ELIMINAR}"
             self.tabla.insert("", "end", tags=(etiqueta,), values=(
                 _fecha_dmy(fila.fecha), fila.proveedor, fila.numero_factura or "",
-                total, fila.razon_social or "", conf, iconos,
+                total, fila.razon_social or "", estado, iconos,
             ))
 
         self.etiqueta_estado.config(text=f"{len(self.filas)} resultado(s)")
         self._refrescar_proveedores()
+        self._programar_puntos_estado()
 
     def limpiar(self) -> None:
         self.entrada_texto.delete(0, "end")
@@ -270,6 +465,263 @@ class Buscador:
             return
         indice = self.tabla.index(seleccion[0])
         abrir_ventana_factura(self.ventana, self.filas[indice], self.db, self.config)
+
+    def _estado_factura(self, fila) -> tuple[str, str, str]:
+        """Devuelve etiqueta visual y explicación del estado de una factura."""
+        umbrales = self.config.get("clasificacion", {})
+        umbral_revision = float(umbrales.get("umbral_confianza", 0.70))
+        umbral_error = float(umbrales.get("umbral_escaneo_defectuoso", 0.40))
+        confianza = fila.confianza
+        tiene_advertencias = self._nota_requiere_revision(fila.notas)
+
+        if confianza is not None and confianza < umbral_error:
+            return (
+                "   Error",
+                "Rojo: hay un problema detectado. La confianza de lectura es muy baja "
+                "y conviene revisar la factura antes de usar sus datos.",
+                "#dc3545",
+            )
+        if confianza is None:
+            return (
+                "   Revisar",
+                "Amarillo: requiere revisión. Esta factura no tiene confianza de "
+                "lectura registrada.",
+                "#f1c40f",
+            )
+        if confianza < umbral_revision or tiene_advertencias:
+            return (
+                "   Revisar",
+                "Amarillo: requiere revisión o existe una advertencia registrada. "
+                f"Confianza de lectura: {confianza:.2f}.",
+                "#f1c40f",
+            )
+        return (
+            "   Correcto",
+            "Verde: todo correcto. La factura fue leída con buena confianza "
+            f"({confianza:.2f}) y no tiene advertencias registradas.",
+            "#27ae60",
+        )
+
+    def _programar_puntos_estado(self) -> None:
+        self.ventana.after_idle(self._dibujar_puntos_estado)
+
+    def _dibujar_puntos_estado(self) -> None:
+        for punto in self._puntos_estado:
+            punto.destroy()
+        self._puntos_estado.clear()
+
+        seleccion = set(self.tabla.selection())
+        for item_id in self.tabla.get_children():
+            bbox = self.tabla.bbox(item_id, "estado")
+            if not bbox:
+                continue
+            indice = self.tabla.index(item_id)
+            if not 0 <= indice < len(self.filas):
+                continue
+            _estado, tooltip, color = self._estado_factura(self.filas[indice])
+            x, y, _ancho, alto = bbox
+            fondo = estilos.ACENTO_AZUL if item_id in seleccion else (
+                "white" if indice % 2 == 0 else "#eef2f6")
+            punto = tk.Label(
+                self.tabla, text="●", font=("Segoe UI", 13, "bold"),
+                fg=color, bg=fondo, bd=0)
+            punto.place(x=x + 8, y=y + max((alto - 20) // 2, 0), width=18, height=20)
+            punto.bind(
+                "<Motion>",
+                lambda e, texto=tooltip: self.tooltip.mostrar(texto, e.x_root, e.y_root))
+            punto.bind("<Leave>", lambda _e: self.tooltip.ocultar())
+            self._puntos_estado.append(punto)
+
+    @staticmethod
+    def _nota_requiere_revision(notas: str | None) -> bool:
+        """Distingue notas descriptivas normales de advertencias reales."""
+        if not notas:
+            return False
+        texto = _texto_simple(notas)
+        indicadores = (
+            "validacion local",
+            "revisar",
+            "advertencia",
+            "sospechos",
+            "ilegible",
+            "invalida",
+            "invalido",
+            "error",
+            "problema",
+            "no se pudo",
+            "confianza baja",
+            "baja confianza",
+            "futura",
+            "futuro",
+            "fecha de emision futura",
+            "esta en el futuro",
+            "futuro respecto",
+            "monto clp con decimales",
+            "monto clp sospechosamente bajo",
+        )
+        return any(indicador in texto for indicador in indicadores)
+
+    def _mover_sobre_tabla(self, evento: tk.Event) -> None:
+        if self.tabla.identify_column(evento.x) != "#6":
+            self.tooltip.ocultar()
+            return
+        fila_id = self.tabla.identify_row(evento.y)
+        if not fila_id:
+            self.tooltip.ocultar()
+            return
+        indice = self.tabla.index(fila_id)
+        if not 0 <= indice < len(self.filas):
+            self.tooltip.ocultar()
+            return
+        _estado, texto, _color = self._estado_factura(self.filas[indice])
+        self.tooltip.mostrar(texto, evento.x_root, evento.y_root)
+
+    def _clic_acciones(self, evento: tk.Event) -> None:
+        """Ejecuta acciones de la columna Acciones."""
+        if self.tabla.identify_column(evento.x) != "#7":
+            return
+        fila_id = self.tabla.identify_row(evento.y)
+        if not fila_id:
+            return
+        bbox = self.tabla.bbox(fila_id, "acciones")
+        if not bbox:
+            return
+        x, _y, ancho, _alto = bbox
+        zona = int((evento.x - x) / max(ancho / 3, 1))
+        indice = self.tabla.index(fila_id)
+        if zona == 0:
+            self._abrir_pdf_predeterminado(self.filas[indice])
+        elif zona == 1:
+            self._editar_factura(self.filas[indice])
+        elif zona == 2:
+            self._eliminar_factura(self.filas[indice])
+        self._programar_puntos_estado()
+
+    def _abrir_pdf_predeterminado(self, fila) -> None:
+        ruta = Path(fila.ruta_archivo)
+        if not ruta.exists():
+            messagebox.showwarning(
+                "Archivo no encontrado",
+                f"No se encontró el PDF de esta factura:\n\n{ruta}",
+                parent=self.ventana,
+            )
+            return
+        try:
+            os.startfile(str(ruta))  # type: ignore[attr-defined]
+        except OSError as exc:
+            messagebox.showerror(
+                "No se pudo abrir",
+                f"No se pudo abrir la factura con el lector predeterminado:\n\n{exc}",
+                parent=self.ventana,
+            )
+
+    def _editar_factura(self, fila) -> None:
+        datos = DialogoEditarFactura(self.ventana, fila).mostrar()
+        if datos is None:
+            return
+        duplicado = self.db.buscar_duplicado(
+            datos.numero_factura, datos.rut_emisor, excluir_id=fila.id)
+        if duplicado:
+            messagebox.showwarning(
+                "Factura duplicada",
+                "Ya existe otra factura con el mismo número y RUT.",
+                parent=self.ventana,
+            )
+            return
+
+        nueva_ruta = self._mover_pdf_si_corresponde(fila, datos)
+        try:
+            self.db.actualizar_factura(fila.id, datos, nueva_ruta)
+        except Exception as exc:
+            messagebox.showerror(
+                "No se pudo guardar",
+                f"No se pudieron guardar los cambios:\n\n{exc}",
+                parent=self.ventana,
+            )
+            return
+        self.buscar()
+
+    def _mover_pdf_si_corresponde(self, fila, datos: DatosFactura) -> Path | None:
+        ruta_actual = Path(fila.ruta_archivo)
+        if not ruta_actual.exists():
+            return None
+        raiz_archivo = Path(self.config["rutas"]["archivo"])
+        carpeta_anterior = ruta_actual.parent
+        destino_dir = ruta_destino(raiz_archivo, datos)
+        destino = destino_dir / nombre_archivo(datos, ruta_actual.suffix.lower())
+        if ruta_actual.resolve() == destino.resolve():
+            return None
+        destino_dir.mkdir(parents=True, exist_ok=True)
+        contador = 2
+        stem_base = destino.stem
+        while destino.exists():
+            destino = destino_dir / f"{stem_base}_{contador}{ruta_actual.suffix.lower()}"
+            contador += 1
+        try:
+            ruta_actual.replace(destino)
+        except OSError as exc:
+            messagebox.showwarning(
+                "Archivo no movido",
+                "Los datos se guardarán, pero no se pudo mover el PDF a la "
+                f"nueva carpeta:\n\n{exc}",
+                parent=self.ventana,
+            )
+            return None
+        self._limpiar_carpetas_vacias(carpeta_anterior, raiz_archivo)
+        return destino
+
+    def _limpiar_carpetas_vacias(self, inicio: Path, raiz_archivo: Path) -> None:
+        """Borra carpetas vacías creadas por movimientos, sin salir de la raíz de facturas."""
+        especiales = {"_entrada", "_revisar", "_errores", "_reemplazadas"}
+        try:
+            actual = inicio.resolve()
+            raiz = raiz_archivo.resolve()
+        except OSError:
+            return
+
+        while actual != raiz and raiz in actual.parents:
+            if actual.name in especiales:
+                return
+            try:
+                actual.rmdir()
+            except OSError:
+                return
+            actual = actual.parent
+
+    def _eliminar_factura(self, fila) -> None:
+        confirmar = messagebox.askyesno(
+            "Eliminar factura",
+            "¿Seguro que deseas eliminar esta factura?\n\n"
+            "Se borrará el registro del sistema y también el archivo PDF.",
+            parent=self.ventana,
+        )
+        if not confirmar:
+            return
+
+        ruta = Path(fila.ruta_archivo)
+        carpeta_anterior = ruta.parent
+        if ruta.exists():
+            try:
+                ruta.unlink()
+            except OSError as exc:
+                messagebox.showerror(
+                    "No se pudo eliminar",
+                    f"No se pudo borrar el PDF de la factura:\n\n{exc}",
+                    parent=self.ventana,
+                )
+                return
+            self._limpiar_carpetas_vacias(
+                carpeta_anterior, Path(self.config["rutas"]["archivo"]))
+        try:
+            self.db.eliminar(fila.id)
+        except Exception as exc:
+            messagebox.showerror(
+                "No se pudo eliminar",
+                f"No se pudo borrar el registro de la factura:\n\n{exc}",
+                parent=self.ventana,
+            )
+            return
+        self.buscar()
 
     def ejecutar(self) -> None:
         self.ventana.mainloop()

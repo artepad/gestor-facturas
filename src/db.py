@@ -94,6 +94,13 @@ CREATE TRIGGER IF NOT EXISTS facturas_ad AFTER DELETE ON facturas BEGIN
   INSERT INTO facturas_fts(facturas_fts, rowid, proveedor, razon_social, numero_factura, texto_completo)
   VALUES ('delete', old.id, old.proveedor, old.razon_social, old.numero_factura, old.texto_completo);
 END;
+
+CREATE TRIGGER IF NOT EXISTS facturas_au AFTER UPDATE ON facturas BEGIN
+  INSERT INTO facturas_fts(facturas_fts, rowid, proveedor, razon_social, numero_factura, texto_completo)
+  VALUES ('delete', old.id, old.proveedor, old.razon_social, old.numero_factura, old.texto_completo);
+  INSERT INTO facturas_fts(rowid, proveedor, razon_social, numero_factura, texto_completo)
+  VALUES (new.id, new.proveedor, new.razon_social, new.numero_factura, new.texto_completo);
+END;
 """
 
 
@@ -340,20 +347,29 @@ class Database:
             return row is not None
 
     def buscar_duplicado(
-        self, numero_factura: str | None, rut_emisor: str | None
+        self,
+        numero_factura: str | None,
+        rut_emisor: str | None,
+        excluir_id: int | None = None,
     ) -> FilaFactura | None:
         """Busca una factura ya registrada con el mismo número + RUT.
         Devuelve None si no hay match o si faltan datos para identificar duplicados."""
         if not numero_factura or not rut_emisor:
             return None
+        clausula_excluir = "AND id <> ?" if excluir_id is not None else ""
+        params: tuple[object, ...] = (
+            (numero_factura, rut_emisor, excluir_id)
+            if excluir_id is not None
+            else (numero_factura, rut_emisor)
+        )
         with self._conexion() as cnx:
             row = cnx.execute(
-                """
+                f"""
                 SELECT * FROM facturas
-                WHERE numero_factura = ? AND rut_emisor = ?
+                WHERE numero_factura = ? AND rut_emisor = ? {clausula_excluir}
                 LIMIT 1
                 """,
-                (numero_factura, rut_emisor),
+                params,
             ).fetchone()
             if not row:
                 return None
@@ -369,6 +385,42 @@ class Database:
     def eliminar(self, id_factura: int) -> None:
         with self._conexion() as cnx:
             cnx.execute("DELETE FROM facturas WHERE id = ?", (id_factura,))
+
+    def actualizar_factura(
+        self,
+        id_factura: int,
+        datos: DatosFactura,
+        ruta_archivo: Path | None = None,
+    ) -> DatosFactura:
+        """Actualiza los datos principales de una factura y devuelve los datos normalizados."""
+        validacion = validar_datos_factura(datos)
+        if not validacion.ok:
+            raise ValueError(" | ".join(validacion.errores))
+        datos = validacion.datos
+        fecha_iso = datetime.strptime(datos.fecha, "%d-%m-%Y").strftime("%Y-%m-%d")
+        with self._conexion() as cnx:
+            cnx.execute(
+                """
+                UPDATE facturas
+                SET proveedor = ?,
+                    razon_social = ?,
+                    rut_emisor = ?,
+                    fecha = ?,
+                    numero_factura = ?,
+                    total = ?,
+                    moneda = ?,
+                    notas = ?,
+                    ruta_archivo = COALESCE(?, ruta_archivo)
+                WHERE id = ?
+                """,
+                (
+                    datos.proveedor, datos.razon_social, datos.rut_emisor,
+                    fecha_iso, datos.numero_factura, datos.total, datos.moneda,
+                    datos.notas, str(ruta_archivo) if ruta_archivo else None,
+                    id_factura,
+                ),
+            )
+        return datos
 
     # --- Detalle de productos ---
 

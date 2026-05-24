@@ -26,6 +26,14 @@ def _formato_peso(valor: float | None) -> str:
     return f"${valor:,.0f}".replace(",", ".")
 
 
+def _formato_fecha_chilena(fecha: str) -> str:
+    """YYYY-MM-DD → DD-MM-YYYY. Si ya viene en otro formato, la deja igual."""
+    partes = fecha.split("-")
+    if len(partes) == 3 and len(partes[0]) == 4:
+        return f"{partes[2]}-{partes[1]}-{partes[0]}"
+    return fecha
+
+
 def _num(valor: float | None) -> str:
     """Muestra una cantidad: 12.0 → '12', 2.5 → '2,5', None → ''."""
     if valor is None:
@@ -414,21 +422,27 @@ class PanelDetalle(tk.Frame):
         self._redondeo = int(precios.get("redondear_a", 100))
         self._productos: dict[int, object] = {}
 
-        # --- Información de la factura: todo en una línea, dentro de un contenedor ---
+        # --- Información de la factura ---
         info = estilos.panel(self, "Información de la factura")
         info.pack(fill="x", pady=(0, 12))
-        tk.Label(info, text="Proveedor:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(side="left")
-        tk.Label(info, text=fila.proveedor, font=estilos.F_BODY_BOLD,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left", padx=(4, 18))
-        tk.Label(info, text="RUT:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(side="left")
-        tk.Label(info, text=fila.rut_emisor or "—", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left", padx=(4, 18))
-        tk.Label(info, text="Fecha:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(side="left")
-        tk.Label(info, text=fila.fecha, font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left", padx=(4, 0))
+        for col in (1, 3):
+            info.columnconfigure(col, weight=1)
+
+        campos_info = (
+            ("Proveedor:", fila.proveedor, estilos.F_BODY_BOLD, 0, 0),
+            ("RUT:", fila.rut_emisor or "—", estilos.F_BODY_BOLD, 0, 2),
+            ("Fecha:", _formato_fecha_chilena(fila.fecha), estilos.F_BODY_BOLD, 1, 0),
+            ("Total:", _formato_peso(fila.total), estilos.F_BODY_BOLD, 1, 2),
+        )
+        for etiqueta, valor, fuente, fila_grid, columna in campos_info:
+            tk.Label(
+                info, text=etiqueta, font=estilos.F_BODY,
+                bg=estilos.FONDO, fg=estilos.TEXTO_SEC,
+            ).grid(row=fila_grid, column=columna, sticky="w", padx=(0, 4), pady=3)
+            tk.Label(
+                info, text=valor, font=fuente, bg=estilos.FONDO,
+                fg=estilos.TEXTO, anchor="w",
+            ).grid(row=fila_grid, column=columna + 1, sticky="w", padx=(0, 18), pady=3)
 
         # --- Encabezado de la sección de productos ---
         cabecera = tk.Frame(self, bg=estilos.FONDO)
