@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS instruccion_proveedor (
 CREATE TABLE IF NOT EXISTS detalle_factura (
   factura_id           INTEGER PRIMARY KEY REFERENCES facturas(id) ON DELETE CASCADE,
   precios_incluyen_iva INTEGER NOT NULL DEFAULT 0,   -- 0/1
+  margen_ganancia      REAL,
   confianza            REAL,
   notas                TEXT,
   analizado_en         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -168,6 +169,15 @@ class Database:
         ruta.parent.mkdir(parents=True, exist_ok=True)
         with self._conexion() as cnx:
             cnx.executescript(ESQUEMA)
+            self._migrar(cnx)
+
+    def _migrar(self, cnx: sqlite3.Connection) -> None:
+        """Aplica cambios pequeños de esquema a bases existentes."""
+        columnas_detalle = {
+            row["name"] for row in cnx.execute("PRAGMA table_info(detalle_factura)")
+        }
+        if "margen_ganancia" not in columnas_detalle:
+            cnx.execute("ALTER TABLE detalle_factura ADD COLUMN margen_ganancia REAL")
 
     @contextmanager
     def _conexion(self) -> Iterator[sqlite3.Connection]:
@@ -362,19 +372,24 @@ class Database:
 
     # --- Detalle de productos ---
 
-    def guardar_detalle(self, factura_id: int, detalle: DetalleFactura) -> None:
+    def guardar_detalle(
+        self,
+        factura_id: int,
+        detalle: DetalleFactura,
+        margen_ganancia: float | None = None,
+    ) -> None:
         """Guarda el detalle de productos de una factura, reemplazando lo anterior."""
         with self._conexion() as cnx:
             cnx.execute("DELETE FROM producto WHERE factura_id = ?", (factura_id,))
             cnx.execute(
                 """
                 INSERT OR REPLACE INTO detalle_factura
-                  (factura_id, precios_incluyen_iva, confianza, notas, analizado_en)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                  (factura_id, precios_incluyen_iva, margen_ganancia, confianza, notas, analizado_en)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     factura_id, int(detalle.precios_incluyen_iva),
-                    detalle.confianza, detalle.notas,
+                    margen_ganancia, detalle.confianza, detalle.notas,
                 ),
             )
             for orden, p in enumerate(detalle.productos):
@@ -408,6 +423,7 @@ class Database:
                 return None
             return {
                 "precios_incluyen_iva": bool(row["precios_incluyen_iva"]),
+                "margen_ganancia": row["margen_ganancia"],
                 "confianza": row["confianza"],
                 "notas": row["notas"],
                 "analizado_en": row["analizado_en"],

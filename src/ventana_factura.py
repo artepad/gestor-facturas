@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -41,6 +42,34 @@ def _parsear_numero(texto: str) -> float | None:
     if not limpio:
         return None
     return float(limpio.replace(".", "").replace(",", "."))
+
+
+def _formato_porcentaje(valor: float) -> str:
+    """0.35 -> '35%'."""
+    return f"{round(valor * 100):g}%"
+
+
+def _parsear_margen(texto: str) -> float:
+    """Convierte '35%' o '35' a 0.35."""
+    limpio = texto.strip().replace("%", "").replace(",", ".")
+    if not limpio:
+        raise ValueError("Ingresa un porcentaje de ganancia.")
+    valor = float(limpio)
+    if valor <= 0:
+        raise ValueError("El porcentaje de ganancia debe ser mayor que cero.")
+    if valor > 1:
+        valor /= 100
+    if valor > 2:
+        raise ValueError("El porcentaje de ganancia parece demasiado alto.")
+    return valor
+
+
+@dataclass(frozen=True)
+class ConfiguracionAnalisisProductos:
+    prompt: str
+    instrucciones_usuario: str
+    margen: float
+    precios_incluyen_iva: bool
 
 
 class VisorPDF(tk.Frame):
@@ -172,6 +201,193 @@ class VisorPDF(tk.Frame):
             self.doc = None
 
 
+class AnalizadorProductos(tk.Toplevel):
+    """Ventana modal que centraliza la configuración antes de llamar a la IA."""
+
+    _ANCHO = 920
+    _ALTO = 700
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        fila: FilaFactura,
+        instrucciones_iniciales: str,
+        margen_default: float,
+        precios_incluyen_iva_default: bool,
+    ) -> None:
+        super().__init__(master)
+        self.fila = fila
+        self.resultado: ConfiguracionAnalisisProductos | None = None
+        self.title("Analizador de Productos")
+        self.transient(master.winfo_toplevel())
+        self.resizable(True, True)
+        self.minsize(920, 680)
+        self.configure(bg=estilos.FONDO)
+        estilos.aplicar_tema(self)
+        self._centrar()
+
+        estilos.cabecera(
+            self, "Analizador de Productos",
+            "Revisa el prompt y los parámetros antes de ejecutar la IA",
+            alto=78, franja=6)
+
+        self._construir_barra_inferior()
+
+        cuerpo = tk.Frame(self, bg=estilos.FONDO)
+        cuerpo.pack(fill="both", expand=True, padx=28, pady=(18, 8))
+
+        self.margen_var = tk.StringVar(value=_formato_porcentaje(margen_default))
+        self.incluye_iva = tk.BooleanVar(value=precios_incluyen_iva_default)
+
+        configuracion = estilos.panel(cuerpo, "Configuración de precios")
+        configuracion.pack(fill="x", pady=(0, 16))
+        configuracion.columnconfigure(0, weight=1)
+        configuracion.columnconfigure(1, weight=1)
+
+        margen_col = tk.Frame(configuracion, bg=estilos.FONDO)
+        margen_col.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        tk.Label(
+            margen_col, text="Margen de ganancia sugerido",
+            font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+            fg=estilos.TEXTO).pack(anchor="w")
+        tk.Label(
+            margen_col, text="Porcentaje base para proyectar precios de venta.",
+            font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=330,
+            justify="left").pack(anchor="w", pady=(4, 10))
+        ttk.Combobox(
+            margen_col, textvariable=self.margen_var,
+            values=("30%", "35%", "40%", "45%", "50%"),
+            state="normal", width=12, font=estilos.F_BODY,
+            justify="center").pack(anchor="w")
+        tk.Label(
+            margen_col,
+            text="Puedes escribir un porcentaje personalizado si el proveedor requiere otro margen.",
+            font=estilos.F_HINT, bg=estilos.FONDO,
+            fg=estilos.TEXTO_TENUE, wraplength=330,
+            justify="left").pack(anchor="w", pady=(8, 0))
+
+        iva_col = tk.Frame(configuracion, bg=estilos.FONDO)
+        iva_col.grid(row=0, column=1, sticky="nsew", padx=(18, 0))
+        tk.Label(
+            iva_col, text="Detalle de IVA",
+            font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+            fg=estilos.TEXTO).pack(anchor="w")
+        tk.Label(
+            iva_col,
+            text="Indica cómo vienen los valores del detalle para orientar el análisis.",
+            font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=330,
+            justify="left").pack(anchor="w", pady=(4, 10))
+        tk.Checkbutton(
+            iva_col, text="Los valores del detalle incluyen IVA",
+            variable=self.incluye_iva, font=estilos.F_BODY_BOLD,
+            bg=estilos.FONDO, fg=estilos.TEXTO,
+            activebackground=estilos.FONDO, activeforeground=estilos.TEXTO,
+            selectcolor="white", cursor="hand2").pack(anchor="w")
+        tk.Label(
+            iva_col,
+            text="Esta opción se enviará a la IA y también se usará para calcular precios.",
+            font=estilos.F_HINT, bg=estilos.FONDO,
+            fg=estilos.TEXTO_TENUE, wraplength=330,
+            justify="left").pack(anchor="w", pady=(6, 0))
+
+        instrucciones_panel = estilos.panel(cuerpo, "Prompt editable para la IA")
+        instrucciones_panel.pack(fill="both", expand=True)
+        tk.Label(
+            instrucciones_panel,
+            text="Ajusta las instrucciones antes de ejecutar el análisis. "
+                 "Esta será la única llamada a la IA.",
+            font=estilos.F_SMALL, bg=estilos.FONDO,
+            fg=estilos.TEXTO_SEC, wraplength=760,
+            justify="left").pack(anchor="w", pady=(0, 8))
+        self.caja = tk.Text(
+            instrucciones_panel, height=10, wrap="word", font=estilos.F_BODY,
+            bg="white", fg=estilos.TEXTO, relief="flat",
+            highlightthickness=2, highlightbackground=estilos.BORDE,
+            highlightcolor=estilos.ENTRY_BORDE_ACTIVO,
+            insertbackground=estilos.TEXTO)
+        self.caja.pack(fill="both", expand=True)
+        self.caja.insert("1.0", self._prompt_inicial(instrucciones_iniciales))
+        tk.Label(
+            instrucciones_panel,
+            text=f"El prompt confirmado se guardará como memoria para {self.fila.proveedor}. "
+                 "Si lo dejas vacío, se borra lo aprendido.",
+            font=estilos.F_HINT, bg=estilos.FONDO, fg=estilos.VERDE_OK,
+            wraplength=760, justify="left").pack(anchor="w", pady=(8, 0))
+
+        self.protocol("WM_DELETE_WINDOW", self._cancelar)
+        self.caja.focus_set()
+        self.grab_set()
+
+    def _centrar(self) -> None:
+        padre = self.master.winfo_toplevel()
+        padre.update_idletasks()
+        x = padre.winfo_rootx() + (padre.winfo_width() - self._ANCHO) // 2
+        y = padre.winfo_rooty() + (padre.winfo_height() - self._ALTO) // 2
+        x = max(0, min(x, self.winfo_screenwidth() - self._ANCHO))
+        y = max(0, min(y, self.winfo_screenheight() - self._ALTO))
+        self.geometry(f"{self._ANCHO}x{self._ALTO}+{x}+{y}")
+
+    def _construir_barra_inferior(self) -> None:
+        botones = tk.Frame(self, bg=estilos.FONDO, height=82)
+        botones.pack(fill="x", side="bottom")
+        botones.pack_propagate(False)
+        tk.Frame(botones, bg=estilos.BORDE, height=2).pack(fill="x", pady=(0, 12))
+        centro = tk.Frame(botones, bg=estilos.FONDO)
+        centro.pack(anchor="center")
+        estilos.boton(centro, "Cancelar", self._cancelar, "gris").pack(side="left", padx=12)
+        estilos.boton(centro, "Analizar con IA", self._aceptar, "verde").pack(side="left", padx=12)
+
+    def _prompt_inicial(self, instrucciones: str) -> str:
+        texto = instrucciones.strip()
+        if texto:
+            return texto
+        return (
+            "Extrae solo productos reales de la factura. Identifica bien columnas de "
+            "cantidad, precio unitario, descuentos y monto de línea. Ignora subtotal, "
+            "neto, IVA, total, transporte, datos de despacho y observaciones que no "
+            "sean productos."
+        )
+
+    def _prompt_final(self, margen: float, prompt_usuario: str) -> str:
+        iva = (
+            "Los valores del detalle YA incluyen IVA."
+            if self.incluye_iva.get()
+            else "Los valores del detalle NO incluyen IVA; son precios netos."
+        )
+        return (
+            "Parámetros definidos por el usuario para este análisis:\n"
+            f"- Margen de ganancia para precios sugeridos: {_formato_porcentaje(margen)}.\n"
+            f"- {iva}\n\n"
+            "Prompt revisado por el usuario:\n"
+            f"{prompt_usuario.strip()}"
+        )
+
+    def _aceptar(self) -> None:
+        prompt_usuario = self.caja.get("1.0", "end").strip()
+        try:
+            margen = _parsear_margen(self.margen_var.get())
+        except ValueError as exc:
+            messagebox.showwarning("Margen inválido", str(exc), parent=self)
+            return
+        self.resultado = ConfiguracionAnalisisProductos(
+            prompt=self._prompt_final(margen, prompt_usuario),
+            instrucciones_usuario=prompt_usuario,
+            margen=margen,
+            precios_incluyen_iva=self.incluye_iva.get(),
+        )
+        self.destroy()
+
+    def _cancelar(self) -> None:
+        self.resultado = None
+        self.destroy()
+
+    def mostrar(self) -> ConfiguracionAnalisisProductos | None:
+        self.wait_window()
+        return self.resultado
+
+
 class PanelDetalle(tk.Frame):
     """Panel derecho: datos de la factura, productos extraídos por IA y el
     precio de venta sugerido de cada uno. Permite corregir los valores a mano."""
@@ -273,13 +489,16 @@ class PanelDetalle(tk.Frame):
     def _cargar_existente(self) -> None:
         """Si la factura ya fue analizada, recalcula precios y muestra el detalle."""
         if self.db.tiene_detalle(self.fila.id):
+            meta = self.db.obtener_meta_detalle(self.fila.id)
+            if meta and meta.get("margen_ganancia") is not None:
+                self._margen = float(meta["margen_ganancia"])
             self.db.recalcular_precios(
                 self.fila.id, self._iva, self._margen, self._redondeo)
-            self.btn_analizar.config(text="Re-analizar con IA")
+            self.btn_analizar.config(text="Analizar productos con IA")
             self._refrescar()
         else:
             self.lbl_estado.config(
-                text="Aún sin analizar. Presiona el botón para extraer los productos con IA.")
+                text="Aún sin analizar. Abre el analizador para revisar el prompt y extraer los productos con IA.")
         self._actualizar_memoria()
 
     def _actualizar_memoria(self) -> None:
@@ -323,28 +542,35 @@ class PanelDetalle(tk.Frame):
         if meta:
             tipo = "con IVA incluido" if meta["precios_incluyen_iva"] else "netos (sin IVA)"
             texto += f"  Precios {tipo}."
+            if meta.get("margen_ganancia") is not None:
+                texto += f"  Margen {_formato_porcentaje(float(meta['margen_ganancia']))}."
         return texto
 
     # --- Análisis con IA ---
 
     def _iniciar_analisis(self) -> None:
-        aprendidas = self.db.obtener_instrucciones(self.fila.rut_emisor)
-        if self.db.tiene_detalle(self.fila.id):
-            # Re-análisis: el usuario ve/ajusta lo aprendido y se vuelve a guardar
-            instrucciones = self._pedir_instrucciones(aprendidas or "")
-            if instrucciones is None:  # el usuario canceló
-                return
-            self.db.guardar_instrucciones(self.fila.rut_emisor, instrucciones)
-        else:
-            # Primer análisis: aplica automáticamente lo aprendido del proveedor
-            instrucciones = aprendidas
+        aprendidas = self.db.obtener_instrucciones(self.fila.rut_emisor) or ""
+        meta = self.db.obtener_meta_detalle(self.fila.id)
+        precios_incluyen_iva = bool(meta["precios_incluyen_iva"]) if meta else False
+        configuracion = AnalizadorProductos(
+            self,
+            self.fila,
+            aprendidas,
+            self._margen,
+            precios_incluyen_iva,
+        ).mostrar()
+        if configuracion is None:
+            return
+        self.db.guardar_instrucciones(
+            self.fila.rut_emisor, configuracion.instrucciones_usuario)
+        self._margen = configuracion.margen
         self.btn_analizar.config(state="disabled")
         self.lbl_estado.config(
             text="Analizando la factura con IA… esto puede tardar unos segundos.")
         threading.Thread(
-            target=self._worker, args=(instrucciones,), daemon=True).start()
+            target=self._worker, args=(configuracion,), daemon=True).start()
 
-    def _worker(self, instrucciones: str | None) -> None:
+    def _worker(self, configuracion: ConfiguracionAnalisisProductos) -> None:
         """Corre en un hilo aparte para no congelar la ventana durante la API."""
         try:
             from classifier import Clasificador
@@ -354,10 +580,13 @@ class PanelDetalle(tk.Frame):
             contenido = extraer_completo(
                 Path(self.fila.ruta_archivo), max_imagenes=max_img)
             clasificador = Clasificador(modelo=self.config["clasificacion"]["modelo"])
-            detalle = clasificador.extraer_detalle(contenido, instrucciones or None)
-            self.db.guardar_detalle(self.fila.id, detalle)
+            detalle = clasificador.extraer_detalle(contenido, configuracion.prompt)
+            detalle = replace(
+                detalle, precios_incluyen_iva=configuracion.precios_incluyen_iva)
+            self.db.guardar_detalle(
+                self.fila.id, detalle, margen_ganancia=configuracion.margen)
             self.db.recalcular_precios(
-                self.fila.id, self._iva, self._margen, self._redondeo)
+                self.fila.id, self._iva, configuracion.margen, self._redondeo)
             resultado: tuple = ("ok", detalle)
         except Exception as exc:  # noqa: BLE001 — se reporta al usuario
             resultado = ("error", exc)
@@ -374,140 +603,12 @@ class PanelDetalle(tk.Frame):
                 "Error al analizar",
                 f"Ocurrió un error al analizar la factura:\n\n{dato}", parent=self)
             return
-        self.btn_analizar.config(text="Re-analizar con IA")
+        self.btn_analizar.config(text="Analizar productos con IA")
         self._refrescar()
         self._actualizar_memoria()
         if dato.notas:  # type: ignore[attr-defined]
             messagebox.showinfo(
                 "Observaciones de la IA", dato.notas, parent=self)  # type: ignore[attr-defined]
-
-    def _pedir_instrucciones(self, texto_inicial: str = "") -> str | None:
-        """Diálogo modal para las instrucciones de la IA antes de re-analizar.
-        Llega con lo aprendido para este proveedor ya escrito (si hay).
-        Devuelve el texto (puede ser '') o None si el usuario cancela."""
-        dlg = tk.Toplevel(self)
-        dlg.title("Re-analizar con IA")
-        dlg.transient(self.winfo_toplevel())
-        dlg.resizable(True, True)
-        dlg.minsize(920, 680)
-        dlg.configure(bg=estilos.FONDO)
-        estilos.aplicar_tema(dlg)
-
-        ancho, alto = 920, 700
-        padre = self.winfo_toplevel()
-        padre.update_idletasks()
-        x = padre.winfo_rootx() + (padre.winfo_width() - ancho) // 2
-        y = padre.winfo_rooty() + (padre.winfo_height() - alto) // 2
-        x = max(0, min(x, dlg.winfo_screenwidth() - ancho))
-        y = max(0, min(y, dlg.winfo_screenheight() - alto))
-        dlg.geometry(f"{ancho}x{alto}+{x}+{y}")
-
-        estilos.cabecera(
-            dlg, "Re-analizar con IA",
-            "Configuración visual para una lectura más precisa de productos y precios",
-            alto=78, franja=6)
-
-        resultado: dict[str, str] = {}
-
-        def aceptar() -> None:
-            resultado["valor"] = caja.get("1.0", "end").strip()
-            dlg.destroy()
-
-        botones = tk.Frame(dlg, bg=estilos.FONDO, height=82)
-        botones.pack(fill="x", side="bottom")
-        botones.pack_propagate(False)
-        tk.Frame(botones, bg=estilos.BORDE, height=2).pack(fill="x", pady=(0, 12))
-        centro = tk.Frame(botones, bg=estilos.FONDO)
-        centro.pack(anchor="center")
-        estilos.boton(centro, "Cancelar", dlg.destroy, "gris").pack(side="left", padx=12)
-        estilos.boton(centro, "Analizar con IA", aceptar, "verde").pack(side="left", padx=12)
-
-        cuerpo = tk.Frame(dlg, bg=estilos.FONDO)
-        cuerpo.pack(fill="both", expand=True, padx=28, pady=(18, 8))
-
-        configuracion = estilos.panel(cuerpo, "Configuración de precios")
-        configuracion.pack(fill="x", pady=(0, 16))
-        configuracion.columnconfigure(0, weight=1)
-        configuracion.columnconfigure(1, weight=1)
-
-        margen_col = tk.Frame(configuracion, bg=estilos.FONDO)
-        margen_col.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
-        tk.Label(
-            margen_col, text="Margen de ganancia sugerido",
-            font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
-            fg=estilos.TEXTO).pack(anchor="w")
-        tk.Label(
-            margen_col, text="Porcentaje base para proyectar precios de venta.",
-            font=estilos.F_SMALL, bg=estilos.FONDO,
-            fg=estilos.TEXTO_SEC, wraplength=330,
-            justify="left").pack(anchor="w", pady=(4, 10))
-        margen_var = tk.StringVar(value="35%")
-        ttk.Combobox(
-            margen_col, textvariable=margen_var,
-            values=("30%", "35%", "40%", "45%", "50%"),
-            state="normal", width=12, font=estilos.F_BODY,
-            justify="center").pack(anchor="w")
-        tk.Label(
-            margen_col,
-            text="Puedes escribir un porcentaje personalizado si el proveedor requiere otro margen.",
-            font=estilos.F_HINT, bg=estilos.FONDO,
-            fg=estilos.TEXTO_TENUE, wraplength=330,
-            justify="left").pack(anchor="w", pady=(8, 0))
-
-        iva_col = tk.Frame(configuracion, bg=estilos.FONDO)
-        iva_col.grid(row=0, column=1, sticky="nsew", padx=(18, 0))
-        tk.Label(
-            iva_col, text="Detalle de IVA",
-            font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
-            fg=estilos.TEXTO).pack(anchor="w")
-        tk.Label(
-            iva_col,
-            text="Indica cómo vienen los valores del detalle para orientar el análisis.",
-            font=estilos.F_SMALL, bg=estilos.FONDO,
-            fg=estilos.TEXTO_SEC, wraplength=330,
-            justify="left").pack(anchor="w", pady=(4, 10))
-        incluye_iva = tk.BooleanVar(value=False)
-        tk.Checkbutton(
-            iva_col, text="Los valores del detalle incluyen IVA",
-            variable=incluye_iva, font=estilos.F_BODY_BOLD,
-            bg=estilos.FONDO, fg=estilos.TEXTO,
-            activebackground=estilos.FONDO, activeforeground=estilos.TEXTO,
-            selectcolor="white", cursor="hand2").pack(anchor="w")
-        tk.Label(
-            iva_col,
-            text="Por ahora es una guía visual y no modifica el cálculo real.",
-            font=estilos.F_HINT, bg=estilos.FONDO,
-            fg=estilos.TEXTO_TENUE, wraplength=330,
-            justify="left").pack(anchor="w", pady=(6, 0))
-
-        instrucciones_panel = estilos.panel(cuerpo, "Instrucciones para la IA")
-        instrucciones_panel.pack(fill="both", expand=True)
-        tk.Label(
-            instrucciones_panel,
-            text="Describe columnas especiales, descuentos, filas que ignorar o reglas del proveedor.",
-            font=estilos.F_SMALL, bg=estilos.FONDO,
-            fg=estilos.TEXTO_SEC, wraplength=330,
-            justify="left").pack(anchor="w", pady=(0, 8))
-        caja = tk.Text(
-            instrucciones_panel, height=10, wrap="word", font=estilos.F_BODY,
-            bg="white", fg=estilos.TEXTO, relief="flat",
-            highlightthickness=2, highlightbackground=estilos.BORDE,
-            highlightcolor=estilos.ENTRY_BORDE_ACTIVO,
-            insertbackground=estilos.TEXTO)
-        caja.pack(fill="both", expand=True)
-        if texto_inicial:
-            caja.insert("1.0", texto_inicial)
-        tk.Label(
-            instrucciones_panel,
-            text=f"Estas instrucciones se guardan para {self.fila.proveedor}. "
-                 "Si dejas el cuadro vacío, se borra lo aprendido.",
-            font=estilos.F_HINT, bg=estilos.FONDO, fg=estilos.VERDE_OK,
-            wraplength=330, justify="left").pack(anchor="w", pady=(8, 0))
-
-        caja.focus_set()
-        dlg.grab_set()
-        self.wait_window(dlg)
-        return resultado.get("valor")  # None si se cerró sin "Analizar"
 
     # --- Edición manual de celdas ---
 
