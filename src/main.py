@@ -33,7 +33,13 @@ from classifier import Clasificador, DatosFactura
 from db import Database
 from estado import Estado
 from extractor import extraer
-from organizer import archivar, mover_a_errores, mover_a_reemplazadas, mover_a_revisar
+from organizer import (
+    archivar,
+    mover_a_errores,
+    mover_a_no_facturas,
+    mover_a_reemplazadas,
+    mover_a_revisar,
+)
 from validacion import validar_datos_factura
 from watcher import ManejadorFacturas, vigilar
 
@@ -109,6 +115,8 @@ def crear_procesador(
     carpeta_revisar = Path(config["rutas"]["revisar"])
     carpeta_errores = Path(config["rutas"]["errores"])
     carpeta_reemplazadas = Path(config["rutas"]["reemplazadas"])
+    carpeta_no_facturas = Path(
+        config["rutas"].get("no_facturas", str(raiz_archivo / "_no_facturas")))
     umbral = float(config["clasificacion"]["umbral_confianza"])
     umbral_defectuoso = float(config["clasificacion"]["umbral_escaneo_defectuoso"])
 
@@ -131,6 +139,25 @@ def crear_procesador(
             destino = mover_a_errores(ruta_pdf, carpeta_errores, err)
             _contar("error")
             print(f"[procesar] ERROR → {destino}", flush=True)
+            return
+
+        # Validación de tipo de documento: si la IA dice que NO es una factura,
+        # cortar acá antes de tocar BD, carpetas de archivo o cualquier otra cosa.
+        if not datos.es_factura:
+            motivo = (
+                "El documento NO es una factura comercial chilena.\n"
+                f"Tipo detectado por la IA: {datos.tipo_documento or 'desconocido'}.\n"
+                f"Confianza del clasificador: {datos.confianza:.2f}.\n"
+                f"Notas: {datos.notas or '—'}\n\n"
+                f"Fecha del descarte: {datetime.now():%Y-%m-%d %H:%M:%S}.\n"
+                "No se registró en la base de datos ni se archivó como factura."
+            )
+            destino = mover_a_no_facturas(ruta_pdf, carpeta_no_facturas, motivo)
+            _contar("no_factura")
+            print(
+                f"[procesar] → NO ES FACTURA ({datos.tipo_documento}): {destino}",
+                flush=True,
+            )
             return
 
         validacion = _verificar_total_sospechoso(clasificador, contenido, datos)
@@ -303,6 +330,10 @@ def modo_tray(config: dict, clasificador: Clasificador, db: Database) -> None:
             "archivo": Path(config["rutas"]["archivo"]),
             "revisar": Path(config["rutas"]["revisar"]),
             "entrada": carpeta_entrada,
+            "no_facturas": Path(
+                config["rutas"].get(
+                    "no_facturas",
+                    str(Path(config["rutas"]["archivo"]) / "_no_facturas"))),
         },
         raiz_proyecto=RAIZ,
         al_reanudar=al_reanudar,
@@ -342,6 +373,13 @@ def modo_reindexar(config: dict, clasificador: Clasificador, db: Database) -> No
         try:
             contenido = extraer(pdf)
             datos = clasificador.clasificar(contenido)
+            if not datos.es_factura:
+                print(
+                    f"  ✗ NO ES FACTURA ({datos.tipo_documento}); se omite del reindex. "
+                    "Considera moverlo manualmente fuera de la carpeta de facturas.",
+                    flush=True,
+                )
+                continue
             validacion = _verificar_total_sospechoso(clasificador, contenido, datos)
             datos = validacion.datos
             if not validacion.ok and _tiene_fecha_futura(validacion.errores):

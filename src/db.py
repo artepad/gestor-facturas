@@ -339,6 +339,13 @@ class Database:
                 for r in rows
             ]
 
+    def max_id_factura(self) -> int:
+        """Mayor id de la tabla facturas, o 0 si está vacía. Lo usa el
+        Administrador para detectar facturas nuevas y refrescar la tabla."""
+        with self._conexion() as cnx:
+            row = cnx.execute("SELECT MAX(id) AS m FROM facturas").fetchone()
+            return int(row["m"] or 0)
+
     def existe_ruta(self, ruta: Path) -> bool:
         with self._conexion() as cnx:
             row = cnx.execute(

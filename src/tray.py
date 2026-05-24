@@ -59,6 +59,7 @@ def construir_icono(
             f"Hoy: {snap.get('ok', 0)} OK  ·  "
             f"{snap.get('revisar', 0) + snap.get('defectuoso', 0)} revisar  ·  "
             f"{snap.get('duplicado', 0)} dup  ·  "
+            f"{snap.get('no_factura', 0)} no factura  ·  "
             f"{snap.get('error', 0)} err"
         )
 
@@ -78,7 +79,7 @@ def construir_icono(
     menu = pystray.Menu(
         pystray.MenuItem(texto_estado, None, enabled=False),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Abrir buscador", lambda _i, _it: _abrir_buscador(raiz_proyecto)),
+        pystray.MenuItem("Abrir Administrador", lambda _i, _it: _abrir_buscador(raiz_proyecto)),
         pystray.MenuItem(
             "Abrir carpeta de facturas",
             lambda _i, _it: _abrir_carpeta(carpetas["archivo"]),
@@ -90,6 +91,10 @@ def construir_icono(
         pystray.MenuItem(
             "Abrir _entrada",
             lambda _i, _it: _abrir_carpeta(carpetas["entrada"]),
+        ),
+        pystray.MenuItem(
+            "Abrir _no_facturas",
+            lambda _i, _it: _abrir_carpeta(carpetas["no_facturas"]),
         ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(texto_pausa, alternar_pausa),

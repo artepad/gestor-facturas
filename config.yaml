@@ -19,6 +19,12 @@ rutas:
   # la versión vieja se mueve aquí por seguridad.
   reemplazadas: C:\Facturas\_reemplazadas
 
+  # PDFs que no son facturas (comprobantes, vouchers, cotizaciones, guías,
+  # estados de cuenta, etc.). Se detectan en la primera lectura con IA y
+  # quedan aquí para revisión. NO se registran en la base de datos ni se
+  # archivan en la estructura AÑO/Mes/Marca.
+  no_facturas: C:\Facturas\_no_facturas
+
   # Base de datos SQLite con el historial y búsqueda full-text
   base_datos: C:\Users\del_a\vibecoding\gestor-facturas\data\facturas.db
 

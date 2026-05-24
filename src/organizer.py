@@ -99,6 +99,22 @@ def mover_a_reemplazadas(origen: Path, carpeta_reemplazadas: Path, motivo: str) 
     return destino
 
 
+def mover_a_no_facturas(origen: Path, carpeta_no_facturas: Path, motivo: str) -> Path:
+    """Mueve un PDF que la IA descartó porque no es una factura comercial.
+    El archivo queda fuera del flujo normal: no se registra en BD ni se archiva."""
+    carpeta_no_facturas.mkdir(parents=True, exist_ok=True)
+    destino = carpeta_no_facturas / origen.name
+    contador = 2
+    while destino.exists():
+        destino = carpeta_no_facturas / f"{origen.stem}_{contador}{origen.suffix}"
+        contador += 1
+    shutil.move(str(origen), str(destino))
+    destino.with_suffix(destino.suffix + ".motivo.txt").write_text(
+        motivo, encoding="utf-8"
+    )
+    return destino
+
+
 def mover_a_errores(origen: Path, carpeta_errores: Path, error: str) -> Path:
     """Mueve un archivo que falló por error técnico, con log adjunto."""
     carpeta_errores.mkdir(parents=True, exist_ok=True)

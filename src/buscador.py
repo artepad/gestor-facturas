@@ -215,10 +215,17 @@ class Buscador:
     _TITULO = "Administrador de Facturas"
     _ANCHO = 1080
     _ALTO = 828
+    _POLL_MS = 4000  # cada cuánto se chequea si hay facturas nuevas en la BD
     # Íconos de la columna Acciones (por ahora solo visuales)
     _ICONO_VER = "🔍"
     _ICONO_EDITAR = "📝"
     _ICONO_ELIMINAR = "❌"
+    # Tooltips que aparecen al pasar el mouse sobre cada ícono
+    _TOOLTIPS_ACCION = (
+        "Ver: abre el PDF de la factura en el visor del sistema.",
+        "Editar: corrige los datos principales de la factura.",
+        "Eliminar: borra el archivo PDF y el registro de la base de datos.",
+    )
 
     def __init__(self, db: Database, config: dict) -> None:
         self.db = db
@@ -239,6 +246,10 @@ class Buscador:
         self.buscar()
         self.ventana.bind("<Escape>", lambda _e: self._salir_pantalla_completa())
         self.entrada_texto.focus_set()  # foco listo en el campo de búsqueda
+        # Refresco automático: el watcher (otro proceso) puede insertar facturas
+        # nuevas en la BD. Chequeamos cada cierto tiempo si hay novedades.
+        self._ultimo_max_id = self.db.max_id_factura()
+        self._programar_chequeo()
 
     def _centrar(self) -> None:
         sw = self.ventana.winfo_screenwidth()
@@ -444,7 +455,7 @@ class Buscador:
             estado, _tooltip, _color = self._estado_factura(fila)
             etiqueta = "par" if indice % 2 == 0 else "impar"
             iconos = f"{self._ICONO_VER}    {self._ICONO_EDITAR}    {self._ICONO_ELIMINAR}"
-            self.tabla.insert("", "end", tags=(etiqueta,), values=(
+            self.tabla.insert("", "end", iid=str(fila.id), tags=(etiqueta,), values=(
                 _fecha_dmy(fila.fecha), fila.proveedor, fila.numero_factura or "",
                 total, fila.razon_social or "", estado, iconos,
             ))
@@ -562,9 +573,16 @@ class Buscador:
         return any(indicador in texto for indicador in indicadores)
 
     def _mover_sobre_tabla(self, evento: tk.Event) -> None:
-        if self.tabla.identify_column(evento.x) != "#6":
-            self.tooltip.ocultar()
+        columna = self.tabla.identify_column(evento.x)
+        if columna == "#6":  # Estado
+            self._tooltip_estado(evento)
             return
+        if columna == "#7":  # Acciones
+            self._tooltip_acciones(evento)
+            return
+        self.tooltip.ocultar()
+
+    def _tooltip_estado(self, evento: tk.Event) -> None:
         fila_id = self.tabla.identify_row(evento.y)
         if not fila_id:
             self.tooltip.ocultar()
@@ -575,6 +593,22 @@ class Buscador:
             return
         _estado, texto, _color = self._estado_factura(self.filas[indice])
         self.tooltip.mostrar(texto, evento.x_root, evento.y_root)
+
+    def _tooltip_acciones(self, evento: tk.Event) -> None:
+        fila_id = self.tabla.identify_row(evento.y)
+        if not fila_id:
+            self.tooltip.ocultar()
+            return
+        bbox = self.tabla.bbox(fila_id, "acciones")
+        if not bbox:
+            self.tooltip.ocultar()
+            return
+        x, _y, ancho, _alto = bbox
+        # Misma división en 3 zonas que _clic_acciones
+        zona = int((evento.x - x) / max(ancho / 3, 1))
+        zona = max(0, min(zona, len(self._TOOLTIPS_ACCION) - 1))
+        self.tooltip.mostrar(
+            self._TOOLTIPS_ACCION[zona], evento.x_root, evento.y_root)
 
     def _clic_acciones(self, evento: tk.Event) -> None:
         """Ejecuta acciones de la columna Acciones."""
@@ -722,6 +756,34 @@ class Buscador:
             )
             return
         self.buscar()
+
+    # --- Auto-refresco cuando llegan facturas nuevas ---
+
+    def _programar_chequeo(self) -> None:
+        try:
+            self.ventana.after(self._POLL_MS, self._chequear_nuevos)
+        except tk.TclError:
+            pass  # la ventana se cerró
+
+    def _chequear_nuevos(self) -> None:
+        """Si el watcher procesó una factura nueva, refresca la tabla."""
+        try:
+            max_id = self.db.max_id_factura()
+            if max_id != self._ultimo_max_id:
+                self._ultimo_max_id = max_id
+                seleccionado = self._id_seleccionado()
+                self.buscar()
+                if seleccionado and self.tabla.exists(seleccionado):
+                    self.tabla.selection_set(seleccionado)
+                    self.tabla.see(seleccionado)
+        except Exception as exc:  # noqa: BLE001 — no romper la UI
+            print(f"[buscador] error chequeando facturas nuevas: {exc}", flush=True)
+        finally:
+            self._programar_chequeo()
+
+    def _id_seleccionado(self) -> str | None:
+        seleccion = self.tabla.selection()
+        return seleccion[0] if seleccion else None
 
     def ejecutar(self) -> None:
         self.ventana.mainloop()

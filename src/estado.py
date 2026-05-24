@@ -20,7 +20,8 @@ class Estado:
         self._lock = Lock()
 
     def incrementar(self, evento: str) -> None:
-        """Eventos esperados: 'ok', 'revisar', 'defectuoso', 'duplicado', 'error'."""
+        """Eventos esperados: 'ok', 'revisar', 'defectuoso', 'duplicado',
+        'no_factura', 'error'."""
         with self._lock:
             self._reset_si_dia_cambio()
             self._contadores[evento] += 1

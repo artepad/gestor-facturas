@@ -16,6 +16,32 @@ HERRAMIENTA_FACTURA = {
     "input_schema": {
         "type": "object",
         "properties": {
+            "es_factura": {
+                "type": "boolean",
+                "description": (
+                    "true SOLO si el documento es una FACTURA comercial chilena "
+                    "real (factura, factura electrónica, factura exenta) con "
+                    "detalle de productos o servicios, RUT del emisor, número de "
+                    "folio y montos (neto/IVA/total o exento/total). "
+                    "false si es otro tipo de documento: comprobante de pago o "
+                    "transferencia, voucher, cotización, orden de compra, guía "
+                    "de despacho, estado de cuenta, recibo, certificado, "
+                    "contrato, contraseña, ticket, o cualquier PDF que no sea "
+                    "una factura. Si hay dudas o falta el detalle de productos "
+                    "con precios, marca false."
+                ),
+            },
+            "tipo_documento": {
+                "type": "string",
+                "description": (
+                    "Tipo real del documento, en minúsculas. Ejemplos: 'factura', "
+                    "'factura electronica', 'factura exenta', 'boleta', "
+                    "'comprobante de transferencia', 'comprobante de pago', "
+                    "'voucher', 'cotizacion', 'orden de compra', 'guia de "
+                    "despacho', 'estado de cuenta', 'recibo', 'certificado', "
+                    "'contrato', 'otro'."
+                ),
+            },
             "proveedor": {
                 "type": "string",
                 "description": (
@@ -78,7 +104,7 @@ HERRAMIENTA_FACTURA = {
                 "description": "Observaciones si algo es dudoso o ilegible.",
             },
         },
-        "required": ["proveedor", "fecha", "confianza"],
+        "required": ["es_factura", "tipo_documento", "proveedor", "fecha", "confianza"],
     },
 }
 
@@ -144,6 +170,17 @@ PROMPT = (
     "Eres un asistente experto en extraer datos de facturas comerciales chilenas. "
     "Te entrego el texto extraído del PDF (puede contener errores de OCR) y la imagen "
     "de la primera página de la factura.\n\n"
+    "PASO 1 — Decide si el documento ES una factura comercial chilena.\n"
+    "Una factura DEBE tener todos estos elementos: encabezado 'FACTURA' / 'FACTURA "
+    "ELECTRÓNICA' / 'FACTURA EXENTA', RUT del emisor, número de folio, y un "
+    "DETALLE DE PRODUCTOS o servicios con cantidades y precios (no solo un total).\n"
+    "Si el documento es un comprobante de pago/transferencia, voucher, cotización, "
+    "orden de compra, guía de despacho, estado de cuenta, recibo, certificado o "
+    "cualquier otro PDF que NO sea una factura comercial, pon `es_factura=false` "
+    "y describe qué es en `tipo_documento`. NO inventes datos en los campos "
+    "siguientes; rellénalos con lo que veas o déjalos en null. Sin detalle de "
+    "productos con precios = no es factura.\n\n"
+    "PASO 2 — Solo si es factura, extrae los datos.\n"
     "Identifica los datos del EMISOR de la factura (NO del cliente que la recibe). "
     "Devuelve TANTO la marca comercial visible en el logo (campo `proveedor`) COMO "
     "la razón social legal y RUT del emisor (campos `razon_social` y `rut_emisor`). "
@@ -334,19 +371,23 @@ class DatosFactura:
     total: float | str | None = None
     moneda: str | None = None
     notas: str | None = None
+    es_factura: bool = True
+    tipo_documento: str | None = None
 
     @classmethod
     def desde_dict(cls, datos: dict[str, Any]) -> "DatosFactura":
         return cls(
-            proveedor=datos["proveedor"],
-            fecha=datos["fecha"],
-            confianza=float(datos["confianza"]),
+            proveedor=datos.get("proveedor") or "",
+            fecha=datos.get("fecha"),
+            confianza=float(datos.get("confianza", 0.0)),
             razon_social=datos.get("razon_social"),
             rut_emisor=datos.get("rut_emisor"),
             numero_factura=datos.get("numero_factura"),
             total=datos.get("total"),
             moneda=datos.get("moneda"),
             notas=datos.get("notas"),
+            es_factura=bool(datos.get("es_factura", True)),
+            tipo_documento=datos.get("tipo_documento"),
         )
 
 
