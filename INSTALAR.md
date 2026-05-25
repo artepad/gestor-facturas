@@ -8,22 +8,26 @@
 - **Conexión a internet** (solo durante la instalación, para bajar el código y dependencias).
 - **Tu API key de Anthropic** (la que paga las llamadas a Claude que clasifican las facturas).
 
-## Instalación (5 minutos)
+## Instalación (3 pasos, 5 minutos)
 
-1. Descarga el archivo **`instalar.ps1`** desde
-   https://github.com/artepad/gestor-facturas (clic derecho → Guardar como).
-2. Clic derecho sobre el archivo → **"Ejecutar con PowerShell"**.
-3. Windows pregunta "¿Permitir cambios?" → **Sí** (el instalador necesita permisos de admin).
-4. Responde tres preguntas:
-   - **Carpeta de instalación**: presiona Enter para usar `C:\AdminFacturas` (recomendado).
-   - **API key**: pega tu key de Anthropic.
-   - **Autoarranque con Windows**: presiona Enter para **Sí** (el ícono de la bandeja aparecerá solo cada vez que prendas el PC).
-5. El instalador trabaja solo:
-   - Descarga el código desde GitHub.
-   - Crea las carpetas necesarias.
-   - Instala las dependencias de Python (puede tardar 1-2 minutos).
-   - Crea accesos directos en el escritorio y menú inicio.
-6. **Listo**. El ícono aparece en la bandeja del sistema (esquina inferior derecha, junto al reloj).
+1. **Abre PowerShell**: Win+S → escribe `powershell` → Enter.
+2. **Copia y pega este comando** (todo en una línea) y presiona Enter:
+   ```powershell
+   iwr https://raw.githubusercontent.com/artepad/gestor-facturas/main/instalar.ps1 -OutFile $env:TEMP\inst.ps1; Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","$env:TEMP\inst.ps1"
+   ```
+3. Acepta el prompt de admin de Windows. En la ventana del instalador responde 3 preguntas:
+   - **Carpeta de instalación**: Enter para `C:\AdminFacturas` (recomendado).
+   - **API key de Anthropic**: pega tu key.
+   - **Autoarranque con Windows**: Enter para **Sí**.
+
+El instalador trabaja solo (1-2 minutos):
+- Descarga el código desde GitHub.
+- Crea las carpetas.
+- Instala las dependencias de Python.
+- Crea accesos directos.
+- Al terminar, ofrece arrancar la vigilancia inmediatamente.
+
+**Listo**. El ícono aparece en la bandeja del sistema (junto al reloj).
 
 ## Estructura instalada
 
@@ -65,6 +69,21 @@ Opción más limpia:
 3. En el PC nuevo: instala Python → corre `instalar.ps1`.
 4. Abre el Administrador → ☰ → Configuración → Importar respaldo → elige el `.zip`.
 5. Cierra y reabre el programa. Todo restaurado.
+
+## Desinstalar
+
+Mismo flujo que la instalación, en una línea:
+
+```powershell
+iwr https://raw.githubusercontent.com/artepad/gestor-facturas/main/desinstalar.ps1 -OutFile $env:TEMP\des.ps1; Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","$env:TEMP\des.ps1"
+```
+
+El desinstalador te ofrece dos opciones:
+
+- **Opción 1 (recomendada)**: borra solo el programa y los accesos directos. **Conserva la BD y los PDFs** en `C:\AdminFacturas\datos\` y `C:\AdminFacturas\Facturas\`. Útil si vas a reinstalar después.
+- **Opción 2**: borra TODO, incluida la base de datos y los PDFs. Te pide escribir `BORRAR` para confirmar (es irreversible).
+
+Antes de elegir Opción 2, te recomiendo **exportar un respaldo** desde el Administrador → ☰ → Configuración → Exportar respaldo. Así puedes restaurarlo después si te arrepientes.
 
 ## Solución de problemas
 

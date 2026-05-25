@@ -146,18 +146,22 @@ $configFinal = "$dirInstall\programa\config.yaml"
 $envFinal = "$dirInstall\programa\.env"
 
 # Solo (re)escribir config.yaml si no existe (no pisar configuracion del usuario)
+# Usar UTF-8 sin BOM: PowerShell 5.1 mete BOM con -Encoding UTF8 y eso rompe
+# a python-dotenv (lee "﻿ANTHROPIC_API_KEY" en vez de la variable).
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 if (-not (Test-Path $configFinal)) {
     $template = Get-Content -Path "$dirInstall\programa\config.template.yaml" -Raw
     $template = $template.Replace("{{INSTALL_DIR}}", $dirInstall)
-    Set-Content -Path $configFinal -Value $template -Encoding UTF8
+    [System.IO.File]::WriteAllText($configFinal, $template, $utf8NoBom)
     Write-Host "  config.yaml generado" -ForegroundColor Gray
 } else {
     Write-Host "  config.yaml ya existe, se conserva" -ForegroundColor Gray
 }
 
-# .env: solo reescribir si no existe
 if (-not (Test-Path $envFinal)) {
-    Set-Content -Path $envFinal -Value "ANTHROPIC_API_KEY=$apiKey" -Encoding UTF8
+    [System.IO.File]::WriteAllText($envFinal,
+        "ANTHROPIC_API_KEY=$apiKey`r`n", $utf8NoBom)
     Write-Host "  .env generado" -ForegroundColor Gray
 } else {
     Write-Host "  .env ya existe, se conserva" -ForegroundColor Gray
