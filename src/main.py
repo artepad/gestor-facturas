@@ -40,6 +40,7 @@ from organizer import (
     mover_a_reemplazadas,
     mover_a_revisar,
 )
+import respaldo
 from validacion import validar_datos_factura
 from watcher import ManejadorFacturas, vigilar
 
@@ -127,6 +128,14 @@ def crear_procesador(
     def procesar(ruta_pdf: Path) -> None:
         if estado is not None and estado.pausado:
             print(f"[procesar] PAUSADO, dejando en _entrada: {ruta_pdf.name}", flush=True)
+            return
+        # Si el Administrador está exportando/importando un respaldo, no
+        # tocamos la BD ni los PDFs. El archivo queda en _entrada para
+        # procesarse cuando el bloqueo se levante (el siguiente evento del
+        # watchdog o la próxima pasada de procesar_pendientes lo retoma).
+        if respaldo.procesamiento_bloqueado(config):
+            print(f"[procesar] RESPALDO EN CURSO, dejando en _entrada: "
+                  f"{ruta_pdf.name}", flush=True)
             return
 
         t0 = time.perf_counter()

@@ -9,7 +9,9 @@ import os
 import tkinter as tk
 import unicodedata
 from pathlib import Path
-from tkinter import messagebox, ttk
+import queue
+import threading
+from tkinter import filedialog, messagebox, ttk
 
 import yaml
 from dotenv import load_dotenv
@@ -19,6 +21,7 @@ import estilos
 from classifier import DatosFactura
 from db import Database
 from organizer import nombre_archivo, ruta_destino
+import respaldo
 from validacion import validar_datos_factura
 from ventana_factura import abrir_ventana_factura
 from version import NOMBRE, __version__
@@ -423,10 +426,41 @@ class Buscador:
         centro = tk.Frame(barra, bg=estilos.FONDO)
         centro.place(relx=0.5, rely=0.5, anchor="center")
         estilos.boton(centro, "Cerrar", self._cerrar, "gris").pack(side="left", padx=10)
+        estilos.boton(centro, "Respaldo ▾", self._abrir_menu_respaldo,
+                      "azul").pack(side="left", padx=10)
         self.btn_pantalla = estilos.boton(
             centro, "Modo pantalla completa",
             self._alternar_pantalla_completa, "verde")
         self.btn_pantalla.pack(side="left", padx=10)
+
+    def _abrir_menu_respaldo(self) -> None:
+        """Muestra un pequeño menú con las dos acciones de respaldo."""
+        menu = tk.Menu(self.ventana, tearoff=0, font=estilos.F_BODY)
+        menu.add_command(label="Exportar respaldo…", command=self._exportar_respaldo)
+        menu.add_command(label="Importar respaldo…", command=self._importar_respaldo)
+        # Posiciona el menú justo bajo el cursor
+        try:
+            x = self.ventana.winfo_pointerx()
+            y = self.ventana.winfo_pointery()
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _exportar_respaldo(self) -> None:
+        DialogoExportarRespaldo(self.ventana, self.config).mostrar()
+
+    def _importar_respaldo(self) -> None:
+        if not messagebox.askyesno(
+                "Importar respaldo",
+                "Importar reemplazará la base de datos y los PDFs actuales con "
+                "los del respaldo.\n\n"
+                "Antes de continuar, IMPORTANTE:\n"
+                "• Pausa la vigilancia desde el ícono de la bandeja.\n"
+                "• Asegúrate de haber exportado un respaldo de seguridad.\n\n"
+                "¿Deseas continuar?",
+                parent=self.ventana, icon="warning"):
+            return
+        DialogoImportarRespaldo(self.ventana, self.config).mostrar()
 
     # --- Acciones ---
 
@@ -823,6 +857,379 @@ class Buscador:
 
     def ejecutar(self) -> None:
         self.ventana.mainloop()
+
+
+class _DialogoRespaldoBase(tk.Toplevel):
+    """Base común para los diálogos de exportar e importar.
+
+    Ejecuta la operación pesada en un thread para no congelar la UI, y
+    transfiere actualizaciones de progreso por una cola consumida desde el
+    hilo de Tk vía `after()`.
+    """
+
+    def __init__(self, padre: tk.Misc, titulo: str, ancho: int = 540,
+                 alto: int = 480) -> None:
+        super().__init__(padre)
+        self.title(titulo)
+        self.transient(padre)
+        self.configure(bg=estilos.FONDO)
+        self.resizable(False, False)
+        self.geometry(f"{ancho}x{alto}")
+        self._cola: queue.Queue = queue.Queue()
+        self._thread: threading.Thread | None = None
+        self._cerrar_permitido = True
+        self.protocol("WM_DELETE_WINDOW", self._intentar_cerrar)
+
+    def _intentar_cerrar(self) -> None:
+        if self._cerrar_permitido:
+            self.destroy()
+        else:
+            messagebox.showinfo(
+                "Operación en curso",
+                "Espera a que termine para cerrar esta ventana.",
+                parent=self)
+
+    def _bloquear_cerrar(self, bloquear: bool) -> None:
+        self._cerrar_permitido = not bloquear
+
+    def _lanzar_en_thread(self, fn) -> None:
+        def correr():
+            try:
+                fn()
+            except Exception as exc:  # noqa: BLE001
+                self._cola.put(("error", str(exc)))
+            else:
+                self._cola.put(("ok", None))
+        self._thread = threading.Thread(target=correr, daemon=True)
+        self._thread.start()
+        self.after(120, self._consumir_cola)
+
+    def _consumir_cola(self) -> None:
+        try:
+            while True:
+                tipo, payload = self._cola.get_nowait()
+                self._manejar_evento(tipo, payload)
+        except queue.Empty:
+            pass
+        if self._thread is not None and self._thread.is_alive():
+            self.after(120, self._consumir_cola)
+
+    def _manejar_evento(self, tipo: str, payload) -> None:
+        """Sobreescribir en cada subclase."""
+        raise NotImplementedError
+
+    def mostrar(self) -> None:
+        self.wait_window()
+
+
+class DialogoExportarRespaldo(_DialogoRespaldoBase):
+    """Modal para generar un respaldo .zip."""
+
+    def __init__(self, padre: tk.Misc, config: dict) -> None:
+        super().__init__(padre, "Exportar respaldo")
+        self.config_app = config
+        self._carpeta_destino = tk.StringVar(value=str(Path.home() / "Desktop"))
+        self._nombre_negocio = tk.StringVar(value="")
+        self._incluir_api_key = tk.BooleanVar(value=False)
+        self._construir_ui()
+
+    def _construir_ui(self) -> None:
+        cont = tk.Frame(self, bg=estilos.FONDO, padx=22, pady=18)
+        cont.pack(fill="both", expand=True)
+
+        tk.Label(cont, text="Exportar respaldo", font=estilos.F_H3,
+                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(anchor="w")
+        tk.Label(cont,
+                 text="Genera un archivo .zip con la base de datos, los PDFs "
+                      "y la configuración.",
+                 font=estilos.F_SMALL, bg=estilos.FONDO,
+                 fg=estilos.TEXTO_SEC, wraplength=480, justify="left"
+                 ).pack(anchor="w", pady=(2, 14))
+
+        # Nombre del negocio
+        tk.Label(cont, text="Nombre del negocio (etiqueta del respaldo):",
+                 font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+                 fg=estilos.TEXTO_SEC).pack(anchor="w")
+        estilos.entrada(cont, textvariable=self._nombre_negocio, width=50
+                        ).pack(anchor="w", pady=(4, 12), ipady=3)
+
+        # Carpeta destino
+        tk.Label(cont, text="Carpeta donde guardar:",
+                 font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+                 fg=estilos.TEXTO_SEC).pack(anchor="w")
+        fila_carpeta = tk.Frame(cont, bg=estilos.FONDO)
+        fila_carpeta.pack(fill="x", pady=(4, 12))
+        estilos.entrada(fila_carpeta, textvariable=self._carpeta_destino
+                        ).pack(side="left", fill="x", expand=True, ipady=3)
+        estilos.boton(fila_carpeta, "Elegir…", self._elegir_carpeta, "gris",
+                      grande=False).pack(side="left", padx=(8, 0))
+
+        # API key
+        tk.Checkbutton(
+            cont, text="Incluir API key (.env) — solo si el respaldo es para ti",
+            variable=self._incluir_api_key, font=estilos.F_SMALL,
+            bg=estilos.FONDO, fg=estilos.TEXTO_SEC,
+            activebackground=estilos.FONDO, selectcolor="white",
+            cursor="hand2").pack(anchor="w", pady=(0, 14))
+
+        # Progreso
+        self._estado = tk.Label(cont, text="", font=estilos.F_SMALL,
+                                bg=estilos.FONDO, fg=estilos.TEXTO_SEC)
+        self._estado.pack(anchor="w")
+        self._barra = ttk.Progressbar(cont, mode="determinate", length=480)
+        self._barra.pack(fill="x", pady=(4, 14))
+
+        # Botones
+        botones = tk.Frame(cont, bg=estilos.FONDO)
+        botones.pack(fill="x")
+        self._btn_cerrar = estilos.boton(botones, "Cerrar", self.destroy, "gris")
+        self._btn_cerrar.pack(side="right", padx=(10, 0))
+        self._btn_exportar = estilos.boton(botones, "Exportar",
+                                           self._iniciar_exportar, "azul")
+        self._btn_exportar.pack(side="right")
+
+    def _elegir_carpeta(self) -> None:
+        carpeta = filedialog.askdirectory(
+            parent=self, title="Carpeta de destino del respaldo",
+            initialdir=self._carpeta_destino.get())
+        if carpeta:
+            self._carpeta_destino.set(carpeta)
+
+    def _iniciar_exportar(self) -> None:
+        destino = Path(self._carpeta_destino.get().strip())
+        if not destino:
+            messagebox.showwarning("Carpeta requerida",
+                                   "Elige una carpeta de destino.", parent=self)
+            return
+        self._btn_exportar.configure(state="disabled")
+        self._bloquear_cerrar(True)
+        self._barra.configure(mode="indeterminate")
+        self._barra.start(80)
+        self._estado.config(text="Iniciando…")
+
+        def progreso(p: respaldo.ProgresoRespaldo) -> None:
+            self._cola.put(("progreso", p))
+
+        def trabajo():
+            # Crea un marcador que el watcher (otro proceso) respeta para no
+            # tocar la BD ni los PDFs mientras se genera el respaldo.
+            with respaldo.bloquear_procesamiento(self.config_app):
+                self._resultado = respaldo.exportar(
+                    self.config_app, destino,
+                    incluir_api_key=self._incluir_api_key.get(),
+                    nombre_negocio=self._nombre_negocio.get().strip(),
+                    ruta_config_yaml=RAIZ / "config.yaml",
+                    ruta_env=RAIZ / ".env",
+                    progreso=progreso)
+
+        self._lanzar_en_thread(trabajo)
+
+    def _manejar_evento(self, tipo: str, payload) -> None:
+        if tipo == "progreso":
+            p: respaldo.ProgresoRespaldo = payload
+            self._estado.config(text=p.paso or "Trabajando…")
+            if p.total:
+                self._barra.stop()
+                self._barra.configure(mode="determinate", maximum=p.total,
+                                      value=p.actual)
+        elif tipo == "ok":
+            self._barra.stop()
+            self._barra.configure(mode="determinate",
+                                  maximum=100, value=100)
+            self._estado.config(text="Respaldo creado correctamente.",
+                                fg=estilos.VERDE_OK)
+            self._bloquear_cerrar(False)
+            self._btn_cerrar.configure(text="Cerrar")
+            r = self._resultado
+            mb = r.tamano_bytes / (1024 * 1024)
+            messagebox.showinfo(
+                "Respaldo creado",
+                f"Archivo: {r.ruta_zip.name}\n"
+                f"Carpeta: {r.ruta_zip.parent}\n"
+                f"Tamaño: {mb:.1f} MB\n"
+                f"Facturas: {r.conteos.get('facturas', '?')}\n"
+                f"PDFs: {r.conteos.get('pdfs', '?')}",
+                parent=self)
+        elif tipo == "error":
+            self._barra.stop()
+            self._estado.config(text=f"Error: {payload}", fg="#dc3545")
+            self._bloquear_cerrar(False)
+            self._btn_exportar.configure(state="normal")
+            messagebox.showerror("Error al exportar",
+                                 str(payload), parent=self)
+
+
+class DialogoImportarRespaldo(_DialogoRespaldoBase):
+    """Modal para restaurar un respaldo .zip."""
+
+    def __init__(self, padre: tk.Misc, config: dict) -> None:
+        super().__init__(padre, "Importar respaldo", alto=560)
+        self.config_app = config
+        self._ruta_zip = tk.StringVar(value="")
+        self._info = tk.StringVar(value="Selecciona un archivo .zip de respaldo.")
+        self._manifiesto: respaldo.Manifiesto | None = None
+        self._auto_respaldar = tk.BooleanVar(value=True)
+        self._ruta_auto: Path | None = None
+        self._construir_ui()
+
+    def _construir_ui(self) -> None:
+        cont = tk.Frame(self, bg=estilos.FONDO, padx=22, pady=18)
+        cont.pack(fill="both", expand=True)
+
+        tk.Label(cont, text="Importar respaldo", font=estilos.F_H3,
+                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(anchor="w")
+        tk.Label(cont,
+                 text="Reemplaza la base de datos y los PDFs actuales con los "
+                      "contenidos del respaldo.",
+                 font=estilos.F_SMALL, bg=estilos.FONDO,
+                 fg=estilos.TEXTO_SEC, wraplength=480, justify="left"
+                 ).pack(anchor="w", pady=(2, 14))
+
+        tk.Label(cont, text="Archivo .zip:",
+                 font=estilos.F_BODY_BOLD, bg=estilos.FONDO,
+                 fg=estilos.TEXTO_SEC).pack(anchor="w")
+        fila = tk.Frame(cont, bg=estilos.FONDO)
+        fila.pack(fill="x", pady=(4, 12))
+        estilos.entrada(fila, textvariable=self._ruta_zip, state="readonly"
+                        ).pack(side="left", fill="x", expand=True, ipady=3)
+        estilos.boton(fila, "Elegir…", self._elegir_zip, "gris",
+                      grande=False).pack(side="left", padx=(8, 0))
+
+        self._info_label = tk.Label(cont, textvariable=self._info,
+                                    font=estilos.F_SMALL,
+                                    bg=estilos.FONDO, fg=estilos.TEXTO_SEC,
+                                    wraplength=480, justify="left")
+        self._info_label.pack(anchor="w", pady=(0, 10))
+
+        # Red de seguridad: respalda automáticamente lo actual antes de pisar
+        tk.Checkbutton(
+            cont,
+            text="Respaldar datos actuales antes de importar (recomendado)",
+            variable=self._auto_respaldar, font=estilos.F_SMALL,
+            bg=estilos.FONDO, fg=estilos.TEXTO_SEC,
+            activebackground=estilos.FONDO, selectcolor="white",
+            cursor="hand2").pack(anchor="w", pady=(0, 14))
+
+        # Progreso
+        self._estado = tk.Label(cont, text="", font=estilos.F_SMALL,
+                                bg=estilos.FONDO, fg=estilos.TEXTO_SEC)
+        self._estado.pack(anchor="w")
+        self._barra = ttk.Progressbar(cont, mode="determinate", length=480)
+        self._barra.pack(fill="x", pady=(4, 14))
+
+        botones = tk.Frame(cont, bg=estilos.FONDO)
+        botones.pack(fill="x")
+        self._btn_cerrar = estilos.boton(botones, "Cerrar", self.destroy, "gris")
+        self._btn_cerrar.pack(side="right", padx=(10, 0))
+        self._btn_importar = estilos.boton(botones, "Importar",
+                                           self._iniciar_importar, "azul")
+        self._btn_importar.pack(side="right")
+        self._btn_importar.configure(state="disabled")
+
+    def _elegir_zip(self) -> None:
+        ruta = filedialog.askopenfilename(
+            parent=self, title="Elegir respaldo a importar",
+            filetypes=[("Respaldo (.zip)", "*.zip"), ("Todos", "*.*")])
+        if not ruta:
+            return
+        self._ruta_zip.set(ruta)
+        try:
+            self._manifiesto = respaldo.leer_manifiesto(Path(ruta))
+        except ValueError as exc:
+            self._info.set(f"Archivo inválido: {exc}")
+            self._info_label.configure(fg="#dc3545")
+            self._btn_importar.configure(state="disabled")
+            return
+        m = self._manifiesto
+        self._info.set(
+            f"Respaldo válido.\n"
+            f"Negocio: {m.negocio or '(sin nombre)'}\n"
+            f"Fecha: {m.fecha_respaldo}\n"
+            f"Versión programa: {m.version_programa}\n"
+            f"Facturas: {m.conteos.get('facturas', '?')}  ·  "
+            f"PDFs: {m.conteos.get('pdfs', '?')}\n"
+            f"Incluye API key: {'sí' if m.incluye_api_key else 'no'}")
+        self._info_label.configure(fg=estilos.TEXTO_SEC)
+        self._btn_importar.configure(state="normal")
+
+    def _iniciar_importar(self) -> None:
+        if not self._manifiesto:
+            return
+        if not messagebox.askyesno(
+                "Confirmar importación",
+                "Esto sobrescribirá la base de datos y los PDFs actuales.\n\n"
+                "¿Continuar?", parent=self, icon="warning"):
+            return
+        self._btn_importar.configure(state="disabled")
+        self._bloquear_cerrar(True)
+        self._barra.configure(mode="indeterminate")
+        self._barra.start(80)
+
+        def progreso(p: respaldo.ProgresoRespaldo) -> None:
+            self._cola.put(("progreso", p))
+
+        def trabajo():
+            # Marcador para que el watcher (otro proceso) no toque la BD
+            # mientras la reemplazamos.
+            with respaldo.bloquear_procesamiento(self.config_app):
+                # Red de seguridad: respaldo automático de lo actual ANTES
+                # de pisar nada. Si la importación falla o el usuario se
+                # arrepiente, este zip permite volver atrás.
+                if self._auto_respaldar.get():
+                    self._cola.put(
+                        ("progreso",
+                         respaldo.ProgresoRespaldo(
+                             paso="Generando respaldo de seguridad…")))
+                    carpeta_auto = respaldo.carpeta_respaldos_automaticos(
+                        self.config_app)
+                    res_auto = respaldo.exportar(
+                        self.config_app, carpeta_auto,
+                        incluir_api_key=False,
+                        nombre_negocio="AUTO_antes_de_importar",
+                        ruta_config_yaml=RAIZ / "config.yaml",
+                        ruta_env=RAIZ / ".env")
+                    self._ruta_auto = res_auto.ruta_zip
+                    # Mantén solo los últimos 5 para no llenar el disco
+                    respaldo.limpiar_respaldos_automaticos(
+                        self.config_app, conservar=5)
+                respaldo.importar(
+                    Path(self._ruta_zip.get()), self.config_app,
+                    ruta_config_yaml_local=RAIZ / "config.yaml",
+                    ruta_env_local=RAIZ / ".env",
+                    progreso=progreso)
+
+        self._lanzar_en_thread(trabajo)
+
+    def _manejar_evento(self, tipo: str, payload) -> None:
+        if tipo == "progreso":
+            p: respaldo.ProgresoRespaldo = payload
+            self._estado.config(text=p.paso or "Trabajando…")
+            if p.total:
+                self._barra.stop()
+                self._barra.configure(mode="determinate", maximum=p.total,
+                                      value=p.actual)
+        elif tipo == "ok":
+            self._barra.stop()
+            self._barra.configure(mode="determinate",
+                                  maximum=100, value=100)
+            self._estado.config(text="Respaldo restaurado correctamente.",
+                                fg=estilos.VERDE_OK)
+            self._bloquear_cerrar(False)
+            mensaje = ("El respaldo se restauró correctamente.\n\n"
+                       "Cierra y vuelve a abrir el programa para que los "
+                       "cambios se reflejen en todas las ventanas.")
+            if self._ruta_auto is not None:
+                mensaje += (
+                    "\n\nRed de seguridad: tus datos anteriores quedaron "
+                    f"respaldados en:\n{self._ruta_auto}")
+            messagebox.showinfo("Importación completa", mensaje, parent=self)
+        elif tipo == "error":
+            self._barra.stop()
+            self._estado.config(text=f"Error: {payload}", fg="#dc3545")
+            self._bloquear_cerrar(False)
+            self._btn_importar.configure(state="normal")
+            messagebox.showerror("Error al importar",
+                                 str(payload), parent=self)
 
 
 def main() -> None:
