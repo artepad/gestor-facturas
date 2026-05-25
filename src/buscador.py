@@ -21,6 +21,7 @@ from db import Database
 from organizer import nombre_archivo, ruta_destino
 from validacion import validar_datos_factura
 from ventana_factura import abrir_ventana_factura
+from version import NOMBRE, __version__
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -264,58 +265,80 @@ class Buscador:
         estilos.cabecera(
             self.ventana, self._TITULO,
             alto=84, franja=6, fuente_titulo=("Segoe UI", 24, "bold"))
-        estilos.pie(self.ventana, "Gestor de Facturas", alto=46, franja=6)
+        estilos.pie(self.ventana, NOMBRE, alto=46, franja=6,
+                    version=f"v{__version__}")
         self._construir_barra_inferior()
 
         cont = tk.Frame(self.ventana, bg=estilos.FONDO)
-        cont.pack(fill="both", expand=True, padx=29, pady=(17, 10))
+        cont.pack(fill="both", expand=True, padx=29, pady=(14, 4))
         self._construir_filtros(cont)
         self._construir_tabla(cont)
 
     def _construir_filtros(self, parent: tk.Misc) -> None:
         filtros = estilos.panel(parent, "Filtros")
         filtros.pack(fill="x")
+        # Padding interno uniforme para que respire
+        # pady aplica arriba y abajo por igual; el margen inferior extra se
+        # compensa con un espaciador al final del bloque.
+        filtros.configure(padx=18, pady=10)
 
-        # Fila 1: búsqueda libre + proveedor + activador del filtro de fecha
-        fila1 = tk.Frame(filtros, bg=estilos.FONDO)
-        fila1.pack(fill="x")
-        tk.Label(fila1, text="Búsqueda libre:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
-        self.entrada_texto = estilos.entrada(fila1, width=31)
-        self.entrada_texto.pack(side="left", padx=(10, 19))
+        # Todo en una sola fila compacta: Búsqueda | Proveedor | Buscar | Limpiar
+        fila = tk.Frame(filtros, bg=estilos.FONDO)
+        fila.pack(fill="x")
+
+        # Ambos campos del mismo ancho fijo, etiqueta arriba
+        ANCHO_CAMPO = 28  # caracteres, mismo para Entry y Combobox
+
+        def _celda(etiqueta: str) -> tk.Frame:
+            celda = tk.Frame(fila, bg=estilos.FONDO)
+            tk.Label(celda, text=etiqueta, font=estilos.F_BODY_BOLD,
+                     bg=estilos.FONDO, fg=estilos.TEXTO_SEC).pack(
+                anchor="w", pady=(0, 5))
+            return celda
+
+        # Búsqueda libre
+        celda_busqueda = _celda("Búsqueda libre")
+        celda_busqueda.pack(side="left")
+        # Búsqueda libre claramente más ancha que el resto
+        self.entrada_texto = estilos.entrada(celda_busqueda, width=60)
+        self.entrada_texto.pack(ipady=4)
         self.entrada_texto.bind("<Return>", lambda _e: self.buscar())
 
-        tk.Label(fila1, text="Proveedor:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
-        self.combo_proveedor = ttk.Combobox(fila1, width=22, state="readonly")
-        self.combo_proveedor.pack(side="left", padx=(10, 19))
-        self.combo_proveedor.bind("<<ComboboxSelected>>", lambda _e: self.buscar())
+        # Proveedor
+        celda_prov = _celda("Proveedor")
+        celda_prov.pack(side="left", padx=(14, 0))
+        self.combo_proveedor = ttk.Combobox(celda_prov, state="readonly",
+                                            font=estilos.F_BODY,
+                                            width=ANCHO_CAMPO - 2)
+        self.combo_proveedor.pack(ipady=3)
+        self.combo_proveedor.bind("<<ComboboxSelected>>",
+                                  lambda _e: self.buscar())
 
-        self.usar_fecha = tk.BooleanVar(value=False)
-        tk.Checkbutton(
-            fila1, text="Filtrar por fecha", variable=self.usar_fecha,
-            command=self._alternar_fechas, font=estilos.F_BODY,
-            bg=estilos.FONDO, fg=estilos.TEXTO, activebackground=estilos.FONDO,
-            activeforeground=estilos.TEXTO, selectcolor="white",
-            cursor="hand2").pack(side="left")
-
-        # Marco de fechas: oculto por defecto, con calendarios visuales
-        self.marco_fechas = tk.Frame(filtros, bg=estilos.FONDO)
-        tk.Label(self.marco_fechas, text="Desde:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
-        self.fecha_desde = self._crear_calendario(self.marco_fechas)
-        self.fecha_desde.pack(side="left", padx=(7, 22))
-        tk.Label(self.marco_fechas, text="Hasta:", font=estilos.F_BODY,
-                 bg=estilos.FONDO, fg=estilos.TEXTO).pack(side="left")
-        self.fecha_hasta = self._crear_calendario(self.marco_fechas)
-        self.fecha_hasta.pack(side="left", padx=7)
-
-        # Fila de botones
-        self.fila_botones = tk.Frame(filtros, bg=estilos.FONDO)
-        self.fila_botones.pack(fill="x", pady=(14, 2))
-        estilos.boton(self.fila_botones, "Buscar", self.buscar, "azul").pack(side="left")
+        # Botones, alineados con el input (no con la etiqueta)
+        self.fila_botones = tk.Frame(fila, bg=estilos.FONDO)
+        self.fila_botones.pack(side="left", padx=(20, 0), pady=(22, 0))
+        estilos.boton(self.fila_botones, "Buscar", self.buscar,
+                      "azul").pack(side="left")
         estilos.boton(self.fila_botones, "Limpiar filtros", self.limpiar,
-                      "gris").pack(side="left", padx=10)
+                      "gris").pack(side="left", padx=(10, 0))
+
+        # --- Filtro por fecha: oculto por ahora, pero la lógica sigue activa ---
+        # Para reactivarlo: empaquetar un checkbox que llame _alternar_fechas y
+        # `self.marco_fechas` en algún lugar de la barra de filtros.
+        self.usar_fecha = tk.BooleanVar(value=False)
+        self.marco_fechas = tk.Frame(filtros, bg=estilos.FONDO)
+        self.fecha_desde = self._crear_calendario(self.marco_fechas)
+        self.fecha_desde.pack(side="left", fill="x", expand=True)
+        tk.Label(self.marco_fechas, text="—", font=estilos.F_BODY,
+                 bg=estilos.FONDO, fg=estilos.TEXTO_TENUE).pack(
+            side="left", padx=8)
+        self.fecha_hasta = self._crear_calendario(self.marco_fechas)
+        self.fecha_hasta.pack(side="left", fill="x", expand=True)
+        # marco_fechas NO se empaqueta: queda invisible hasta que se reactive.
+
+        # Espaciador inferior: aumenta ~10% el margen entre la fila de filtros
+        # y el borde inferior del contenedor "Filtros".
+        tk.Frame(filtros, bg=estilos.FONDO, height=8).pack(fill="x")
 
     def _crear_calendario(self, parent: tk.Misc) -> DateEntry:
         """Campo de fecha con calendario visual desplegable."""
@@ -333,7 +356,7 @@ class Buscador:
 
     def _construir_tabla(self, parent: tk.Misc) -> None:
         marco = tk.Frame(parent, bg=estilos.FONDO)
-        marco.pack(fill="both", expand=True, pady=(17, 0))
+        marco.pack(fill="both", expand=True, pady=(12, 0))
 
         columnas = ("fecha", "proveedor", "numero", "total", "razon_social",
                     "estado", "acciones")
@@ -381,16 +404,20 @@ class Buscador:
         self.tabla.bind("<<TreeviewSelect>>", lambda _e: self._programar_puntos_estado())
         self.tabla.bind("<Double-1>", self._abrir_seleccionado)
 
+        # Línea inferior: "N resultado(s)" y la pista de doble clic en la misma fila
+        fila_estado = tk.Frame(parent, bg=estilos.FONDO)
+        fila_estado.pack(fill="x", pady=(6, 0))
         self.etiqueta_estado = tk.Label(
-            parent, text="", font=estilos.F_SMALL,
+            fila_estado, text="", font=estilos.F_SMALL,
             bg=estilos.FONDO, fg=estilos.TEXTO_SEC)
-        self.etiqueta_estado.pack(anchor="w", pady=(10, 0))
-        tk.Label(parent, text="Doble clic en una fila para abrir el detalle de la factura.",
+        self.etiqueta_estado.pack(side="left")
+        tk.Label(fila_estado,
+                 text="  ·  Doble clic en una fila para abrir el detalle de la factura.",
                  font=estilos.F_HINT, bg=estilos.FONDO,
-                 fg=estilos.TEXTO_TENUE).pack(anchor="w")
+                 fg=estilos.TEXTO_TENUE).pack(side="left")
 
     def _construir_barra_inferior(self) -> None:
-        barra = tk.Frame(self.ventana, bg=estilos.FONDO, height=72)
+        barra = tk.Frame(self.ventana, bg=estilos.FONDO, height=58)
         barra.pack(fill="x", side="bottom")
         barra.pack_propagate(False)
         centro = tk.Frame(barra, bg=estilos.FONDO)
@@ -405,7 +432,7 @@ class Buscador:
 
     def _alternar_fechas(self) -> None:
         if self.usar_fecha.get():
-            self.marco_fechas.pack(fill="x", pady=(10, 0), before=self.fila_botones)
+            self.marco_fechas.pack(fill="x")
         else:
             self.marco_fechas.pack_forget()
         self.buscar()
@@ -522,6 +549,11 @@ class Buscador:
         self._puntos_estado.clear()
 
         seleccion = set(self.tabla.selection())
+        # Alto del área visible de filas (sin contar el encabezado)
+        try:
+            alto_visible = self.tabla.winfo_height()
+        except tk.TclError:
+            alto_visible = 0
         for item_id in self.tabla.get_children():
             bbox = self.tabla.bbox(item_id, "estado")
             if not bbox:
@@ -529,8 +561,12 @@ class Buscador:
             indice = self.tabla.index(item_id)
             if not 0 <= indice < len(self.filas):
                 continue
-            _estado, tooltip, color = self._estado_factura(self.filas[indice])
             x, y, _ancho, alto = bbox
+            # Evita dibujar el punto sobre filas parcialmente recortadas en el
+            # borde inferior de la tabla (causaba un "Estado" colgando fuera).
+            if alto < 20 or (alto_visible and y + alto > alto_visible):
+                continue
+            _estado, tooltip, color = self._estado_factura(self.filas[indice])
             fondo = estilos.ACENTO_AZUL if item_id in seleccion else (
                 "white" if indice % 2 == 0 else "#eef2f6")
             punto = tk.Label(

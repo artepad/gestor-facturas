@@ -73,6 +73,8 @@ Devuelve un `ConfiguracionAnalisisProductos` que el `_worker` usa para llamar a 
 
 **Precio de venta sugerido** (`precios.py`): valor unitario = `monto/cantidad` (cae a `precio_unitario` si falta `monto`) → + IVA si el producto es afecto y el precio venía neto → + margen → redondeo hacia arriba al múltiplo configurado. Los parámetros base (`iva`, `margen`, `redondear_a`) viven en `config.yaml` bajo `precios`; el margen efectivo de cada factura se sobreescribe con el guardado en `detalle_factura.margen_ganancia`. `db.recalcular_precios` recalcula y persiste el precio sugerido de toda la factura tras cada edición.
 
+**Versión** (`src/version.py`): fuente única de la versión del programa (SemVer). El footer del Administrador y de la ventana de factura la muestran a la derecha leyendo desde aquí vía `estilos.pie(..., version=f"v{__version__}")`. Para liberar una versión nueva basta con actualizar `__version__` en ese archivo.
+
 **Tema visual** (`estilos.py`): paleta, fuentes y constructores reutilizables (`aplicar_tema`, `cabecera`, `pie`, `boton`, `entrada`, `panel`) para que el buscador, la ventana de factura y los modales (`AnalizadorProductos`, `DialogoEditarFactura`) compartan el mismo look. `aplicar_tema` configura `clam` + el estilo `App.Treeview` (encabezado oscuro, selección azul); cada ventana lo puede ajustar localmente (ej. la ventana de factura usa `rowheight=32`).
 
 ## Convenciones importantes

@@ -17,6 +17,7 @@ from PIL import Image, ImageTk
 
 import estilos
 from db import Database, FilaFactura
+from version import NOMBRE, __version__
 
 
 def _formato_peso(valor: float | None) -> str:
@@ -733,7 +734,8 @@ class VentanaFactura(tk.Toplevel):
             return
 
         estilos.cabecera(self, "Detalle de Factura", alto=72, franja=6)
-        estilos.pie(self, "Gestor de Facturas", alto=42, franja=6)
+        estilos.pie(self, NOMBRE, alto=42, franja=6,
+                    version=f"v{__version__}")
         self._construir_barra_inferior()
 
         contenedor = tk.Frame(self, bg=estilos.FONDO)
