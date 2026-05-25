@@ -93,24 +93,35 @@ def pie(
     alto: int = 38,
     franja: int = 5,
     version: str | None = None,
+    accion_menu=None,
 ) -> tk.Frame:
     """Footer con el nombre del sistema + franja azul inferior.
 
     Si se pasa `version` (ej. "v1.0.0") se muestra discretamente a la derecha.
+    Si se pasa `accion_menu` (callable), aparece un botón hamburguesa (☰) en
+    el extremo derecho que la dispara — útil para abrir un menú de opciones.
     """
     tk.Frame(parent, bg=ACENTO_AZUL, height=franja).pack(fill="x", side="bottom")
     footer = tk.Frame(parent, bg=FONDO, height=alto)
     footer.pack(fill="x", side="bottom")
     footer.pack_propagate(False)
     tk.Frame(footer, bg=BORDE, height=2).pack(fill="x", pady=(8, 6))
-    # El nombre va centrado; la versión, si existe, alineada a la derecha
+    # Layout: nombre + versión CENTRADOS; hamburguesa a la derecha
+    # fill+expand para que el Frame ocupe el alto restante del footer y el
+    # place(rely=0.5) tenga un alto sobre el que centrar.
     contenido = tk.Frame(footer, bg=FONDO)
-    contenido.pack(fill="x")
-    tk.Label(contenido, text=texto, font=F_BODY_BOLD, bg=FONDO,
+    contenido.pack(fill="both", expand=True)
+    texto_central = f"{texto}  ·  {version}" if version else texto
+    tk.Label(contenido, text=texto_central, font=F_BODY_BOLD, bg=FONDO,
              fg=TEXTO_TENUE).place(relx=0.5, rely=0.5, anchor="center")
-    if version:
-        tk.Label(contenido, text=version, font=F_TINY, bg=FONDO,
-                 fg=TEXTO_TENUE).pack(side="right", padx=14)
+    if accion_menu is not None:
+        btn = tk.Label(
+            contenido, text="☰", font=(_FAMILIA, 16, "bold"), bg=FONDO,
+            fg=TEXTO_SEC, cursor="hand2", padx=14)
+        btn.pack(side="right")
+        btn.bind("<Button-1>", lambda _e: accion_menu())
+        btn.bind("<Enter>", lambda _e: btn.configure(fg=TEXTO))
+        btn.bind("<Leave>", lambda _e: btn.configure(fg=TEXTO_SEC))
     return footer
 
 

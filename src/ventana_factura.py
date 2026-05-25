@@ -734,7 +734,7 @@ class VentanaFactura(tk.Toplevel):
             return
 
         estilos.cabecera(self, "Detalle de Factura", alto=72, franja=6)
-        estilos.pie(self, NOMBRE, alto=42, franja=6,
+        estilos.pie(self, NOMBRE, alto=50, franja=6,
                     version=f"v{__version__}")
         self._construir_barra_inferior()
 

@@ -12,4 +12,4 @@ Versionado SemVer (MAYOR.MENOR.PARCHE):
 from __future__ import annotations
 
 __version__ = "1.0.0"
-NOMBRE = "Gestor de Facturas"
+NOMBRE = "Sistema de Gestión de Facturas"
