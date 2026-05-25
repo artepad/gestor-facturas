@@ -1,0 +1,44 @@
+# Plantilla de configuración usada por el instalador.
+# El instalador reemplaza {{INSTALL_DIR}} por la carpeta elegida
+# (por defecto: C:\AdminFacturas) y guarda el resultado como config.yaml.
+
+rutas:
+  # PDFs recién escaneados (cola del Brother DS-640)
+  entrada: {{INSTALL_DIR}}\Facturas\_entrada
+
+  # Raíz donde se archivan las facturas por AÑO/Mes/Marca
+  archivo: {{INSTALL_DIR}}\Facturas
+
+  # Facturas con baja confianza de lectura → revisar a mano
+  revisar: {{INSTALL_DIR}}\Facturas\_revisar
+
+  # Facturas que fallaron por error técnico
+  errores: {{INSTALL_DIR}}\Facturas\_errores
+
+  # Versiones viejas reemplazadas al detectar un duplicado
+  reemplazadas: {{INSTALL_DIR}}\Facturas\_reemplazadas
+
+  # PDFs detectados como NO-facturas (vouchers, cotizaciones, etc.)
+  no_facturas: {{INSTALL_DIR}}\Facturas\_no_facturas
+
+  # Base de datos SQLite (vive separada de los PDFs, junto a los respaldos)
+  base_datos: {{INSTALL_DIR}}\datos\facturas.db
+
+  # Carpeta para logs del modo bandeja (opcional)
+  logs: {{INSTALL_DIR}}\datos\logs
+
+clasificacion:
+  modelo: claude-haiku-4-5-20251001
+  umbral_confianza: 0.70
+  umbral_escaneo_defectuoso: 0.40
+  max_imagenes_detalle: 24
+
+procesamiento:
+  espera_estabilizacion: 2
+  periodo_gracia: 60
+  extensiones: [".pdf"]
+
+precios:
+  iva: 0.19
+  margen: 0.35
+  redondear_a: 100

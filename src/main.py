@@ -291,9 +291,16 @@ def procesar_pendientes(
             procesar(ruta)
 
 
-def _redirigir_logs_a_archivo() -> None:
-    """Cuando se corre via pyw.exe (autoarranque), no hay stdout. Mandamos a archivo."""
-    log_dir = RAIZ / "data" / "logs"
+def _redirigir_logs_a_archivo(config: dict) -> None:
+    """Cuando se corre via pyw.exe (autoarranque), no hay stdout. Mandamos a archivo.
+
+    Usa `config.rutas.logs` si está definido; si no, cae a `<programa>/data/logs/`.
+    """
+    ruta_logs = config.get("rutas", {}).get("logs")
+    if ruta_logs:
+        log_dir = Path(ruta_logs)
+    else:
+        log_dir = RAIZ / "data" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{datetime.now():%Y-%m-%d}.log"
     archivo = open(log_path, "a", encoding="utf-8", buffering=1)  # line-buffered
@@ -304,7 +311,7 @@ def _redirigir_logs_a_archivo() -> None:
 def modo_tray(config: dict, clasificador: Clasificador, db: Database) -> None:
     """Modo bandeja del sistema. Watcher en thread + tray en main thread."""
     if sys.stdout is None:  # arrancado via pyw.exe (sin consola)
-        _redirigir_logs_a_archivo()
+        _redirigir_logs_a_archivo(config)
 
     # Importar acá para no pagar el costo en modo consola
     from tray import construir_icono

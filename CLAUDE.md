@@ -8,8 +8,9 @@ Sistema que organiza automáticamente facturas escaneadas (escáner Brother DS-6
 
 ## Comandos
 
-Requiere Python 3.x en Windows. No hay entorno virtual ni instalador automatizado.
+Requiere Python 3.x en Windows.
 
+**Para desarrollo** (en este repo clonado):
 ```powershell
 pip install -r requirements.txt          # dependencias (incluye tkcalendar)
 copy .env.ejemplo .env                   # luego pegar la ANTHROPIC_API_KEY real
@@ -22,6 +23,8 @@ py src/prototipo.py [ruta.pdf]           # prueba aislada de extracción+clasifi
 
 py -m unittest discover -s tests         # suite de tests (unittest, sin dependencias externas)
 ```
+
+**Para instalación en PCs del negocio**: ver `INSTALAR.md`. El script `instalar.ps1` requiere permisos de administrador, descarga el código desde GitHub, crea la estructura `C:\AdminFacturas\{programa,datos,Facturas\…}`, genera `config.yaml` a partir de `config.template.yaml` reemplazando `{{INSTALL_DIR}}`, instala dependencias y crea accesos directos (incluido autoarranque opcional). El mismo script sirve para actualizar (queda copiado como `actualizar.ps1` en `programa\`): detecta instalación existente y reemplaza solo el código sin tocar BD ni PDFs.
 
 `tests/test_validacion.py` cubre el parser de montos chilenos, la detección de fechas futuras y la cooperación con `organizer.parsear_fecha`. `tests/test_respaldo.py` cubre el ciclo exportar→verificar→importar del módulo de respaldos (incluye detección de zip corrupto/alterado, marcador entre procesos y retención de respaldos automáticos). `tests/facturas_ejemplo/` (ignorada por git) son solo PDFs de muestra para `prototipo.py`. No hay linter configurado.
 
