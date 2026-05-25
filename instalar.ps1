@@ -168,14 +168,24 @@ Write-Host ""
 Write-Host "[7/8] Instalando dependencias de Python (puede tardar)..." -ForegroundColor Green
 Push-Location "$dirInstall\programa"
 try {
-    & $py.Source -m pip install --upgrade pip 2>&1 | Out-Null
-    & $py.Source -m pip install -r requirements.txt
+    & $py.Source -m pip install --upgrade pip --no-cache-dir 2>&1 | Out-Null
+    # --no-cache-dir evita problemas con caches corruptos de pip.
+    & $py.Source -m pip install --no-cache-dir -r requirements.txt
     if ($LASTEXITCODE -ne 0) {
-        throw "pip install fallo (codigo $LASTEXITCODE)"
+        Write-Host "  Primer intento fallo, limpiando cache y reintentando..." -ForegroundColor Yellow
+        & $py.Source -m pip cache purge 2>&1 | Out-Null
+        & $py.Source -m pip install --no-cache-dir --force-reinstall -r requirements.txt
+        if ($LASTEXITCODE -ne 0) {
+            throw "pip install fallo (codigo $LASTEXITCODE)"
+        }
     }
     Write-Host "  OK" -ForegroundColor Gray
 } catch {
     Write-Host "  ERROR instalando dependencias: $_" -ForegroundColor Red
+    Write-Host "  Soluciona manualmente con:" -ForegroundColor Yellow
+    Write-Host "    cd $dirInstall\programa" -ForegroundColor White
+    Write-Host "    py -m pip cache purge" -ForegroundColor White
+    Write-Host "    py -m pip install -r requirements.txt" -ForegroundColor White
     Pop-Location
     Read-Host "Presiona Enter para salir"
     exit 1
