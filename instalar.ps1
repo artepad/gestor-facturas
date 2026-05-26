@@ -20,6 +20,7 @@
 $ErrorActionPreference = "Stop"
 $REPO_ZIP   = "https://github.com/artepad/gestor-facturas/archive/refs/heads/main.zip"
 $PYTHON_URL = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
+$VCREDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 $PYTHON_MIN_MAJOR = 3
 $PYTHON_MIN_MINOR = 10
 $LOG_PATH = "$env:TEMP\admin-facturas-install.log"
@@ -71,6 +72,24 @@ function Get-Python {
         } catch {}
     }
     return $null
+}
+
+function Install-VCRedist {
+    # Visual C++ Redistributable 2015-2022 (x64). Lo necesita PyMuPDF.
+    # El instalador es idempotente: si ya esta una version igual o mas nueva,
+    # solo termina rapido. Conviene siempre asegurarlo en Win10 reciente.
+    Write-Host "  Descargando Visual C++ Redistributable..." -ForegroundColor Gray
+    $vcInst = "$env:TEMP\vc_redist.x64.exe"
+    Invoke-WebRequest -Uri $VCREDIST_URL -OutFile $vcInst -UseBasicParsing
+    Write-Host "  Instalando Visual C++ Redistributable (silencioso)..." -ForegroundColor Gray
+    $p = Start-Process -FilePath $vcInst `
+        -ArgumentList "/install","/quiet","/norestart" `
+        -Wait -PassThru
+    Remove-Item -Path $vcInst -Force -ErrorAction SilentlyContinue
+    # Codigos comunes: 0=instalado, 1638=ya hay version mas nueva, 3010=reboot pendiente
+    if ($p.ExitCode -notin @(0, 1638, 3010)) {
+        throw "Visual C++ Redistributable termino con codigo $($p.ExitCode)."
+    }
 }
 
 function Install-Python {
@@ -244,9 +263,12 @@ try {
         Write-Host "  .env conservado (ya existia)" -ForegroundColor Gray
     }
 
-    # --- 7. Instalar dependencias ---
+    # --- 7. Instalar dependencias (con Visual C++ Redist primero) ---
     Write-Host ""
-    Write-Host "[7/8] Instalando dependencias de Python (1-2 minutos)..." -ForegroundColor Green
+    Write-Host "[7/8] Instalando Visual C++ Redistributable y dependencias..." -ForegroundColor Green
+    # PyMuPDF (fitz) depende de DLLs nativas del VC++ Redist. En Windows 10
+    # limpio no esta presente y pymupdf falla con "DLL load failed".
+    Install-VCRedist
     Push-Location "$dirInstall\programa"
     try {
         & $py.Exe -m pip install --upgrade pip --no-cache-dir 2>&1 | Out-Null
