@@ -564,13 +564,25 @@ class Database:
                 "SELECT * FROM producto WHERE factura_id = ? ORDER BY orden, id",
                 (factura_id,),
             ).fetchall()
+            # Migracion defensiva: productos guardados antes del fix de formato
+                # chileno pueden tener valores corruptos (ej. 18.689 en vez de 18689).
+            # Si un valor CLP es < 1000 con decimales, lo escalamos x1000.
+            def _fix(v):
+                if v is None:
+                    return None
+                if isinstance(v, (int, float)) and 0 < v < 1000 and not float(v).is_integer():
+                    return float(round(v * 1000))
+                return v
+
             return [
                 FilaProducto(
                     id=r["id"], descripcion=r["descripcion"],
-                    cantidad=r["cantidad"], precio_unitario=r["precio_unitario"],
-                    descuento=r["descuento"], monto=r["monto"],
+                    cantidad=r["cantidad"],
+                    precio_unitario=_fix(r["precio_unitario"]),
+                    descuento=_fix(r["descuento"]),
+                    monto=_fix(r["monto"]),
                     afecto_iva=bool(r["afecto_iva"]),
-                    precio_sugerido=r["precio_sugerido"],
+                    precio_sugerido=_fix(r["precio_sugerido"]),
                     editado_manual=bool(r["editado_manual"]),
                 )
                 for r in rows

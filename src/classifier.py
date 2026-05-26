@@ -255,25 +255,37 @@ HERRAMIENTA_DETALLE = {
                         },
                         "cantidad": {
                             "type": ["number", "null"],
-                            "description": "Unidades facturadas. Null si no aparece.",
+                            "description": (
+                                "Unidades facturadas. Puede ser decimal real "
+                                "(ej. 1.5 kg). Null si no aparece."
+                            ),
                         },
                         "precio_unitario": {
-                            "type": ["number", "null"],
+                            "type": ["string", "null"],
                             "description": (
-                                "Precio por unidad, solo el número sin símbolos ni "
-                                "puntos de miles. Null si no aparece."
+                                "Precio unitario tal como aparece en la factura, "
+                                "incluyendo los puntos de miles. Ejemplos: "
+                                "\"18.689\", \"1.299\", \"119.990\". NO conviertas "
+                                "el formato: en Chile el punto separa miles, NO es "
+                                "decimal. Devuelve string. Null si no aparece."
                             ),
                         },
                         "descuento": {
-                            "type": ["number", "null"],
+                            "type": ["string", "null"],
                             "description": (
-                                "Monto del descuento de la línea EN PESOS (no porcentaje). "
-                                "0 o null si la línea no tiene descuento."
+                                "Monto del descuento de la línea EN PESOS chilenos, "
+                                "tal como aparece (ej. \"1.500\"). NO porcentaje. "
+                                "Null si la línea no tiene descuento."
                             ),
                         },
                         "monto": {
-                            "type": ["number", "null"],
-                            "description": "Monto total de la línea (cantidad x precio - descuento).",
+                            "type": ["string", "null"],
+                            "description": (
+                                "Monto total de la línea (cantidad x precio - descuento) "
+                                "tal como aparece en la factura. Ejemplos: \"18.689\", "
+                                "\"37.378\". El punto es separador de miles en CLP. "
+                                "Devuelve string. Null si no aparece."
+                            ),
                         },
                         "afecto_iva": {
                             "type": "boolean",
@@ -317,6 +329,11 @@ PROMPT_DETALLE = (
     "neto, IVA, total, ni datos de despacho o transporte. "
     "Si una factura larga viene en franjas, no repitas un producto que aparezca "
     "en el traslape entre dos franjas.\n\n"
+    "MUY IMPORTANTE sobre montos chilenos: en Chile el PUNTO `.` es separador "
+    "de MILES (no decimales). \"18.689\" significa 18 mil 689 pesos, NO 18 con "
+    "689 milésimas. Devuelve los campos `precio_unitario`, `descuento` y `monto` "
+    "como STRING tal cual aparecen en la factura (con sus puntos), sin "
+    "convertirlos a número. El sistema los procesará correctamente.\n\n"
     "Devuelve los datos llamando a la herramienta `registrar_detalle_factura`. "
     "La confianza debe reflejar honestamente qué tan seguro estás de la extracción."
 )
@@ -341,14 +358,23 @@ class DetalleFactura:
 
     @classmethod
     def desde_dict(cls, datos: dict[str, Any]) -> "DetalleFactura":
+        # Import diferido: validacion -> classifier -> validacion en circular
+        from validacion import parsear_monto_chileno
+
+        def _parse_clp(v):
+            return parsear_monto_chileno(v, moneda="CLP")
+
         productos = tuple(
             ProductoFactura(
                 descripcion=(p.get("descripcion") or "").strip(),
                 afecto_iva=bool(p.get("afecto_iva", True)),
+                # cantidad puede ser decimal real (1.5 kg), no la pasamos por CLP
                 cantidad=p.get("cantidad"),
-                precio_unitario=p.get("precio_unitario"),
-                descuento=p.get("descuento"),
-                monto=p.get("monto"),
+                # precio_unitario / descuento / monto vienen como STRING desde
+                # la IA, los normalizamos con la logica chilena (punto=miles).
+                precio_unitario=_parse_clp(p.get("precio_unitario")),
+                descuento=_parse_clp(p.get("descuento")),
+                monto=_parse_clp(p.get("monto")),
             )
             for p in datos.get("productos", [])
         )
