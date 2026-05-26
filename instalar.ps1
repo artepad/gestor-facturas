@@ -324,12 +324,27 @@ try {
 
     # --- Arranque automatico (sin elevacion para que la bandeja se vea bien) ---
     Write-Host "  Iniciando vigilancia en segundo plano..." -ForegroundColor Gray
-    # Tecnica: schtasks ONCE /it lanza como el usuario interactivo, sin elevacion
-    $taskName = "AdminFacturasFirstLaunch_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
-    schtasks /Create /TN $taskName /TR "`"$dirInstall\programa\iniciar_bandeja.bat`"" /SC ONCE /ST 00:00 /IT /F 2>&1 | Out-Null
-    schtasks /Run    /TN $taskName 2>&1 | Out-Null
-    Start-Sleep -Seconds 2
-    schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+    # IMPORTANTE: ErrorActionPreference="Continue" en este bloque porque schtasks
+    # emite warnings inofensivos en stderr que con "Stop" abortarian el script.
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        # Tecnica: schtasks ONCE /IT lanza como el usuario interactivo, sin elevacion.
+        # /ST debe ser futuro o schtasks da warning; usamos 2 minutos en adelante.
+        $taskName = "AdminFacturasFirstLaunch_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+        $stFuturo = (Get-Date).AddMinutes(2).ToString("HH:mm")
+        cmd /c "schtasks /Create /TN `"$taskName`" /TR `"\`"$dirInstall\programa\iniciar_bandeja.bat\`"`" /SC ONCE /ST $stFuturo /IT /F >nul 2>&1"
+        cmd /c "schtasks /Run /TN `"$taskName`" >nul 2>&1"
+        Start-Sleep -Seconds 2
+        cmd /c "schtasks /Delete /TN `"$taskName`" /F >nul 2>&1"
+    } catch {
+        # Fallback: lanzar directo (puede heredar elevacion, pero al menos arranca)
+        Start-Process -FilePath "cmd.exe" `
+            -ArgumentList "/c","`"$dirInstall\programa\iniciar_bandeja.bat`"" `
+            -WindowStyle Hidden -ErrorAction SilentlyContinue
+    } finally {
+        $ErrorActionPreference = $prevPref
+    }
     Write-Host "  El icono debe aparecer en la bandeja (junto al reloj)." -ForegroundColor Green
     Write-Host "  Si no lo ves, clic en la flecha que muestra los iconos ocultos." -ForegroundColor Gray
 
