@@ -1,223 +1,102 @@
 # =====================================================================
-# Instalador del Sistema de Gestión de Facturas
+# Instalador del Sistema de Gestion de Facturas
 # =====================================================================
-# Uso: clic derecho → "Ejecutar con PowerShell"
-# Requiere: Python 3.10+ ya instalado, conexión a internet.
+# Uso desde PowerShell:
+#   iwr https://raw.githubusercontent.com/artepad/gestor-facturas/main/instalar.ps1 -OutFile $env:TEMP\inst.ps1; `
+#       Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","$env:TEMP\inst.ps1"
+#
+# El script:
+#  - Pide permisos de admin si no los tiene.
+#  - Detecta Python; si falta o es viejo, ofrece instalarlo automaticamente.
+#  - Crea estructura en C:\AdminFacturas, baja codigo, instala dependencias.
+#  - Crea accesos directos y autoarranque.
+#  - Lanza la vigilancia al final (sin la elevacion de admin).
+#  - NUNCA cierra la ventana por error: siempre espera Enter.
+#  - Guarda log completo en %TEMP%\admin-facturas-install.log
 # =====================================================================
 
 #Requires -Version 5.1
 
 $ErrorActionPreference = "Stop"
-$REPO_ZIP = "https://github.com/artepad/gestor-facturas/archive/refs/heads/main.zip"
+$REPO_ZIP   = "https://github.com/artepad/gestor-facturas/archive/refs/heads/main.zip"
+$PYTHON_URL = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
+$PYTHON_MIN_MAJOR = 3
+$PYTHON_MIN_MINOR = 10
+$LOG_PATH = "$env:TEMP\admin-facturas-install.log"
 
-# --- 1. Verificar permisos de administrador, reabrir como admin si falta ---
+# Empezar log
+try { Start-Transcript -Path $LOG_PATH -Force | Out-Null } catch {}
+
+# Helpers ---------------------------------------------------------------
+
+function Stop-OnExit {
+    try { Stop-Transcript | Out-Null } catch {}
+    Write-Host ""
+    Write-Host "Log completo: $LOG_PATH" -ForegroundColor Gray
+    Read-Host "Presiona Enter para cerrar esta ventana"
+}
+
 function Test-Administrator {
-    $usuario = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($usuario)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $u = [Security.Principal.WindowsIdentity]::GetCurrent()
+    return (New-Object Security.Principal.WindowsPrincipal($u)).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-if (-not (Test-Administrator)) {
-    Write-Host "Se necesitan permisos de administrador. Reabriendo elevado..." -ForegroundColor Yellow
-    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","`"$PSCommandPath`""
-    exit
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") +
+                ";" +
+                [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# --- 2. Banner ---
-Clear-Host
-Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "  Instalador del Sistema de Gestion de Facturas" -ForegroundColor Cyan
-Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host ""
+function Get-Python {
+    # Devuelve el ejecutable de Python si la version es aceptable; si no, $null
+    Refresh-Path
+    $candidates = @()
+    $cmd = Get-Command py -ErrorAction SilentlyContinue
+    if ($cmd) { $candidates += $cmd.Source }
+    $cmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($cmd) { $candidates += $cmd.Source }
 
-# --- 3. Verificar Python ---
-Write-Host "[1/8] Verificando Python..." -ForegroundColor Green
-$py = Get-Command py -ErrorAction SilentlyContinue
-if (-not $py) {
-    $py = Get-Command python -ErrorAction SilentlyContinue
-}
-if (-not $py) {
-    Write-Host "  ERROR: Python no esta instalado o no esta en el PATH." -ForegroundColor Red
-    Write-Host "  Instala Python 3.10+ desde https://www.python.org/downloads/" -ForegroundColor Red
-    Write-Host "  (Marca 'Add Python to PATH' durante la instalacion)" -ForegroundColor Red
-    Read-Host "Presiona Enter para salir"
-    exit 1
-}
-$pyVersion = & $py.Source --version 2>&1
-Write-Host "  OK: $pyVersion encontrado" -ForegroundColor Gray
-
-# --- 4. Preguntas al usuario ---
-Write-Host ""
-Write-Host "[2/8] Configuracion inicial" -ForegroundColor Green
-$dirInstall = Read-Host "  Carpeta de instalacion [C:\AdminFacturas]"
-if ([string]::IsNullOrWhiteSpace($dirInstall)) {
-    $dirInstall = "C:\AdminFacturas"
-}
-$dirInstall = $dirInstall.TrimEnd("\")
-
-if (Test-Path "$dirInstall\programa") {
-    Write-Host "  AVISO: Ya existe una instalacion en $dirInstall\programa" -ForegroundColor Yellow
-    $r = Read-Host "  ¿Reinstalar reemplazando solo el codigo? (datos y facturas se conservan) [s/N]"
-    if ($r -ne "s" -and $r -ne "S") {
-        Write-Host "  Cancelado." -ForegroundColor Yellow
-        Read-Host "Presiona Enter para salir"
-        exit 0
+    foreach ($exe in $candidates) {
+        try {
+            $vstr = & $exe --version 2>&1
+            if ($vstr -match "Python (\d+)\.(\d+)") {
+                $maj = [int]$Matches[1]
+                $min = [int]$Matches[2]
+                if ($maj -gt $PYTHON_MIN_MAJOR -or
+                    ($maj -eq $PYTHON_MIN_MAJOR -and $min -ge $PYTHON_MIN_MINOR)) {
+                    return @{ Exe = $exe; Version = $vstr }
+                }
+            }
+        } catch {}
     }
+    return $null
 }
 
-Write-Host ""
-$apiKey = Read-Host "  Pega tu API key de Anthropic (sk-ant-...)"
-if ([string]::IsNullOrWhiteSpace($apiKey)) {
-    Write-Host "  ERROR: La API key es obligatoria." -ForegroundColor Red
-    Read-Host "Presiona Enter para salir"
-    exit 1
-}
-
-Write-Host ""
-$autoarranque = Read-Host "  ¿Iniciar automaticamente con Windows? [S/n]"
-$autoarranque = ($autoarranque -ne "n" -and $autoarranque -ne "N")
-
-# --- 5. Crear estructura de carpetas ---
-Write-Host ""
-Write-Host "[3/8] Creando estructura de carpetas..." -ForegroundColor Green
-$carpetas = @(
-    "$dirInstall",
-    "$dirInstall\programa",
-    "$dirInstall\datos",
-    "$dirInstall\datos\logs",
-    "$dirInstall\datos\respaldos_automaticos",
-    "$dirInstall\Facturas",
-    "$dirInstall\Facturas\_entrada",
-    "$dirInstall\Facturas\_revisar",
-    "$dirInstall\Facturas\_errores",
-    "$dirInstall\Facturas\_reemplazadas",
-    "$dirInstall\Facturas\_no_facturas"
-)
-foreach ($c in $carpetas) {
-    if (-not (Test-Path $c)) {
-        New-Item -ItemType Directory -Path $c -Force | Out-Null
+function Install-Python {
+    Write-Host "  Descargando Python 3.12.7..." -ForegroundColor Gray
+    $instPath = "$env:TEMP\python-installer.exe"
+    Invoke-WebRequest -Uri $PYTHON_URL -OutFile $instPath -UseBasicParsing
+    Write-Host "  Ejecutando instalador de Python (1-2 minutos, sin ventana)..." -ForegroundColor Gray
+    # Instalacion silenciosa para todos los usuarios, agregando al PATH
+    $args = @(
+        "/quiet",
+        "InstallAllUsers=1",
+        "PrependPath=1",
+        "Include_test=0",
+        "Include_launcher=1",
+        "Include_pip=1"
+    )
+    $p = Start-Process -FilePath $instPath -ArgumentList $args -Wait -PassThru
+    Remove-Item -Path $instPath -Force -ErrorAction SilentlyContinue
+    if ($p.ExitCode -ne 0) {
+        throw "El instalador de Python termino con codigo $($p.ExitCode)."
     }
+    Refresh-Path
 }
-Write-Host "  OK" -ForegroundColor Gray
-
-# --- 6. Descargar el codigo desde GitHub ---
-Write-Host ""
-Write-Host "[4/8] Descargando el codigo desde GitHub..." -ForegroundColor Green
-$tmpZip = [System.IO.Path]::GetTempFileName() + ".zip"
-$tmpDir = [System.IO.Path]::Combine($env:TEMP, "gestor-facturas-" + [System.Guid]::NewGuid().ToString("N"))
-try {
-    Invoke-WebRequest -Uri $REPO_ZIP -OutFile $tmpZip -UseBasicParsing
-    Write-Host "  Descarga completada, descomprimiendo..." -ForegroundColor Gray
-    Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
-    # Carpeta extraida: gestor-facturas-main
-    $extraida = Get-ChildItem $tmpDir -Directory | Select-Object -First 1
-    if (-not $extraida) {
-        throw "No se pudo extraer el ZIP del repositorio."
-    }
-    Write-Host "  OK" -ForegroundColor Gray
-} catch {
-    Write-Host "  ERROR descargando: $_" -ForegroundColor Red
-    Read-Host "Presiona Enter para salir"
-    exit 1
-}
-
-# --- 7. Copiar codigo a programa\ ---
-Write-Host ""
-Write-Host "[5/8] Copiando codigo a $dirInstall\programa\..." -ForegroundColor Green
-# Borrar src\ anterior si existe (reinstall) — preserva config.yaml y .env si ya estaban
-if (Test-Path "$dirInstall\programa\src") {
-    Remove-Item -Path "$dirInstall\programa\src" -Recurse -Force
-}
-Copy-Item -Path "$($extraida.FullName)\src" -Destination "$dirInstall\programa\src" -Recurse -Force
-Copy-Item -Path "$($extraida.FullName)\requirements.txt" -Destination "$dirInstall\programa\" -Force
-# Plantilla de config y archivos auxiliares
-$templatePath = "$($extraida.FullName)\config.template.yaml"
-if (Test-Path $templatePath) {
-    Copy-Item -Path $templatePath -Destination "$dirInstall\programa\config.template.yaml" -Force
-}
-# El instalador mismo se copia para futuras reinstalaciones
-Copy-Item -Path "$($extraida.FullName)\instalar.ps1" -Destination "$dirInstall\programa\actualizar.ps1" -Force -ErrorAction SilentlyContinue
-Write-Host "  OK" -ForegroundColor Gray
-
-# --- 8. Generar config.yaml y .env ---
-Write-Host ""
-Write-Host "[6/8] Generando config.yaml y .env..." -ForegroundColor Green
-$configFinal = "$dirInstall\programa\config.yaml"
-$envFinal = "$dirInstall\programa\.env"
-
-# Solo (re)escribir config.yaml si no existe (no pisar configuracion del usuario)
-# Usar UTF-8 sin BOM: PowerShell 5.1 mete BOM con -Encoding UTF8 y eso rompe
-# a python-dotenv (lee "﻿ANTHROPIC_API_KEY" en vez de la variable).
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
-if (-not (Test-Path $configFinal)) {
-    $template = Get-Content -Path "$dirInstall\programa\config.template.yaml" -Raw
-    $template = $template.Replace("{{INSTALL_DIR}}", $dirInstall)
-    [System.IO.File]::WriteAllText($configFinal, $template, $utf8NoBom)
-    Write-Host "  config.yaml generado" -ForegroundColor Gray
-} else {
-    Write-Host "  config.yaml ya existe, se conserva" -ForegroundColor Gray
-}
-
-if (-not (Test-Path $envFinal)) {
-    [System.IO.File]::WriteAllText($envFinal,
-        "ANTHROPIC_API_KEY=$apiKey`r`n", $utf8NoBom)
-    Write-Host "  .env generado" -ForegroundColor Gray
-} else {
-    Write-Host "  .env ya existe, se conserva" -ForegroundColor Gray
-}
-
-# --- 9. Instalar dependencias de Python ---
-Write-Host ""
-Write-Host "[7/8] Instalando dependencias de Python (puede tardar)..." -ForegroundColor Green
-Push-Location "$dirInstall\programa"
-try {
-    & $py.Source -m pip install --upgrade pip --no-cache-dir 2>&1 | Out-Null
-    # --no-cache-dir evita problemas con caches corruptos de pip.
-    & $py.Source -m pip install --no-cache-dir -r requirements.txt
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  Primer intento fallo, limpiando cache y reintentando..." -ForegroundColor Yellow
-        & $py.Source -m pip cache purge 2>&1 | Out-Null
-        & $py.Source -m pip install --no-cache-dir --force-reinstall -r requirements.txt
-        if ($LASTEXITCODE -ne 0) {
-            throw "pip install fallo (codigo $LASTEXITCODE)"
-        }
-    }
-    Write-Host "  OK" -ForegroundColor Gray
-} catch {
-    Write-Host "  ERROR instalando dependencias: $_" -ForegroundColor Red
-    Write-Host "  Soluciona manualmente con:" -ForegroundColor Yellow
-    Write-Host "    cd $dirInstall\programa" -ForegroundColor White
-    Write-Host "    py -m pip cache purge" -ForegroundColor White
-    Write-Host "    py -m pip install -r requirements.txt" -ForegroundColor White
-    Pop-Location
-    Read-Host "Presiona Enter para salir"
-    exit 1
-}
-Pop-Location
-
-# --- 10. Crear lanzadores .bat ---
-$pyw = $py.Source -replace "py\.exe$", "pyw.exe" -replace "python\.exe$", "pythonw.exe"
-if (-not (Test-Path $pyw)) { $pyw = $py.Source }  # fallback
-
-$batBandeja = @"
-@echo off
-start "" "$pyw" "$dirInstall\programa\src\main.py" --tray
-"@
-Set-Content -Path "$dirInstall\programa\iniciar_bandeja.bat" -Value $batBandeja -Encoding ASCII
-
-$batAdmin = @"
-@echo off
-start "" "$pyw" "$dirInstall\programa\src\buscador.py"
-"@
-Set-Content -Path "$dirInstall\programa\iniciar_admin.bat" -Value $batAdmin -Encoding ASCII
-
-# --- 11. Crear accesos directos ---
-Write-Host ""
-Write-Host "[8/8] Creando accesos directos..." -ForegroundColor Green
-$wsh = New-Object -ComObject WScript.Shell
 
 function New-Shortcut($ruta, $target, $args, $workDir, $descripcion) {
+    $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($ruta)
     $sc.TargetPath = $target
     $sc.Arguments = $args
@@ -226,66 +105,246 @@ function New-Shortcut($ruta, $target, $args, $workDir, $descripcion) {
     $sc.Save()
 }
 
-$desktop = [Environment]::GetFolderPath("Desktop")
-$startMenu = [Environment]::GetFolderPath("Programs")
-$startup = [Environment]::GetFolderPath("Startup")
+# Cuerpo principal ------------------------------------------------------
 
-# Accesos directos en escritorio
-New-Shortcut "$desktop\Administrador de Facturas.lnk" `
-    $pyw "`"$dirInstall\programa\src\buscador.py`"" `
-    "$dirInstall\programa" "Sistema de Gestion de Facturas"
+try {
+    # --- Elevacion ---
+    if (-not (Test-Administrator)) {
+        Write-Host "Reabriendo con permisos de administrador..." -ForegroundColor Yellow
+        try { Stop-Transcript | Out-Null } catch {}
+        Start-Process powershell.exe -Verb RunAs -ArgumentList `
+            "-NoProfile","-ExecutionPolicy","Bypass","-File","`"$PSCommandPath`""
+        exit
+    }
 
-# Acceso en menu inicio
-$dirMenu = "$startMenu\Sistema de Gestion de Facturas"
-if (-not (Test-Path $dirMenu)) {
-    New-Item -ItemType Directory -Path $dirMenu | Out-Null
-}
-New-Shortcut "$dirMenu\Administrador de Facturas.lnk" `
-    $pyw "`"$dirInstall\programa\src\buscador.py`"" `
-    "$dirInstall\programa" "Administrador"
-New-Shortcut "$dirMenu\Iniciar vigilancia (bandeja).lnk" `
-    $pyw "`"$dirInstall\programa\src\main.py`" --tray" `
-    "$dirInstall\programa" "Vigilancia de facturas en la bandeja"
+    Clear-Host
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "  Instalador del Sistema de Gestion de Facturas" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host ""
 
-# Autoarranque
-if ($autoarranque) {
-    New-Shortcut "$startup\Sistema Gestion Facturas (bandeja).lnk" `
+    # --- 1. Verificar / instalar Python ---
+    Write-Host "[1/8] Verificando Python..." -ForegroundColor Green
+    $py = Get-Python
+    if (-not $py) {
+        Write-Host "  Python no se encuentra o la version es inferior a 3.10." -ForegroundColor Yellow
+        Write-Host ""
+        $r = Read-Host "  Instalar Python 3.12.7 automaticamente desde python.org? [S/n]"
+        if ($r -eq "n" -or $r -eq "N") {
+            throw "Python es requisito. Instalalo manualmente desde https://www.python.org/downloads/ marcando 'Add to PATH', y vuelve a correr el instalador."
+        }
+        Install-Python
+        $py = Get-Python
+        if (-not $py) {
+            throw "Python se instalo pero no es detectable. Reinicia el PC y vuelve a correr el instalador."
+        }
+        Write-Host "  Python instalado: $($py.Version)" -ForegroundColor Gray
+    } else {
+        Write-Host "  OK: $($py.Version)" -ForegroundColor Gray
+    }
+
+    # --- 2. Configuracion ---
+    Write-Host ""
+    Write-Host "[2/8] Configuracion" -ForegroundColor Green
+    $dirInstall = Read-Host "  Carpeta de instalacion [C:\AdminFacturas]"
+    if ([string]::IsNullOrWhiteSpace($dirInstall)) { $dirInstall = "C:\AdminFacturas" }
+    $dirInstall = $dirInstall.TrimEnd("\")
+
+    if (Test-Path "$dirInstall\programa") {
+        Write-Host "  Ya existe una instalacion en $dirInstall\programa" -ForegroundColor Yellow
+        $r = Read-Host "  Reinstalar codigo (datos y facturas se conservan)? [s/N]"
+        if ($r -ne "s" -and $r -ne "S") {
+            throw "Cancelado por el usuario."
+        }
+    }
+
+    Write-Host ""
+    $apiKey = Read-Host "  Pega tu API key de Anthropic (sk-ant-...)"
+    if ([string]::IsNullOrWhiteSpace($apiKey)) {
+        throw "La API key es obligatoria."
+    }
+
+    Write-Host ""
+    $autoarranque = Read-Host "  Iniciar automaticamente con Windows? [S/n]"
+    $autoarranque = ($autoarranque -ne "n" -and $autoarranque -ne "N")
+
+    # --- 3. Crear estructura ---
+    Write-Host ""
+    Write-Host "[3/8] Creando estructura de carpetas..." -ForegroundColor Green
+    $carpetas = @(
+        $dirInstall,
+        "$dirInstall\programa",
+        "$dirInstall\datos",
+        "$dirInstall\datos\logs",
+        "$dirInstall\datos\respaldos_automaticos",
+        "$dirInstall\Facturas",
+        "$dirInstall\Facturas\_entrada",
+        "$dirInstall\Facturas\_revisar",
+        "$dirInstall\Facturas\_errores",
+        "$dirInstall\Facturas\_reemplazadas",
+        "$dirInstall\Facturas\_no_facturas"
+    )
+    foreach ($c in $carpetas) {
+        if (-not (Test-Path $c)) { New-Item -ItemType Directory -Path $c -Force | Out-Null }
+    }
+    Write-Host "  OK" -ForegroundColor Gray
+
+    # --- 4. Descargar codigo desde GitHub ---
+    Write-Host ""
+    Write-Host "[4/8] Descargando codigo desde GitHub..." -ForegroundColor Green
+    $tmpZip = [System.IO.Path]::GetTempFileName() + ".zip"
+    $tmpDir = [System.IO.Path]::Combine($env:TEMP, "gestor-facturas-" + [System.Guid]::NewGuid().ToString("N"))
+    try {
+        Invoke-WebRequest -Uri $REPO_ZIP -OutFile $tmpZip -UseBasicParsing
+    } catch {
+        throw "No se pudo descargar el codigo. Revisa tu conexion a internet. ($_)"
+    }
+    Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
+    $extraida = Get-ChildItem $tmpDir -Directory | Select-Object -First 1
+    if (-not $extraida) { throw "El ZIP descargado esta vacio o no tiene contenido." }
+    Write-Host "  OK" -ForegroundColor Gray
+
+    # --- 5. Copiar codigo ---
+    Write-Host ""
+    Write-Host "[5/8] Copiando codigo a $dirInstall\programa\..." -ForegroundColor Green
+    if (Test-Path "$dirInstall\programa\src") {
+        Remove-Item -Path "$dirInstall\programa\src" -Recurse -Force
+    }
+    Copy-Item -Path "$($extraida.FullName)\src" -Destination "$dirInstall\programa\src" -Recurse -Force
+    Copy-Item -Path "$($extraida.FullName)\requirements.txt" -Destination "$dirInstall\programa\" -Force
+    if (Test-Path "$($extraida.FullName)\config.template.yaml") {
+        Copy-Item -Path "$($extraida.FullName)\config.template.yaml" -Destination "$dirInstall\programa\config.template.yaml" -Force
+    }
+    Copy-Item -Path "$($extraida.FullName)\instalar.ps1"     -Destination "$dirInstall\programa\actualizar.ps1"   -Force -ErrorAction SilentlyContinue
+    Copy-Item -Path "$($extraida.FullName)\desinstalar.ps1"  -Destination "$dirInstall\programa\desinstalar.ps1"  -Force -ErrorAction SilentlyContinue
+    Write-Host "  OK" -ForegroundColor Gray
+
+    # --- 6. Generar config.yaml y .env (UTF-8 sin BOM) ---
+    Write-Host ""
+    Write-Host "[6/8] Generando config.yaml y .env..." -ForegroundColor Green
+    $configFinal = "$dirInstall\programa\config.yaml"
+    $envFinal    = "$dirInstall\programa\.env"
+    $utf8NoBom   = New-Object System.Text.UTF8Encoding($false)
+
+    if (-not (Test-Path $configFinal)) {
+        $template = Get-Content -Path "$dirInstall\programa\config.template.yaml" -Raw
+        $template = $template.Replace("{{INSTALL_DIR}}", $dirInstall)
+        [System.IO.File]::WriteAllText($configFinal, $template, $utf8NoBom)
+        Write-Host "  config.yaml generado" -ForegroundColor Gray
+    } else {
+        Write-Host "  config.yaml conservado (ya existia)" -ForegroundColor Gray
+    }
+    if (-not (Test-Path $envFinal)) {
+        [System.IO.File]::WriteAllText($envFinal, "ANTHROPIC_API_KEY=$apiKey`r`n", $utf8NoBom)
+        Write-Host "  .env generado" -ForegroundColor Gray
+    } else {
+        Write-Host "  .env conservado (ya existia)" -ForegroundColor Gray
+    }
+
+    # --- 7. Instalar dependencias ---
+    Write-Host ""
+    Write-Host "[7/8] Instalando dependencias de Python (1-2 minutos)..." -ForegroundColor Green
+    Push-Location "$dirInstall\programa"
+    try {
+        & $py.Exe -m pip install --upgrade pip --no-cache-dir 2>&1 | Out-Null
+        & $py.Exe -m pip install --no-cache-dir -r requirements.txt
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  Reintentando sin cache..." -ForegroundColor Yellow
+            & $py.Exe -m pip cache purge 2>&1 | Out-Null
+            & $py.Exe -m pip install --no-cache-dir --force-reinstall -r requirements.txt
+            if ($LASTEXITCODE -ne 0) { throw "pip install fallo (codigo $LASTEXITCODE)." }
+        }
+        Write-Host "  OK" -ForegroundColor Gray
+    } finally {
+        Pop-Location
+    }
+
+    # --- 8. Crear lanzadores .bat y accesos directos ---
+    Write-Host ""
+    Write-Host "[8/8] Creando accesos directos y autoarranque..." -ForegroundColor Green
+
+    # Calcular pyw.exe (sin consola). Si py.exe es el launcher, junto esta pyw.exe.
+    $pyw = $py.Exe -replace "py\.exe$","pyw.exe" -replace "python\.exe$","pythonw.exe"
+    if (-not (Test-Path $pyw)) { $pyw = $py.Exe }
+
+    $batBandeja = "@echo off`r`nstart `"`" `"$pyw`" `"$dirInstall\programa\src\main.py`" --tray`r`n"
+    $batAdmin   = "@echo off`r`nstart `"`" `"$pyw`" `"$dirInstall\programa\src\buscador.py`"`r`n"
+    [System.IO.File]::WriteAllText("$dirInstall\programa\iniciar_bandeja.bat", $batBandeja, [System.Text.Encoding]::ASCII)
+    [System.IO.File]::WriteAllText("$dirInstall\programa\iniciar_admin.bat",   $batAdmin,   [System.Text.Encoding]::ASCII)
+
+    $desktop   = [Environment]::GetFolderPath("Desktop")
+    $startMenu = [Environment]::GetFolderPath("Programs")
+    $startup   = [Environment]::GetFolderPath("Startup")
+
+    New-Shortcut "$desktop\Administrador de Facturas.lnk" `
+        $pyw "`"$dirInstall\programa\src\buscador.py`"" `
+        "$dirInstall\programa" "Sistema de Gestion de Facturas"
+
+    $dirMenu = "$startMenu\Sistema de Gestion de Facturas"
+    if (-not (Test-Path $dirMenu)) { New-Item -ItemType Directory -Path $dirMenu | Out-Null }
+    New-Shortcut "$dirMenu\Administrador de Facturas.lnk" `
+        $pyw "`"$dirInstall\programa\src\buscador.py`"" `
+        "$dirInstall\programa" "Administrador"
+    New-Shortcut "$dirMenu\Iniciar vigilancia.lnk" `
         $pyw "`"$dirInstall\programa\src\main.py`" --tray" `
-        "$dirInstall\programa" "Vigilancia de facturas (autoarranque)"
-    Write-Host "  Autoarranque configurado" -ForegroundColor Gray
-}
-Write-Host "  OK" -ForegroundColor Gray
+        "$dirInstall\programa" "Vigilancia en bandeja"
 
-# --- 12. Limpieza ---
-Remove-Item -Path $tmpZip -Force -ErrorAction SilentlyContinue
-Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    if ($autoarranque) {
+        $accAuto = "$startup\Sistema Gestion Facturas (bandeja).lnk"
+        New-Shortcut $accAuto `
+            $pyw "`"$dirInstall\programa\src\main.py`" --tray" `
+            "$dirInstall\programa" "Autoarranque"
+        # Reaseguro: tambien escribimos al HKCU\Run para que dispare aunque
+        # algunas politicas de Windows ignoren la carpeta Startup.
+        $rk = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        if (-not (Test-Path $rk)) { New-Item -Path $rk -Force | Out-Null }
+        Set-ItemProperty -Path $rk -Name "AdminFacturasBandeja" `
+            -Value "`"$pyw`" `"$dirInstall\programa\src\main.py`" --tray"
+        Write-Host "  Autoarranque configurado (Startup + HKCU\Run)" -ForegroundColor Gray
+    }
+    Write-Host "  OK" -ForegroundColor Gray
 
-# --- 13. Resumen ---
-Write-Host ""
-Write-Host "================================================================" -ForegroundColor Green
-Write-Host "  INSTALACION COMPLETADA" -ForegroundColor Green
-Write-Host "================================================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "  Carpeta:        $dirInstall" -ForegroundColor White
-Write-Host "  Escaneo deja PDFs en: $dirInstall\Facturas\_entrada\" -ForegroundColor White
-Write-Host "  Base de datos:  $dirInstall\datos\facturas.db" -ForegroundColor White
-Write-Host ""
-Write-Host "  Accesos creados:" -ForegroundColor White
-Write-Host "    - Escritorio: 'Administrador de Facturas'" -ForegroundColor Gray
-Write-Host "    - Menu Inicio: 'Sistema de Gestion de Facturas'" -ForegroundColor Gray
-if ($autoarranque) {
-    Write-Host "    - Autoarranque al iniciar sesion" -ForegroundColor Gray
+    # --- Limpieza ---
+    Remove-Item -Path $tmpZip -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    # --- Resumen ---
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host "  INSTALACION COMPLETADA" -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Carpeta:        $dirInstall" -ForegroundColor White
+    Write-Host "  Escaner deja PDFs en: $dirInstall\Facturas\_entrada\" -ForegroundColor White
+    Write-Host "  Base de datos:  $dirInstall\datos\facturas.db" -ForegroundColor White
+    Write-Host ""
+
+    # --- Arranque automatico (sin elevacion para que la bandeja se vea bien) ---
+    Write-Host "  Iniciando vigilancia en segundo plano..." -ForegroundColor Gray
+    # Tecnica: schtasks ONCE /it lanza como el usuario interactivo, sin elevacion
+    $taskName = "AdminFacturasFirstLaunch_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+    schtasks /Create /TN $taskName /TR "`"$dirInstall\programa\iniciar_bandeja.bat`"" /SC ONCE /ST 00:00 /IT /F 2>&1 | Out-Null
+    schtasks /Run    /TN $taskName 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+    schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+    Write-Host "  El icono debe aparecer en la bandeja (junto al reloj)." -ForegroundColor Green
+    Write-Host "  Si no lo ves, clic en la flecha que muestra los iconos ocultos." -ForegroundColor Gray
+
+    Stop-OnExit
 }
-Write-Host ""
-$iniciar = Read-Host "¿Iniciar la vigilancia (bandeja) ahora? [S/n]"
-if ($iniciar -ne "n" -and $iniciar -ne "N") {
-    # Usar el .bat (que internamente hace `start ""` desacopla bien el proceso).
-    # Invocarlo via cmd /c y -WindowStyle Hidden evita que quede una ventana negra.
-    Start-Process -FilePath "cmd.exe" `
-        -ArgumentList "/c","`"$dirInstall\programa\iniciar_bandeja.bat`"" `
-        -WindowStyle Hidden -WorkingDirectory "$dirInstall\programa"
-    Write-Host "  El icono debe aparecer en la bandeja del sistema." -ForegroundColor Green
-    Write-Host "  Si no aparece, busca la flecha ⌃ en la barra de tareas." -ForegroundColor Gray
+catch {
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Red
+    Write-Host "  ERROR EN LA INSTALACION" -ForegroundColor Red
+    Write-Host "================================================================" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  $_" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Que hacer:" -ForegroundColor White
+    Write-Host "  1. Revisa el log completo." -ForegroundColor Gray
+    Write-Host "  2. Si es un error de conexion, intenta de nuevo." -ForegroundColor Gray
+    Write-Host "  3. Si es un error de Python, instala 3.10+ manualmente desde python.org" -ForegroundColor Gray
+    Write-Host "     y marca 'Add Python to PATH'." -ForegroundColor Gray
+    Stop-OnExit
+    exit 1
 }
-Write-Host ""
-Read-Host "Presiona Enter para terminar"
