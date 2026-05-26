@@ -74,10 +74,28 @@ function Get-Python {
     return $null
 }
 
+function Test-VCRedist {
+    # Detecta si el VC++ Redistributable 2015-2022 (x64) ya esta instalado.
+    # La clave de registro la deja el propio instalador de Microsoft.
+    $rutas = @(
+        "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
+    )
+    foreach ($k in $rutas) {
+        try {
+            $p = Get-ItemProperty -Path $k -ErrorAction Stop
+            if ($p.Installed -eq 1) { return $true }
+        } catch {}
+    }
+    return $false
+}
+
 function Install-VCRedist {
     # Visual C++ Redistributable 2015-2022 (x64). Lo necesita PyMuPDF.
-    # El instalador es idempotente: si ya esta una version igual o mas nueva,
-    # solo termina rapido. Conviene siempre asegurarlo en Win10 reciente.
+    if (Test-VCRedist) {
+        Write-Host "  Visual C++ Redistributable ya instalado, omitiendo descarga." -ForegroundColor Gray
+        return
+    }
     Write-Host "  Descargando Visual C++ Redistributable..." -ForegroundColor Gray
     $vcInst = "$env:TEMP\vc_redist.x64.exe"
     Invoke-WebRequest -Uri $VCREDIST_URL -OutFile $vcInst -UseBasicParsing
