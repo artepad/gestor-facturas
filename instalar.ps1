@@ -332,18 +332,19 @@ try {
         $pyw "`"$dirInstall\programa\src\main.py`" --tray" `
         "$dirInstall\programa" "Vigilancia en bandeja"
 
+    # Limpieza obligatoria: versiones anteriores del instalador creaban
+    # TANTO el acceso directo de Startup COMO una entrada en HKCU\Run, lo
+    # que provocaba 2 instancias del tray al iniciar Windows. Borrar el
+    # HKCU\Run siempre (existe o no), asi quedamos con un solo mecanismo.
+    $rk = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+    Remove-ItemProperty -Path $rk -Name "AdminFacturasBandeja" -ErrorAction SilentlyContinue
+
     if ($autoarranque) {
         $accAuto = "$startup\Sistema Gestion Facturas (bandeja).lnk"
         New-Shortcut $accAuto `
             $pyw "`"$dirInstall\programa\src\main.py`" --tray" `
             "$dirInstall\programa" "Autoarranque"
-        # Reaseguro: tambien escribimos al HKCU\Run para que dispare aunque
-        # algunas politicas de Windows ignoren la carpeta Startup.
-        $rk = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-        if (-not (Test-Path $rk)) { New-Item -Path $rk -Force | Out-Null }
-        Set-ItemProperty -Path $rk -Name "AdminFacturasBandeja" `
-            -Value "`"$pyw`" `"$dirInstall\programa\src\main.py`" --tray"
-        Write-Host "  Autoarranque configurado (Startup + HKCU\Run)" -ForegroundColor Gray
+        Write-Host "  Autoarranque configurado (carpeta Startup)" -ForegroundColor Gray
     }
     Write-Host "  OK" -ForegroundColor Gray
 

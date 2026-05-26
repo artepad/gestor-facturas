@@ -88,6 +88,9 @@ foreach ($a in $accesos) {
         Write-Host "  Borrado: $a" -ForegroundColor Gray
     }
 }
+# Limpiar entrada de HKCU\Run dejada por versiones anteriores
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" `
+    -Name "AdminFacturasBandeja" -ErrorAction SilentlyContinue
 Write-Host "  OK" -ForegroundColor Gray
 
 # --- 3. Borrar segun la opcion elegida ---

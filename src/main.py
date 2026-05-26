@@ -308,10 +308,41 @@ def _redirigir_logs_a_archivo(config: dict) -> None:
     sys.stderr = archivo
 
 
+_MUTEX_HANDLE = None  # mantener referencia para que el mutex no se libere
+
+
+def _asegurar_instancia_unica() -> bool:
+    """Mutex global de Windows: solo permite UNA bandeja activa por sesion.
+
+    Si ya hay otra instancia corriendo, devuelve False y el caller debe
+    salir. Si es la primera, devuelve True y mantiene el mutex vivo
+    durante toda la vida del proceso.
+    """
+    if os.name != "nt":
+        return True  # solo aplica en Windows
+    global _MUTEX_HANDLE
+    try:
+        import ctypes
+        ERROR_ALREADY_EXISTS = 183
+        nombre = "Global\\AdminFacturasBandeja_v1"
+        # CreateMutexW: si ya existe, devuelve handle valido + GetLastError = 183
+        _MUTEX_HANDLE = ctypes.windll.kernel32.CreateMutexW(None, False, nombre)
+        if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+            return False
+        return True
+    except Exception:
+        # Si por lo que sea no podemos crear el mutex, no bloqueamos
+        return True
+
+
 def modo_tray(config: dict, clasificador: Clasificador, db: Database) -> None:
     """Modo bandeja del sistema. Watcher en thread + tray en main thread."""
     if sys.stdout is None:  # arrancado via pyw.exe (sin consola)
         _redirigir_logs_a_archivo(config)
+
+    if not _asegurar_instancia_unica():
+        print("[modo_tray] Ya hay otra instancia de la bandeja corriendo. Saliendo.", flush=True)
+        return
 
     # Importar acá para no pagar el costo en modo consola
     from tray import construir_icono
