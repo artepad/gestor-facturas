@@ -79,7 +79,7 @@ function Install-Python {
     Invoke-WebRequest -Uri $PYTHON_URL -OutFile $instPath -UseBasicParsing
     Write-Host "  Ejecutando instalador de Python (1-2 minutos, sin ventana)..." -ForegroundColor Gray
     # Instalacion silenciosa para todos los usuarios, agregando al PATH
-    $args = @(
+    $argsPy = @(
         "/quiet",
         "InstallAllUsers=1",
         "PrependPath=1",
@@ -87,7 +87,7 @@ function Install-Python {
         "Include_launcher=1",
         "Include_pip=1"
     )
-    $p = Start-Process -FilePath $instPath -ArgumentList $args -Wait -PassThru
+    $p = Start-Process -FilePath $instPath -ArgumentList $argsPy -Wait -PassThru
     Remove-Item -Path $instPath -Force -ErrorAction SilentlyContinue
     if ($p.ExitCode -ne 0) {
         throw "El instalador de Python termino con codigo $($p.ExitCode)."
@@ -95,11 +95,14 @@ function Install-Python {
     Refresh-Path
 }
 
-function New-Shortcut($ruta, $target, $args, $workDir, $descripcion) {
+function New-Shortcut($ruta, $target, $arguments, $workDir, $descripcion) {
+    # OJO: el parametro NO puede llamarse $args, que es variable automatica
+    # en PowerShell (array). Si se llama $args, el COM recibe Object[] en vez
+    # de string y revienta con "no se puede convertir Object[] a string".
     $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($ruta)
     $sc.TargetPath = $target
-    $sc.Arguments = $args
+    $sc.Arguments = [string]$arguments
     $sc.WorkingDirectory = $workDir
     $sc.Description = $descripcion
     $sc.Save()
