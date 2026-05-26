@@ -279,9 +279,13 @@ if ($autoarranque) {
 Write-Host ""
 $iniciar = Read-Host "¿Iniciar la vigilancia (bandeja) ahora? [S/n]"
 if ($iniciar -ne "n" -and $iniciar -ne "N") {
-    Start-Process $pyw -ArgumentList "`"$dirInstall\programa\src\main.py`"","--tray" `
-        -WorkingDirectory "$dirInstall\programa"
+    # Usar el .bat (que internamente hace `start ""` desacopla bien el proceso).
+    # Invocarlo via cmd /c y -WindowStyle Hidden evita que quede una ventana negra.
+    Start-Process -FilePath "cmd.exe" `
+        -ArgumentList "/c","`"$dirInstall\programa\iniciar_bandeja.bat`"" `
+        -WindowStyle Hidden -WorkingDirectory "$dirInstall\programa"
     Write-Host "  El icono debe aparecer en la bandeja del sistema." -ForegroundColor Green
+    Write-Host "  Si no aparece, busca la flecha ⌃ en la barra de tareas." -ForegroundColor Gray
 }
 Write-Host ""
 Read-Host "Presiona Enter para terminar"
