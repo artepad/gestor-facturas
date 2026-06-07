@@ -5,6 +5,11 @@ CREATE TABLE IF NOT EXISTS negocios (
   id        INT AUTO_INCREMENT PRIMARY KEY,
   slug      VARCHAR(50)  NOT NULL UNIQUE,        -- identificador corto, ej. "minimark-centro"
   nombre    VARCHAR(150) NOT NULL,
+  rut       VARCHAR(20)  NULL,                   -- perfil del negocio
+  telefono  VARCHAR(40)  NULL,
+  direccion VARCHAR(255) NULL,
+  correo    VARCHAR(150) NULL,
+  activo    TINYINT(1)   NOT NULL DEFAULT 1,     -- desactivar sin borrar
   creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
