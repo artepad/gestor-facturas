@@ -1,0 +1,2 @@
+# La carpeta lib/ tiene codigo interno, nunca se accede por la web directamente.
+Require all denied

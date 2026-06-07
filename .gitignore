@@ -8,3 +8,8 @@ tests/facturas_ejemplo/*.jpg
 tests/facturas_ejemplo/*.png
 .venv/
 venv/
+
+# Servidor web: secretos y archivos subidos
+web/config.php
+web/almacen_pdf/*
+!web/almacen_pdf/.htaccess

@@ -1,0 +1,3 @@
+# Los PDF NO se sirven directo por la web. Se accederan via un script con
+# autenticacion en el dashboard (Fase posterior). Bloqueo total por ahora.
+Require all denied

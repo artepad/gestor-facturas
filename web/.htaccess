@@ -1,0 +1,14 @@
+# Seguridad general del subdominio admin.minimark.cl
+
+# No listar archivos de las carpetas
+Options -Indexes
+
+# Bloquear acceso directo a archivos sensibles
+<FilesMatch "(config\.php|config\.ejemplo\.php|\.sql)$">
+    Require all denied
+</FilesMatch>
+
+# Forzar HTTPS (HostGator emite certificado Let's Encrypt gratis)
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
