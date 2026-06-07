@@ -3,34 +3,99 @@
  * Helpers de interfaz compartidos por las páginas del dashboard.
  */
 
-/** Cabecera con franja, título y menú de navegación. */
+/** Íconos SVG (stroke con currentColor para que tomen el color del tema). */
+function icono(string $nombre): string
+{
+    $svg = [
+        'facturas' => '<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
+        'negocios' => '<path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9 21v-6h6v6"/>',
+        'salir'    => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+        'menu'     => '<path d="M3 12h18M3 6h18M3 18h18"/>',
+    ];
+    $d = $svg[$nombre] ?? '';
+    return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+         . 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+         . $d . '</svg>';
+}
+
+/** Abre el layout: sidebar colapsable + área de contenido. */
 function cabecera_dashboard(array $usuario, string $activo = 'facturas'): void
 {
     $esAdmin = ($usuario['rol'] ?? '') === 'admin';
     $nombre = htmlspecialchars($usuario['nombre'] ?? '');
     $rol = htmlspecialchars($usuario['rol'] ?? '');
-    $itm = fn(string $id, string $txt, string $href) =>
-        '<a class="nav-item' . ($activo === $id ? ' activo' : '') . '" href="'
-        . $href . '">' . $txt . '</a>';
-    echo '<div class="franja"></div>';
-    echo '<div class="header">';
-    echo '  <div class="header-izq">';
-    echo '    <h1>Sistema de Gestión</h1>';
-    echo '    <nav class="nav">';
-    echo        $itm('facturas', 'Facturas', 'panel.php');
-    if ($esAdmin) {
-        echo    $itm('negocios', 'Negocios', 'negocios.php');
-    }
-    echo '    </nav>';
-    echo '  </div>';
-    echo '  <div class="usuario">' . $nombre . ' (' . $rol . ')'
-       . ' <a href="logout.php">Salir</a></div>';
-    echo '</div>';
+    $item = function (string $id, string $txt, string $href) use ($activo) {
+        $cls = 'nav-item' . ($activo === $id ? ' activo' : '');
+        return "<a class=\"$cls\" href=\"$href\" title=\"$txt\">"
+             . icono($id) . "<span class=\"txt\">$txt</span></a>";
+    };
+    ?>
+    <div class="app" id="app">
+    <script>
+      // Restaura el estado colapsado antes de pintar (evita parpadeo).
+      if (localStorage.getItem('sidebar') === 'colapsado')
+        document.getElementById('app').classList.add('colapsado');
+    </script>
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <span class="logo">Gestión</span>
+          <button class="toggle" id="btnToggle" aria-label="Contraer menú">
+            <?= icono('menu') ?>
+          </button>
+        </div>
+        <nav class="nav">
+          <?= $item('facturas', 'Facturas', 'panel.php') ?>
+          <?php if ($esAdmin): ?>
+            <?= $item('negocios', 'Negocios', 'negocios.php') ?>
+          <?php endif; ?>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="usuario-mini" title="<?= $nombre ?>">
+            <span class="avatar"><?= strtoupper(substr($nombre, 0, 1) ?: 'U') ?></span>
+            <span class="txt">
+              <span class="u-nombre"><?= $nombre ?></span>
+              <span class="u-rol"><?= $rol ?></span>
+            </span>
+          </div>
+          <a class="nav-item salir" href="logout.php" title="Cerrar sesión">
+            <?= icono('salir') ?><span class="txt">Cerrar sesión</span>
+          </a>
+        </div>
+      </aside>
+      <div class="backdrop" id="backdrop"></div>
+      <div class="main">
+        <button class="hamburguesa" id="btnMovil" aria-label="Abrir menú">
+          <?= icono('menu') ?>
+        </button>
+    <?php
 }
 
+/** Cierra el layout + script de interacción. */
 function pie_dashboard(): void
 {
-    echo '<div class="pie">Sistema de Gestión de Facturas</div>';
+    ?>
+      </div><!-- .main -->
+    </div><!-- .app -->
+    <script>
+      (function () {
+        var app = document.getElementById('app');
+        var t = document.getElementById('btnToggle');
+        var m = document.getElementById('btnMovil');
+        var b = document.getElementById('backdrop');
+        if (t) t.addEventListener('click', function () {
+          app.classList.toggle('colapsado');
+          localStorage.setItem('sidebar',
+            app.classList.contains('colapsado') ? 'colapsado' : 'expandido');
+        });
+        if (m) m.addEventListener('click', function () {
+          app.classList.toggle('movil-abierto');
+        });
+        if (b) b.addEventListener('click', function () {
+          app.classList.remove('movil-abierto');
+        });
+      })();
+    </script>
+    <?php
 }
 
 /** Formatea un número como pesos chilenos: 119990 -> $119.990 */

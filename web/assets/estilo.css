@@ -23,28 +23,83 @@ body {
   margin: 0;
 }
 
-/* Franja verde + header oscuro */
 .franja { height: 5px; background: var(--verde); }
-.header {
-  background: var(--header);
-  color: #fff;
-  padding: 18px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+
+/* ===== Layout con sidebar ===== */
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 240px; background: var(--header); color: #cfd6dd;
+  display: flex; flex-direction: column; flex-shrink: 0;
+  position: sticky; top: 0; height: 100vh;
+  transition: width .18s ease;
 }
-.header h1 { margin: 0; font-size: 20px; }
-.header-izq { display: flex; align-items: center; gap: 28px; }
-.nav { display: flex; gap: 6px; }
+.app.colapsado .sidebar { width: 68px; }
+
+.sidebar-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,.08);
+  min-height: 60px;
+}
+.sidebar-top .logo { font-size: 18px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; }
+.app.colapsado .sidebar-top .logo { display: none; }
+.toggle {
+  background: none; border: none; color: #cfd6dd; cursor: pointer;
+  padding: 6px; border-radius: 6px; display: flex;
+}
+.toggle:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+.sidebar .nav { display: flex; flex-direction: column; gap: 4px;
+  padding: 14px 12px; flex: 1; }
 .nav-item {
-  color: #b4bcc4; text-decoration: none; font-size: 14px; font-weight: 600;
-  padding: 7px 14px; border-radius: 6px;
+  display: flex; align-items: center; gap: 12px; text-decoration: none;
+  color: #cfd6dd; font-size: 14px; font-weight: 600; padding: 11px 12px;
+  border-radius: 8px; white-space: nowrap; overflow: hidden;
 }
-.nav-item:hover { color: #fff; background: rgba(255,255,255,.08); }
-.nav-item.activo { color: #fff; background: var(--azul); }
-.header .usuario { font-size: 13px; color: #b4bcc4; }
-.header .usuario a { color: #fff; text-decoration: none; margin-left: 14px; }
-.header .usuario a:hover { text-decoration: underline; }
+.nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+.nav-item.activo { background: var(--azul); color: #fff; }
+.nav-item .ic { width: 20px; height: 20px; flex-shrink: 0; }
+.app.colapsado .nav-item .txt { display: none; }
+.app.colapsado .nav-item { justify-content: center; padding: 11px 0; }
+
+.sidebar-bottom { border-top: 1px solid rgba(255,255,255,.08);
+  padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.usuario-mini { display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; overflow: hidden; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  background: var(--azul); color: #fff; display: flex; align-items: center;
+  justify-content: center; font-weight: 700; }
+.usuario-mini .txt { display: flex; flex-direction: column; line-height: 1.25;
+  overflow: hidden; }
+.u-nombre { color: #fff; font-size: 13px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.u-rol { color: #8a939e; font-size: 11px; }
+.app.colapsado .usuario-mini .txt { display: none; }
+.app.colapsado .usuario-mini { justify-content: center; }
+.nav-item.salir { color: #f3b0b0; }
+.nav-item.salir:hover { background: rgba(220,53,69,.2); color: #fff; }
+
+/* Área principal */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hamburguesa { display: none; }
+.backdrop { display: none; }
+
+/* Responsive: sidebar como overlay en móvil */
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 0; z-index: 50;
+    transform: translateX(-100%); transition: transform .2s ease; width: 240px; }
+  .app.movil-abierto .sidebar { transform: translateX(0); }
+  .app.colapsado .sidebar { width: 240px; }      /* en móvil siempre completo */
+  .hamburguesa { display: inline-flex; align-items: center; gap: 8px;
+    background: var(--header); color: #fff; border: none; cursor: pointer;
+    padding: 12px 16px; }
+  .hamburguesa .ic { width: 22px; height: 22px; }
+  .backdrop { display: block; position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,.4); opacity: 0; pointer-events: none;
+    transition: opacity .2s; }
+  .app.movil-abierto .backdrop { opacity: 1; pointer-events: auto; }
+}
 
 /* Tarjetas de negocios */
 .grid-negocios { display: grid; gap: 18px;
