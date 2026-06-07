@@ -367,6 +367,11 @@ def modo_tray(config: dict, clasificador: Clasificador, db: Database) -> None:
     observer.start()
     print(f"[tray] Vigilando {carpeta_entrada}", flush=True)
 
+    # Worker de sincronización con el servidor web (si está configurado)
+    from sync import SyncWorker
+    sync_worker = SyncWorker(db, config)
+    sync_worker.iniciar()
+
     def al_reanudar() -> None:
         # Tras reanudar la pausa, procesar lo que quedó en _entrada durante la pausa
         procesar_pendientes(carpeta_entrada, config["procesamiento"]["extensiones"], procesar)

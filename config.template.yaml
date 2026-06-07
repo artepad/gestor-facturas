@@ -42,3 +42,10 @@ precios:
   iva: 0.19
   margen: 0.35
   redondear_a: 100
+
+# Sincronización con el servidor web (opcional). Si 'activado' es false o
+# falta el token, el sistema funciona 100% local sin intentar sincronizar.
+sincronizacion:
+  activado: false
+  url: https://admin.minimark.cl
+  token: ""              # token de esta máquina (lo da setup.php en el servidor)

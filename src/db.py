@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import unicodedata
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -79,6 +80,19 @@ CREATE TABLE IF NOT EXISTS producto (
   editado_manual  INTEGER NOT NULL DEFAULT 0        -- 0/1
 );
 CREATE INDEX IF NOT EXISTS idx_producto_factura ON producto(factura_id);
+
+-- Cola de sincronización hacia el servidor web. Una fila por cada cambio
+-- pendiente de enviar. El worker (sync.py) la vacía cuando hay internet.
+CREATE TABLE IF NOT EXISTS sync_cola (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  uuid_local   TEXT NOT NULL,                    -- factura a sincronizar
+  accion       TEXT NOT NULL,                    -- 'guardar' o 'eliminar'
+  intentos     INTEGER NOT NULL DEFAULT 0,
+  ultimo_error TEXT,
+  proximo_intento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- backoff
+  creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_sync_cola_uuid ON sync_cola(uuid_local);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facturas_fts USING fts5(
   proveedor, razon_social, numero_factura, texto_completo,
@@ -186,6 +200,26 @@ class Database:
         if "margen_ganancia" not in columnas_detalle:
             cnx.execute("ALTER TABLE detalle_factura ADD COLUMN margen_ganancia REAL")
 
+        # uuid_local: identificador estable para sincronizar con el servidor.
+        columnas_facturas = {
+            row["name"] for row in cnx.execute("PRAGMA table_info(facturas)")
+        }
+        if "uuid_local" not in columnas_facturas:
+            cnx.execute("ALTER TABLE facturas ADD COLUMN uuid_local TEXT")
+            # Backfill: asignar un UUID a las facturas ya existentes
+            faltantes = cnx.execute(
+                "SELECT id FROM facturas WHERE uuid_local IS NULL"
+            ).fetchall()
+            for row in faltantes:
+                cnx.execute(
+                    "UPDATE facturas SET uuid_local = ? WHERE id = ?",
+                    (str(uuid.uuid4()), row["id"]),
+                )
+            cnx.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_facturas_uuid "
+                "ON facturas(uuid_local)"
+            )
+
     @contextmanager
     def _conexion(self) -> Iterator[sqlite3.Connection]:
         cnx = sqlite3.connect(self.ruta)
@@ -265,21 +299,116 @@ class Database:
             )
         datos = validacion.datos
         fecha_iso = datetime.strptime(datos.fecha, "%d-%m-%Y").strftime("%Y-%m-%d")
+        uuid_local = str(uuid.uuid4())
         with self._conexion() as cnx:
             cur = cnx.execute(
                 """
                 INSERT OR IGNORE INTO facturas
                   (proveedor, razon_social, rut_emisor, fecha, numero_factura,
-                   total, moneda, ruta_archivo, texto_completo, confianza, notas)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   total, moneda, ruta_archivo, texto_completo, confianza, notas,
+                   uuid_local)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datos.proveedor, datos.razon_social, datos.rut_emisor,
                     fecha_iso, datos.numero_factura, datos.total, datos.moneda,
                     str(ruta_archivo), texto_completo, datos.confianza, datos.notas,
+                    uuid_local,
                 ),
             )
-            return cur.lastrowid or 0
+            factura_id = cur.lastrowid or 0
+            if factura_id:
+                self._encolar_sync(cnx, uuid_local, "guardar")
+            return factura_id
+
+    # --- Cola de sincronización con el servidor web ---
+
+    @staticmethod
+    def _encolar_sync(cnx: sqlite3.Connection, uuid_local: str, accion: str) -> None:
+        """Agrega un cambio a la cola de sincronización (dentro de la misma
+        transacción de quien llama). Si no hay sincronización activa, igual
+        se encola: el worker simplemente no existe y la cola queda inerte."""
+        cnx.execute(
+            "INSERT INTO sync_cola (uuid_local, accion) VALUES (?, ?)",
+            (uuid_local, accion),
+        )
+
+    def uuid_de_factura(self, factura_id: int) -> str | None:
+        with self._conexion() as cnx:
+            row = cnx.execute(
+                "SELECT uuid_local FROM facturas WHERE id = ?", (factura_id,)
+            ).fetchone()
+            return row["uuid_local"] if row else None
+
+    def pendientes_sync(self, limite: int = 20) -> list[dict]:
+        """Items de la cola listos para enviar (cuyo backoff ya venció)."""
+        with self._conexion() as cnx:
+            rows = cnx.execute(
+                """
+                SELECT id, uuid_local, accion, intentos
+                FROM sync_cola
+                WHERE proximo_intento <= CURRENT_TIMESTAMP
+                ORDER BY id
+                LIMIT ?
+                """,
+                (limite,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def marcar_sync_ok(self, cola_id: int) -> None:
+        with self._conexion() as cnx:
+            cnx.execute("DELETE FROM sync_cola WHERE id = ?", (cola_id,))
+
+    def marcar_sync_error(self, cola_id: int, error: str,
+                          backoff_segundos: int) -> None:
+        """Aumenta el contador de intentos y agenda el próximo con backoff."""
+        with self._conexion() as cnx:
+            cnx.execute(
+                """
+                UPDATE sync_cola
+                SET intentos = intentos + 1,
+                    ultimo_error = ?,
+                    proximo_intento = datetime(CURRENT_TIMESTAMP, ?)
+                WHERE id = ?
+                """,
+                (error[:500], f"+{int(backoff_segundos)} seconds", cola_id),
+            )
+
+    def contar_pendientes_sync(self) -> int:
+        with self._conexion() as cnx:
+            return int(cnx.execute(
+                "SELECT COUNT(*) FROM sync_cola"
+            ).fetchone()[0])
+
+    def factura_para_sync(self, uuid_local: str) -> dict | None:
+        """Arma el payload completo de una factura (cabecera + detalle + ruta
+        del PDF) para enviarlo al servidor. None si la factura ya no existe."""
+        with self._conexion() as cnx:
+            f = cnx.execute(
+                "SELECT * FROM facturas WHERE uuid_local = ?", (uuid_local,)
+            ).fetchone()
+            if not f:
+                return None
+            productos = cnx.execute(
+                "SELECT descripcion, cantidad, precio_unitario, descuento, "
+                "monto, afecto_iva, precio_sugerido FROM producto "
+                "WHERE factura_id = ? ORDER BY orden, id",
+                (f["id"],),
+            ).fetchall()
+        return {
+            "uuid_local": f["uuid_local"],
+            "proveedor": f["proveedor"],
+            "razon_social": f["razon_social"],
+            "rut_emisor": f["rut_emisor"],
+            "numero_factura": f["numero_factura"],
+            "fecha": f["fecha"],            # ya en YYYY-MM-DD
+            "total": f["total"],
+            "moneda": f["moneda"],
+            "confianza": f["confianza"],
+            "notas": f["notas"],
+            "ruta_archivo": f["ruta_archivo"],
+            "detalle": [dict(p) for p in productos],
+        }
 
     def listar_proveedores(self) -> list[str]:
         with self._conexion() as cnx:
