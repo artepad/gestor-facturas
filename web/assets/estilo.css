@@ -107,15 +107,16 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 .nav-item.salir { color: #f3b0b0; }
 .nav-item.salir:hover { background: rgba(220,53,69,.2); color: #fff; }
 
-/* Área principal */
-.main { flex: 1; min-width: 0; }
+/* Área principal: columna para empujar el footer-texto al fondo */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.main .contenido { flex: 1; width: 100%; }
 
-/* Footer con franja azul delgada (como en el escritorio) */
-.footer-app { flex-shrink: 0; }
+/* Footer: el texto vive dentro del main; la franja azul cruza todo el ancho.
+   Así el sidebar oscuro llega hasta abajo (hasta la franja azul). */
 .footer-texto { text-align: center; color: var(--texto-tenue);
   font-size: 13px; font-weight: 600; padding: 12px;
-  border-top: 1px solid var(--borde); background: var(--fondo); }
-.franja-azul { height: 5px; background: var(--azul); }
+  border-top: 1px solid var(--borde); background: var(--fondo); flex-shrink: 0; }
+.franja-azul { height: 5px; background: var(--azul); flex-shrink: 0; }
 
 .hamburguesa { display: none; }
 .backdrop { display: none; }

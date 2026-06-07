@@ -98,12 +98,10 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas'): void
 function pie_dashboard(): void
 {
     ?>
+        <div class="footer-texto">Sistema de Gestión de Facturas</div>
       </div><!-- .main -->
     </div><!-- .app -->
-    <footer class="footer-app">
-      <div class="footer-texto">Sistema de Gestión de Facturas</div>
-      <div class="franja-azul"></div>
-    </footer>
+    <div class="franja-azul"></div>
     <script>
       (function () {
         var app = document.getElementById('app');
