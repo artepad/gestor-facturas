@@ -520,7 +520,13 @@ class Database:
 
     def eliminar(self, id_factura: int) -> None:
         with self._conexion() as cnx:
+            # Capturar el uuid ANTES de borrar para encolar la eliminación
+            row = cnx.execute(
+                "SELECT uuid_local FROM facturas WHERE id = ?", (id_factura,)
+            ).fetchone()
             cnx.execute("DELETE FROM facturas WHERE id = ?", (id_factura,))
+            if row and row["uuid_local"]:
+                self._encolar_sync(cnx, row["uuid_local"], "eliminar")
 
     def actualizar_factura(
         self,
@@ -556,6 +562,12 @@ class Database:
                     id_factura,
                 ),
             )
+            # Re-sincronizar: encolar un "guardar" con los datos nuevos
+            row = cnx.execute(
+                "SELECT uuid_local FROM facturas WHERE id = ?", (id_factura,)
+            ).fetchone()
+            if row and row["uuid_local"]:
+                self._encolar_sync(cnx, row["uuid_local"], "guardar")
         return datos
 
     # --- Detalle de productos ---

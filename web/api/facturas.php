@@ -50,6 +50,25 @@ if ($uuid === '') {
     responder_json(['error' => 'Falta uuid_local.'], 400);
 }
 
+// --- Eliminación (soft-delete): marca eliminada_en, no borra fisicamente ---
+if (!empty($datos['eliminar'])) {
+    try {
+        $st = $pdo->prepare(
+            "UPDATE facturas SET eliminada_en = NOW()
+             WHERE uuid_local = ? AND negocio_id = ?"
+        );
+        $st->execute([$uuid, $negocioId]);
+        $pdo->prepare("UPDATE maquinas SET ultima_sync = NOW() WHERE id = ?")
+            ->execute([$maquinaId]);
+        $pdo->prepare(
+            "INSERT INTO sync_log (maquina_id, accion, factura_uuid, exito) VALUES (?, 'eliminar', ?, 1)"
+        )->execute([$maquinaId, $uuid]);
+        responder_json(['ok' => true, 'accion' => 'eliminar']);
+    } catch (Throwable $e) {
+        responder_json(['error' => 'Error al eliminar.'], 500);
+    }
+}
+
 // --- Guardar el PDF si vino ---
 $rutaPdf = null;
 if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK) {
