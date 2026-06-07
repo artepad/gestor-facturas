@@ -27,6 +27,16 @@ from db import Database
 _BACKOFF = [60, 300, 900, 3600]  # 1min, 5min, 15min, 1h
 _TIMEOUT = 30  # segundos por request
 
+# User-Agent realista: muchos WAF (como Mod_Security en HostGator) bloquean
+# el "python-requests/x.y" por defecto con un HTTP 406.
+_HEADERS_BASE = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) GestorFacturas/1.0"
+    ),
+    "Accept": "application/json",
+}
+
 
 def _backoff_para(intentos: int) -> int:
     return _BACKOFF[min(intentos, len(_BACKOFF) - 1)]
@@ -46,7 +56,7 @@ def enviar_uno(db: Database, item: dict, cfg: dict) -> tuple[bool, str]:
     """Envía un item de la cola al servidor. Devuelve (exito, mensaje)."""
     uuid_local = item["uuid_local"]
     url = cfg["url"].rstrip("/") + "/api/facturas.php"
-    headers = {"Authorization": f"Bearer {cfg['token']}"}
+    headers = {**_HEADERS_BASE, "Authorization": f"Bearer {cfg['token']}"}
 
     if item["accion"] == "eliminar":
         # La eliminación se maneja como un campo en el payload mínimo
@@ -107,7 +117,8 @@ def _interpretar(r: "requests.Response") -> tuple[bool, str]:
 def procesar_cola(db: Database, cfg: dict) -> int:
     """Procesa los items pendientes una vez. Devuelve cuántos se enviaron OK."""
     enviados = 0
-    for item in db.pendientes_sync():
+    items = db.pendientes_sync()
+    for i, item in enumerate(items):
         exito, msg = enviar_uno(db, item, cfg)
         if exito:
             db.marcar_sync_ok(item["id"])
@@ -116,6 +127,9 @@ def procesar_cola(db: Database, cfg: dict) -> int:
             db.marcar_sync_error(
                 item["id"], msg, _backoff_para(item["intentos"]))
             print(f"[sync] error enviando {item['uuid_local']}: {msg}", flush=True)
+        # Pausa breve entre envíos: evita que el WAF tome la ráfaga como ataque.
+        if i < len(items) - 1:
+            time.sleep(0.5)
     return enviados
 
 

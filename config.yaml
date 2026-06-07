@@ -65,6 +65,6 @@ precios:
 # Sincronización con el servidor web (opcional). Para activar: activado: true
 # y pega el token que entrega setup.php en el servidor.
 sincronizacion:
-  activado: false
+  activado: true
   url: https://admin.minimark.cl
-  token: ""
+  token: "d53e9bcc757f93fd9c036be1b2cece5e43f68feceeb9460a"
