@@ -13,3 +13,4 @@ venv/
 web/config.php
 web/almacen_pdf/*
 !web/almacen_pdf/.htaccess
+config.yaml
