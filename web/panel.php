@@ -51,6 +51,17 @@ $st = $pdo->prepare($sql);
 $st->execute($params);
 $facturas = $st->fetchAll();
 // clp(), fecha_dmy() y estado_factura() viven en lib/ui.php
+
+// Texto que indica qué negocio se está viendo
+$nombrePorId = [];
+foreach ($negocios as $n) { $nombrePorId[(int)$n['id']] = $n['nombre']; }
+if ($fNegocio && isset($nombrePorId[$fNegocio])) {
+    $viendo = $nombrePorId[$fNegocio];
+} elseif (count($negocios) === 1) {
+    $viendo = $negocios[0]['nombre'];   // un solo negocio: mostrar su nombre
+} else {
+    $viendo = 'Todos los negocios';
+}
 ?>
 <!doctype html>
 <html lang="es">
@@ -64,6 +75,13 @@ $facturas = $st->fetchAll();
     <?php cabecera_dashboard($usuario, 'facturas'); ?>
 
     <div class="contenido">
+        <div class="cab-acciones">
+            <h2>Facturas</h2>
+            <span class="badge-negocio">
+                <?= icono('negocios') ?>
+                Viendo: <strong><?= htmlspecialchars($viendo) ?></strong>
+            </span>
+        </div>
         <div class="panel">
             <h2>Filtros</h2>
             <form class="filtros" method="get">

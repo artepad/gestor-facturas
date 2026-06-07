@@ -166,6 +166,11 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 .cab-acciones h2 { margin: 0; font-size: 18px; }
 .badge-inactivo { font-size: 11px; background: #eee; color: #888;
   padding: 2px 8px; border-radius: 10px; }
+.badge-negocio { display: inline-flex; align-items: center; gap: 7px;
+  background: #fff; border: 1px solid var(--borde); border-radius: 20px;
+  padding: 7px 14px; font-size: 13.5px; color: var(--texto-sec); }
+.badge-negocio strong { color: var(--texto); }
+.badge-negocio .ic { width: 16px; height: 16px; color: var(--azul); }
 
 .contenido { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
 
