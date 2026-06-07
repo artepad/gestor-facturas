@@ -60,9 +60,45 @@ a correr el setup con otro `&slug=` y `&maquina=` para generar otro.
 
 ## Probar que la API responde
 
-```
-https://admin.minimark.cl/            → "Servidor activo"
-```
-
 El endpoint `api/facturas.php` solo acepta POST con token; abrirlo en el
 navegador devolverá "Metodo no permitido", lo cual es correcto.
+
+## Dashboard web (login + listado de facturas)
+
+### Crear tu usuario administrador
+
+Una vez subidos los archivos y corrido el setup, crea tu usuario:
+
+```
+https://admin.minimark.cl/crear_admin.php?key=TU_SETUP_KEY&email=tu@correo.cl&clave=TuClave123&nombre=Miguel&rol=admin
+```
+
+- `rol=admin` ve todos los negocios.
+- Para una trabajadora: `rol=sucursal` y agrega `&negocio=ID` (el id del
+  negocio que se mostro al crear el negocio en setup).
+
+**Borra `crear_admin.php` del servidor** después de crear tus usuarios.
+
+### Entrar
+
+```
+https://admin.minimark.cl/            → redirige al login
+https://admin.minimark.cl/login.php   → ingresar
+```
+
+Tras ingresar ves el panel con:
+- Filtros: búsqueda libre, negocio (si ves más de uno), proveedor, rango de fechas.
+- Tabla de facturas con estado (verde/amarillo/rojo) por confianza de lectura.
+- Botón "Ver" para abrir el PDF (solo de negocios que te corresponden).
+
+### Archivos del dashboard
+
+```
+login.php          formulario de ingreso
+logout.php         cerrar sesión
+panel.php          listado + filtros (requiere login)
+ver_pdf.php        sirve el PDF con control de acceso por negocio
+crear_admin.php    crea usuarios (correr 1 vez, luego borrar)
+lib/auth.php       sesión y permisos
+assets/estilo.css  tema visual
+```
