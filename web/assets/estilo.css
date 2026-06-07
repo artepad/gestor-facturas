@@ -34,9 +34,43 @@ body {
   justify-content: space-between;
 }
 .header h1 { margin: 0; font-size: 20px; }
+.header-izq { display: flex; align-items: center; gap: 28px; }
+.nav { display: flex; gap: 6px; }
+.nav-item {
+  color: #b4bcc4; text-decoration: none; font-size: 14px; font-weight: 600;
+  padding: 7px 14px; border-radius: 6px;
+}
+.nav-item:hover { color: #fff; background: rgba(255,255,255,.08); }
+.nav-item.activo { color: #fff; background: var(--azul); }
 .header .usuario { font-size: 13px; color: #b4bcc4; }
 .header .usuario a { color: #fff; text-decoration: none; margin-left: 14px; }
 .header .usuario a:hover { text-decoration: underline; }
+
+/* Tarjetas de negocios */
+.grid-negocios { display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.negocio-card {
+  background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 4px;
+}
+.negocio-card.inactivo { opacity: .55; }
+.negocio-card h3 { margin: 0 0 2px; font-size: 17px; }
+.negocio-card .rut { color: var(--texto-sec); font-size: 13px; margin-bottom: 10px; }
+.negocio-card .dato { font-size: 13px; color: var(--texto); display: flex; gap: 8px; }
+.negocio-card .dato .ic { color: var(--azul); width: 18px; }
+.negocio-card .nfact {
+  margin: 12px 0; font-size: 13px; color: var(--texto-sec);
+  border-top: 1px solid var(--borde); padding-top: 12px;
+}
+.negocio-card .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+.btn.sm { padding: 7px 12px; font-size: 13px; }
+.btn.verde { background: var(--verde-ok); }
+.btn.verde:hover { background: #1e8449; }
+.cab-acciones { display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 18px; }
+.cab-acciones h2 { margin: 0; font-size: 18px; }
+.badge-inactivo { font-size: 11px; background: #eee; color: #888;
+  padding: 2px 8px; border-radius: 10px; }
 
 .contenido { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
 

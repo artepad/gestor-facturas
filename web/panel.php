@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/lib/auth.php';
+require __DIR__ . '/lib/ui.php';
 
 $usuario = exigir_login();
 $pdo = obtener_pdo();
@@ -49,25 +50,7 @@ $sql = "SELECT f.*, n.nombre AS negocio_nombre
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $facturas = $st->fetchAll();
-
-function clp($v): string {
-    if ($v === null || $v === '') return '';
-    return '$' . number_format((float)$v, 0, ',', '.');
-}
-function fecha_dmy($iso): string {
-    if (!$iso) return '';
-    $p = explode('-', $iso);
-    return count($p) === 3 ? "$p[2]-$p[1]-$p[0]" : $iso;
-}
-/** Color de estado segun confianza y notas. */
-function estado_factura(array $f): array {
-    $conf = $f['confianza'];
-    $notas = strtolower($f['notas'] ?? '');
-    $adv = preg_match('/revisar|sospechos|advertencia|ilegible/', $notas);
-    if ($conf !== null && $conf < 0.4) return ['rojo', 'Revisar (baja lectura)'];
-    if ($conf === null || $conf < 0.7 || $adv) return ['amarillo', 'Revisar'];
-    return ['verde', 'Correcto'];
-}
+// clp(), fecha_dmy() y estado_factura() viven en lib/ui.php
 ?>
 <!doctype html>
 <html lang="es">
@@ -78,15 +61,7 @@ function estado_factura(array $f): array {
     <link rel="stylesheet" href="assets/estilo.css">
 </head>
 <body>
-    <div class="franja"></div>
-    <div class="header">
-        <h1>Administrador de Facturas</h1>
-        <div class="usuario">
-            <?= htmlspecialchars($usuario['nombre'] ?? '') ?>
-            (<?= htmlspecialchars($usuario['rol']) ?>)
-            <a href="logout.php">Salir</a>
-        </div>
-    </div>
+    <?php cabecera_dashboard($usuario, 'facturas'); ?>
 
     <div class="contenido">
         <div class="panel">
@@ -178,6 +153,6 @@ function estado_factura(array $f): array {
             </table>
         </div>
     </div>
-    <div class="pie">Sistema de Gestión de Facturas</div>
+    <?php pie_dashboard(); ?>
 </body>
 </html>
