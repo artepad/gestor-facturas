@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Dos proyectos en un repo.** Este `CLAUDE.md` cubre la **app de escritorio de Python** (`src/`). El **dashboard web** (`web/`, PHP + MySQL en admin.minimark.cl) se desarrolla en su propio chat y tiene su propia documentación en `web/CLAUDE.md`. Los dos lados están unidos por la **sincronización de facturas**, cuyo formato exacto vive en `web/CONTRATO.md`: cualquier cambio en los campos de la factura, el endpoint o el `uuid_local` debe coordinarse en ambos lados según ese documento. Trabajando en `src/`, no toques `web/` salvo para respetar el contrato; trabajando en `web/`, no toques `src/`.
+
 ## Contexto
 
 Sistema que organiza automáticamente facturas escaneadas (escáner Brother DS-640 deja PDFs en una carpeta vigilada). Pensado para un almacén de barrio en Chile: las trabajadoras escanean y el sistema clasifica, renombra y archiva sin intervención. Además del archivado automático, la app es un **administrador de facturas**: ventana de búsqueda con acciones (ver, editar, eliminar), ventana de detalle con visor de PDF embebido, y un analizador de productos con cálculo de precios sugeridos. El idioma del código, comentarios y mensajes al usuario es **español** — mantenerlo así.
