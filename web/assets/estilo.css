@@ -23,45 +23,72 @@ body {
   margin: 0;
 }
 
-.franja { height: 5px; background: var(--verde); }
+/* Body como columna: franja+header arriba, app en medio, footer abajo */
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Barras superiores (conservadas del diseño de escritorio) */
+.franja { height: 5px; background: var(--verde); flex-shrink: 0; }
+.topbar {
+  background: var(--header); color: #fff; flex-shrink: 0;
+  display: flex; align-items: center; gap: 14px; padding: 16px 26px;
+}
+.topbar h1 { margin: 0; font-size: 20px; font-weight: 700; }
 
 /* ===== Layout con sidebar ===== */
-.app { display: flex; min-height: 100vh; }
+.app { display: flex; flex: 1; min-height: 0; }
 
 .sidebar {
   width: 240px; background: var(--header); color: #cfd6dd;
   display: flex; flex-direction: column; flex-shrink: 0;
-  position: sticky; top: 0; height: 100vh;
+  border-top: 1px solid rgba(255,255,255,.08);
   transition: width .18s ease;
 }
 .app.colapsado .sidebar { width: 68px; }
 
 .sidebar-top {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,.08);
-  min-height: 60px;
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 10px 14px;
 }
-.sidebar-top .logo { font-size: 18px; font-weight: 700; color: #fff;
-  white-space: nowrap; overflow: hidden; }
-.app.colapsado .sidebar-top .logo { display: none; }
+.app.colapsado .sidebar-top { justify-content: center; }
 .toggle {
   background: none; border: none; color: #cfd6dd; cursor: pointer;
   padding: 6px; border-radius: 6px; display: flex;
 }
 .toggle:hover { background: rgba(255,255,255,.1); color: #fff; }
+.toggle .ic { width: 22px; height: 22px; }
 
 .sidebar .nav { display: flex; flex-direction: column; gap: 4px;
-  padding: 14px 12px; flex: 1; }
+  padding: 6px 12px 14px; flex: 1; }
 .nav-item {
   display: flex; align-items: center; gap: 12px; text-decoration: none;
   color: #cfd6dd; font-size: 14px; font-weight: 600; padding: 11px 12px;
   border-radius: 8px; white-space: nowrap; overflow: hidden;
+  background: none; border: none; cursor: pointer; width: 100%;
+  font-family: inherit; text-align: left;
 }
 .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
 .nav-item.activo { background: var(--azul); color: #fff; }
 .nav-item .ic { width: 20px; height: 20px; flex-shrink: 0; }
 .app.colapsado .nav-item .txt { display: none; }
 .app.colapsado .nav-item { justify-content: center; padding: 11px 0; }
+
+/* Grupo Administración (submenú acordeón) */
+.grupo-toggle .chevron { margin-left: auto; display: flex; transition: transform .15s; }
+.grupo-toggle .chevron .ic { width: 16px; height: 16px; }
+.nav-grupo.abierto .grupo-toggle .chevron { transform: rotate(180deg); }
+.app.colapsado .grupo-toggle .chevron { display: none; }
+.subnav { display: none; flex-direction: column; gap: 2px;
+  margin: 2px 0 2px 16px; padding-left: 12px;
+  border-left: 1px solid rgba(255,255,255,.12); }
+.nav-grupo.abierto .subnav { display: flex; }
+.app.colapsado .subnav { display: none !important; }
+.subnav-item {
+  color: #aeb7c0; text-decoration: none; font-size: 13.5px; font-weight: 500;
+  padding: 9px 12px; border-radius: 7px; white-space: nowrap;
+}
+.subnav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+.subnav-item.activo { color: #fff; background: var(--azul); }
 
 .sidebar-bottom { border-top: 1px solid rgba(255,255,255,.08);
   padding: 12px; display: flex; flex-direction: column; gap: 6px; }
@@ -81,24 +108,36 @@ body {
 .nav-item.salir:hover { background: rgba(220,53,69,.2); color: #fff; }
 
 /* Área principal */
-.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.main { flex: 1; min-width: 0; }
+
+/* Footer con franja azul delgada (como en el escritorio) */
+.footer-app { flex-shrink: 0; }
+.footer-texto { text-align: center; color: var(--texto-tenue);
+  font-size: 13px; font-weight: 600; padding: 12px;
+  border-top: 1px solid var(--borde); background: var(--fondo); }
+.franja-azul { height: 5px; background: var(--azul); }
+
 .hamburguesa { display: none; }
 .backdrop { display: none; }
 
 /* Responsive: sidebar como overlay en móvil */
 @media (max-width: 768px) {
-  .sidebar { position: fixed; left: 0; top: 0; z-index: 50;
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50;
     transform: translateX(-100%); transition: transform .2s ease; width: 240px; }
   .app.movil-abierto .sidebar { transform: translateX(0); }
-  .app.colapsado .sidebar { width: 240px; }      /* en móvil siempre completo */
-  .hamburguesa { display: inline-flex; align-items: center; gap: 8px;
-    background: var(--header); color: #fff; border: none; cursor: pointer;
-    padding: 12px 16px; }
-  .hamburguesa .ic { width: 22px; height: 22px; }
+  .app.colapsado .sidebar { width: 240px; }
+  .app.colapsado .nav-item .txt,
+  .app.colapsado .usuario-mini .txt { display: inline; }  /* en móvil completo */
+  .hamburguesa { display: inline-flex; align-items: center;
+    background: none; color: #fff; border: none; cursor: pointer; padding: 4px; }
+  .hamburguesa .ic { width: 24px; height: 24px; }
   .backdrop { display: block; position: fixed; inset: 0; z-index: 40;
     background: rgba(0,0,0,.4); opacity: 0; pointer-events: none;
     transition: opacity .2s; }
   .app.movil-abierto .backdrop { opacity: 1; pointer-events: auto; }
+}
+@media (min-width: 769px) {
+  .hamburguesa { display: none; }
 }
 
 /* Tarjetas de negocios */
