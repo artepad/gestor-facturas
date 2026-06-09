@@ -49,4 +49,37 @@ agregar_columna($pdo, 'negocios', 'direccion', "VARCHAR(255) NULL AFTER telefono
 agregar_columna($pdo, 'negocios', 'correo',    "VARCHAR(150) NULL AFTER direccion");
 agregar_columna($pdo, 'negocios', 'activo',    "TINYINT(1) NOT NULL DEFAULT 1 AFTER correo");
 
+echo "\n[Modulo Fiados]\n";
+// Crea las tablas del modulo Fiados si faltan (CREATE TABLE IF NOT EXISTS es
+// idempotente: no toca las que ya existen).
+$tablasFiados = [
+    'clientes' => "CREATE TABLE IF NOT EXISTS clientes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        nombre VARCHAR(100) NOT NULL, apellido VARCHAR(100) NULL,
+        telefono VARCHAR(40) NULL, direccion VARCHAR(255) NULL, correo VARCHAR(150) NULL,
+        activo TINYINT(1) NOT NULL DEFAULT 1, creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        INDEX idx_cliente_negocio (negocio_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'fiados' => "CREATE TABLE IF NOT EXISTS fiados (
+        id INT AUTO_INCREMENT PRIMARY KEY, cliente_id INT NOT NULL,
+        fecha DATE NOT NULL, monto DECIMAL(14,2) NOT NULL, descripcion VARCHAR(255) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+        INDEX idx_fiado_cliente (cliente_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'abonos' => "CREATE TABLE IF NOT EXISTS abonos (
+        id INT AUTO_INCREMENT PRIMARY KEY, cliente_id INT NOT NULL,
+        fecha DATE NOT NULL, monto DECIMAL(14,2) NOT NULL, nota VARCHAR(255) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+        INDEX idx_abono_cliente (cliente_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+];
+foreach ($tablasFiados as $nombre => $ddl) {
+    $pdo->exec($ddl);
+    echo "  ~ tabla $nombre lista\n";
+}
+
 echo "\nListo. Migraciones aplicadas.\n";

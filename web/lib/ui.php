@@ -22,6 +22,9 @@ function icono(string $nombre): string
         'menu'     => '<path d="M3 12h18M3 6h18M3 18h18"/>',
         'chevron'  => '<path d="M6 9l6 6 6-6"/>',
         'reloj'    => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        'fiados'   => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/>',
+        'basurero' => '<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
+        'lapiz'    => '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
     ];
     $d = $svg[$nombre] ?? '';
     return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
@@ -88,6 +91,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
         <nav class="nav">
           <?= $item('home', 'Home', 'home.php') ?>
           <?= $item('facturas', 'Facturas', 'panel_facturas.php') ?>
+          <?= $item('fiados', 'Fiados', 'fiados.php') ?>
           <?php if ($esAdmin): ?>
             <div class="nav-grupo <?= $adminAbierto ? 'abierto' : '' ?>" id="grupoAdmin">
               <button class="nav-item grupo-toggle" id="btnAdmin" type="button" title="Administración">
@@ -189,6 +193,22 @@ function clp($v): string
 {
     if ($v === null || $v === '') return '';
     return '$' . number_format((float)$v, 0, ',', '.');
+}
+
+/**
+ * Interpreta un monto escrito por el usuario en formato chileno y lo devuelve
+ * como número. En CLP el "." separa miles y la "," los decimales:
+ *   "5.000" -> 5000.0 ; "$1.234.567" -> 1234567.0 ; "1500,50" -> 1500.5
+ * Devuelve null si no hay un número válido.
+ */
+function parsear_monto($v): ?float
+{
+    if ($v === null) return null;
+    $s = trim((string)$v);
+    if ($s === '') return null;
+    $s = str_replace(['$', ' ', '.'], '', $s);   // quita símbolo, espacios y miles
+    $s = str_replace(',', '.', $s);               // coma decimal -> punto
+    return is_numeric($s) ? (float)$s : null;
 }
 
 /** ISO (2026-05-20) -> dd-mm-yyyy (20-05-2026) */

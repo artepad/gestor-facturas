@@ -60,6 +60,10 @@ web/
 ├── panel_facturas.php   listado de facturas + filtros (la página principal de consulta)
 ├── factura.php          detalle de una factura (cabecera + productos + botón Ver PDF)
 ├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio
+│
+├── fiados.php           listado de clientes con su saldo (módulo Fiados)
+├── cliente_form.php     crear/editar un cliente de fiados
+├── cliente.php          ficha del cliente: saldo + registrar fiados/abonos + historial
 ├── login.php            formulario de ingreso
 ├── logout.php           cerrar sesión
 │
@@ -98,6 +102,17 @@ Definición canónica en `lib/esquema.sql`. Tablas:
 - **`detalle_factura`** — líneas de producto de una factura (relación con
   `ON DELETE CASCADE`). Se reemplaza completo en cada sync.
 - **`sync_log`** — bitácora de cada operación de sincronización (auditoría).
+
+**Módulo Fiados** (web-nativo, NO participa de la sincronización; la web es la
+fuente de verdad):
+- **`clientes`** — clientes a crédito de cada negocio (`negocio_id`, `nombre`,
+  `apellido`, `telefono`, `direccion`, `correo`, `activo`). `negocio_id` vive solo
+  aquí; fiados/abonos llegan al negocio a través del cliente.
+- **`fiados`** — cargos a crédito que aumentan la deuda (`cliente_id`, `fecha`,
+  `monto`, `descripcion`).
+- **`abonos`** — pagos que disminuyen la deuda (`cliente_id`, `fecha`, `monto`,
+  `nota`). **Cuenta corriente**: saldo del cliente = Σ`fiados.monto` − Σ`abonos.monto`
+  (calculado, no almacenado). Acceso admin+sucursal acotado por `negocios_visibles()`.
 
 ## Reglas de acceso (en `lib/auth.php`)
 

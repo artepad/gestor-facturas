@@ -85,3 +85,44 @@ CREATE TABLE IF NOT EXISTS sync_log (
   error        TEXT,
   ts           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ===== Modulo Fiados (web-nativo, no participa de la sincronizacion) =====
+
+-- Clientes a quienes el negocio vende a credito. Uno por negocio.
+CREATE TABLE IF NOT EXISTS clientes (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id INT NOT NULL,
+  nombre     VARCHAR(100) NOT NULL,
+  apellido   VARCHAR(100) NULL,
+  telefono   VARCHAR(40)  NULL,
+  direccion  VARCHAR(255) NULL,
+  correo     VARCHAR(150) NULL,
+  activo     TINYINT(1)   NOT NULL DEFAULT 1,     -- desactivar sin borrar historial
+  creado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  INDEX idx_cliente_negocio (negocio_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Fiados: cargos a credito que aumentan la deuda del cliente.
+CREATE TABLE IF NOT EXISTS fiados (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  cliente_id  INT NOT NULL,
+  fecha       DATE NOT NULL,
+  monto       DECIMAL(14,2) NOT NULL,
+  descripcion VARCHAR(255) NULL,
+  creado_en   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+  INDEX idx_fiado_cliente (cliente_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Abonos: pagos que disminuyen la deuda del cliente (cuenta corriente).
+CREATE TABLE IF NOT EXISTS abonos (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT NOT NULL,
+  fecha      DATE NOT NULL,
+  monto      DECIMAL(14,2) NOT NULL,
+  nota       VARCHAR(255) NULL,
+  creado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+  INDEX idx_abono_cliente (cliente_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

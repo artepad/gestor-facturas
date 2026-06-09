@@ -178,7 +178,7 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 .btn.verde:hover { background: #1e8449; }
 .cab-acciones { display: flex; justify-content: space-between;
   align-items: center; margin-bottom: 18px; }
-.cab-acciones h2 { margin: 0; font-size: 18px; }
+.cab-acciones h2 { margin: 0; font-size: 21px; line-height: 1.2; }
 .badge-inactivo { font-size: 11px; background: #eee; color: #888;
   padding: 2px 8px; border-radius: 10px; }
 .badge-negocio { display: inline-flex; align-items: center; gap: 7px;
@@ -343,6 +343,64 @@ tr:hover td { background: #eef5ff; }
 .dg-label { font-size: 12px; font-weight: 600; color: var(--texto-sec);
   text-transform: uppercase; letter-spacing: .4px; }
 .dg-valor { font-size: 15px; color: var(--texto); }
+
+/* Datos de contacto: dos columnas, valores en negrita */
+.contacto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+.contacto-grid .dg-valor { font-weight: 600; }
+.acciones-rapidas.centrado { justify-content: center; }
+@media (max-width: 768px) { .contacto-grid { grid-template-columns: 1fr; } }
+
+/* ===== Fiados: saldo del cliente / deudas ===== */
+.saldo-card { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.saldo-label { font-size: 21px; font-weight: 700; color: var(--texto); }
+.saldo-monto { font-size: 30px; font-weight: 700; }
+.saldo-deuda { color: var(--rojo); }
+.saldo-ok { color: var(--verde-ok); }
+.monto-col { text-align: right; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
+
+/* ===== Secciones desplegables (details/summary) ===== */
+details.bloque { background: #fff; border: 1px solid var(--borde);
+  border-radius: 8px; margin-bottom: 14px; }
+details.bloque > summary { cursor: pointer; padding: 14px 18px; font-weight: 600;
+  font-size: 14px; color: var(--texto); list-style: none; display: flex;
+  align-items: center; gap: 9px; }
+details.bloque > summary::-webkit-details-marker { display: none; }
+details.bloque > summary::before { content: '\203A'; font-size: 18px; line-height: 1;
+  color: var(--texto-sec); transition: transform .15s; }
+details.bloque[open] > summary::before { transform: rotate(90deg); }
+details.bloque > summary:hover { color: var(--azul); }
+details.bloque[open] > summary { border-bottom: 1px solid var(--borde); }
+.bloque-cuerpo { padding: 16px 18px; }
+
+/* Acciones desplegables (Registrar fiado / abono): el summary es un botón */
+.acciones-cc { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.acciones-cc .accion-cc { flex: 1; min-width: 200px; }
+.acciones-cc summary { list-style: none; width: 100%; text-align: center; }
+.acciones-cc summary::-webkit-details-marker { display: none; }
+.acciones-cc .form-cc { margin-top: 12px; }
+.acciones-cc .form-cc .campo input { width: 100%; min-width: 0; }
+
+/* Movimientos: insignia de tipo y montos con signo */
+.mov-badge { display: inline-block; padding: 2px 9px; border-radius: 20px;
+  font-size: 12px; font-weight: 600; }
+.mov-fiado { background: #fdecea; color: var(--rojo); }
+.mov-abono { background: #e8f5e9; color: var(--verde-ok); }
+
+/* Botones de ícono compactos (editar / eliminar fila) */
+.btn-icono { background: none; border: none; cursor: pointer; padding: 6px;
+  border-radius: 6px; color: var(--texto-sec); display: inline-flex; line-height: 0;
+  text-decoration: none; }
+.btn-icono:hover { background: #eef2f7; color: var(--azul); }
+.btn-icono.peligro:hover { background: #fdecea; color: var(--rojo); }
+.btn-icono .ic { width: 18px; height: 18px; }
+.acciones-fila { display: inline-flex; gap: 4px; align-items: center; }
+.col-accion { text-align: center; width: 1%; white-space: nowrap; }
+
+/* Tabla de movimientos: Detalle flexible, las demás columnas compactas
+   (evita que los montos queden empujados muy a la derecha). */
+.tabla-mov th, .tabla-mov td { white-space: nowrap; }
+.tabla-mov .col-detalle { white-space: normal; width: 99%; }
 
 /* ===== Vista móvil ===== */
 @media (max-width: 768px) {
