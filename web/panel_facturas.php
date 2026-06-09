@@ -180,8 +180,8 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
                         <td class="celda-estado"><span class="estado"><span class="punto <?= $color ?>"></span><span class="estado-txt"><?= $txtEstado ?></span></span></td>
                         <td class="col-ocultar-movil">
                             <?php if ($f['ruta_pdf']): ?>
-                                <a href="ver_pdf.php?id=<?= (int)$f['id'] ?>" target="_blank"
-                                   onclick="event.stopPropagation()">Ver</a>
+                                <a class="btn-icono" href="ver_pdf.php?id=<?= (int)$f['id'] ?>" target="_blank"
+                                   title="Ver PDF" aria-label="Ver PDF" onclick="event.stopPropagation()"><?= icono('documento') ?></a>
                             <?php else: ?>
                                 <span style="color:#aaa">—</span>
                             <?php endif; ?>

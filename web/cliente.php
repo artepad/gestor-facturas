@@ -212,10 +212,8 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
             </div>
         </details>
 
-        <!-- Movimientos: fiados y abonos en una sola línea de tiempo (siempre visible) -->
-        <div class="panel">
-            <h2>Movimientos (<?= count($movs) ?>)</h2>
-            <div class="tabla-wrap">
+        <!-- Movimientos: fiados y abonos en una sola línea de tiempo (solo la tabla) -->
+        <div class="tabla-wrap">
                 <table class="tabla-mov">
                     <thead><tr>
                         <th>Fecha</th><th>Tipo</th><th class="col-detalle">Detalle</th>
@@ -245,7 +243,6 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
                     <?php endforeach; endif; ?>
                     </tbody>
                 </table>
-            </div>
         </div>
     </div>
     <?php pie_dashboard(); ?>
