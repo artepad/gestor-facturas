@@ -11,11 +11,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_login();
-if (($usuario['rol'] ?? '') !== 'admin') {
-    header('Location: panel.php');
-    exit;
-}
+$usuario = exigir_admin();
 
 $pdo = obtener_pdo();
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -47,18 +43,8 @@ $maquinas = $pdo->prepare("SELECT * FROM maquinas WHERE negocio_id = ? ORDER BY 
 $maquinas->execute([$id]);
 $maquinas = $maquinas->fetchAll();
 
-function h($v) { return htmlspecialchars((string)($v ?? '')); }
 ?>
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tokens · <?= h($negocio['nombre']) ?></title>
-    <link rel="stylesheet" href="assets/estilo.css">
-</head>
-<body>
-    <?php cabecera_dashboard($usuario, 'negocios'); ?>
+<?php cabecera_dashboard($usuario, 'negocios', 'Tokens · ' . $negocio['nombre']); ?>
 
     <div class="contenido">
         <div class="cab-acciones">
@@ -67,17 +53,13 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
         </div>
 
         <?php if ($tokenNuevo): ?>
-            <div class="panel" style="border-color:#27ae60">
-                <h2 style="color:#1a7a3a">Token generado — cópialo ahora</h2>
-                <p style="font-size:13px;color:#6c757d">
+            <div class="panel exito">
+                <h2>Token generado — cópialo ahora</h2>
+                <p class="token-aviso">
                     Este token NO se vuelve a mostrar. Pégalo en el
                     <code>config.yaml</code> del PC, en <code>sincronizacion.token</code>.
                 </p>
-                <div style="background:#0f1b2d;color:#7ee787;padding:14px 16px;
-                            border-radius:8px;font-family:Consolas,monospace;
-                            font-size:15px;word-break:break-all">
-                    <?= h($tokenNuevo) ?>
-                </div>
+                <div class="token-box"><?= h($tokenNuevo) ?></div>
             </div>
         <?php endif; ?>
 
@@ -111,12 +93,12 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
                             <tr>
                                 <td><?= h($m['nombre']) ?></td>
                                 <td><?= $m['ultima_sync'] ? h($m['ultima_sync']) : '—' ?></td>
-                                <td style="color:#8a939e">•••••• (oculto por seguridad)</td>
+                                <td class="token-oculto">•••••• (oculto por seguridad)</td>
                                 <td>
-                                    <form method="post" onsubmit="return confirm('¿Eliminar este PC? Su token dejará de funcionar.')" style="margin:0">
+                                    <form method="post" class="inline-form" onsubmit="return confirm('¿Eliminar este PC? Su token dejará de funcionar.')">
                                         <input type="hidden" name="accion" value="eliminar">
                                         <input type="hidden" name="maquina_id" value="<?= (int)$m['id'] ?>">
-                                        <button class="btn sm" type="submit" style="background:#dc3545">Eliminar</button>
+                                        <button class="btn sm rojo" type="submit">Eliminar</button>
                                     </form>
                                 </td>
                             </tr>
@@ -128,5 +110,3 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
         </div>
     </div>
     <?php pie_dashboard(); ?>
-</body>
-</html>

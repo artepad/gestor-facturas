@@ -94,6 +94,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             <?php endif; ?>
         </form>
     </div>
-    <div class="pie">Sistema de Gestión de Facturas</div>
+    <div class="pie">Minimark · Plataforma de gestión</div>
 </body>
 </html>

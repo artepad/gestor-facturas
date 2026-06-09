@@ -8,7 +8,17 @@ Options -Indexes
     Require all denied
 </FilesMatch>
 
-# Forzar HTTPS (HostGator emite certificado Let's Encrypt gratis)
+# Reenviar el header Authorization a PHP. Algunos Apache (ej. XAMPP con
+# mod_php) lo omiten, dejando vacío $_SERVER['HTTP_AUTHORIZATION'] y rompiendo
+# la autenticación por token del endpoint de sincronización. Inofensivo en
+# producción (donde ya llega bien).
+SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
+
+# Forzar HTTPS (HostGator emite certificado Let's Encrypt gratis).
+# Se excluye el ambiente local (XAMPP) para poder probar por http sin certificado.
 RewriteEngine On
+RewriteCond %{HTTP_HOST} !=localhost
+RewriteCond %{HTTP_HOST} !^127\.0\.0\.1 [NC]
+RewriteCond %{HTTP_HOST} !\.test$ [NC]
 RewriteCond %{HTTPS} off
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

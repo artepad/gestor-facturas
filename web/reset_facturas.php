@@ -52,7 +52,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
                 <div class="error" style="background:#e8f5e9;color:#1a7a3a;border-color:#c8e6c9">
                     Listo. Se borraron <?= $conteo ?> factura(s) y sus PDFs.
                 </div>
-                <p style="text-align:center"><a href="panel.php">Ir al panel</a></p>
+                <p style="text-align:center"><a href="panel_facturas.php">Ir al panel</a></p>
             <?php else: ?>
                 <p class="sub">Borra TODAS las facturas y PDFs del servidor.
                    Conserva tu usuario y el token. Esto es irreversible.</p>
@@ -64,11 +64,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
                     Borrar todas las facturas
                 </button>
                 <p style="text-align:center;margin-top:14px">
-                    <a href="panel.php">Cancelar</a>
+                    <a href="panel_facturas.php">Cancelar</a>
                 </p>
             <?php endif; ?>
         </form>
     </div>
-    <div class="pie">Sistema de Gestión de Facturas</div>
+    <div class="pie">Minimark · Plataforma de gestión</div>
 </body>
 </html>

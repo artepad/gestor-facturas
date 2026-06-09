@@ -25,50 +25,37 @@ if ($ids) {
     [$totMes, $sumaMes] = array_values($st->fetch(PDO::FETCH_NUM));
 }
 $nNegocios = count($negocios);
-
-function h($v) { return htmlspecialchars((string)($v ?? '')); }
 ?>
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Inicio · Sistema de Gestión</title>
-    <link rel="stylesheet" href="assets/estilo.css">
-</head>
-<body>
-    <?php cabecera_dashboard($usuario, 'home'); ?>
+<?php cabecera_dashboard($usuario, 'home', 'Inicio'); ?>
     <div class="contenido">
-        <h2 style="margin-top:0">Hola, <?= h($usuario['nombre'] ?: 'usuario') ?> 👋</h2>
-        <p style="color:var(--texto-sec);margin-top:-6px">
-            Resumen de tu actividad.
-        </p>
+        <h2 class="saludo">Hola, <?= h($usuario['nombre'] ?: 'usuario') ?> 👋</h2>
+        <p class="saludo-sub">Resumen de tu actividad.</p>
 
-        <div class="grid-negocios" style="margin-top:18px">
+        <div class="grid-negocios grid-stats">
             <div class="panel">
-                <div style="font-size:13px;color:var(--texto-sec)">Facturas totales</div>
-                <div style="font-size:30px;font-weight:700"><?= (int)$totFacturas ?></div>
+                <div class="stat-label">Facturas totales</div>
+                <div class="stat-valor"><?= (int)$totFacturas ?></div>
             </div>
             <div class="panel">
-                <div style="font-size:13px;color:var(--texto-sec)">Facturas este mes</div>
-                <div style="font-size:30px;font-weight:700"><?= (int)$totMes ?></div>
+                <div class="stat-label">Facturas este mes</div>
+                <div class="stat-valor"><?= (int)$totMes ?></div>
             </div>
             <div class="panel">
-                <div style="font-size:13px;color:var(--texto-sec)">Monto del mes</div>
-                <div style="font-size:30px;font-weight:700">$<?= number_format((float)$sumaMes, 0, ',', '.') ?></div>
+                <div class="stat-label">Monto del mes</div>
+                <div class="stat-valor">$<?= number_format((float)$sumaMes, 0, ',', '.') ?></div>
             </div>
             <?php if ($esAdmin): ?>
             <div class="panel">
-                <div style="font-size:13px;color:var(--texto-sec)">Negocios</div>
-                <div style="font-size:30px;font-weight:700"><?= (int)$nNegocios ?></div>
+                <div class="stat-label">Negocios</div>
+                <div class="stat-valor"><?= (int)$nNegocios ?></div>
             </div>
             <?php endif; ?>
         </div>
 
-        <div class="panel" style="margin-top:20px">
+        <div class="panel bloque-sep">
             <h2>Accesos rápidos</h2>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <a class="btn" href="panel.php">Ver facturas</a>
+            <div class="acciones-rapidas">
+                <a class="btn" href="panel_facturas.php">Ver facturas</a>
                 <?php if ($esAdmin): ?>
                     <a class="btn gris" href="negocios.php">Gestionar negocios</a>
                     <a class="btn gris" href="usuarios.php">Gestionar usuarios</a>
@@ -77,5 +64,3 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
         </div>
     </div>
     <?php pie_dashboard(); ?>
-</body>
-</html>

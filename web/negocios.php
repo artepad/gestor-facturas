@@ -2,11 +2,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_login();
-if (($usuario['rol'] ?? '') !== 'admin') {
-    header('Location: panel.php');   // sucursal no gestiona negocios
-    exit;
-}
+$usuario = exigir_admin();   // solo admin gestiona negocios
 
 $pdo = obtener_pdo();
 // Negocios + conteo de facturas (no eliminadas) y de máquinas
@@ -18,19 +14,8 @@ $negocios = $pdo->query(
      FROM negocios n
      ORDER BY n.activo DESC, n.nombre"
 )->fetchall();
-
-function h($v) { return htmlspecialchars((string)($v ?? '')); }
 ?>
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Negocios · Sistema de Gestión</title>
-    <link rel="stylesheet" href="assets/estilo.css">
-</head>
-<body>
-    <?php cabecera_dashboard($usuario, 'negocios'); ?>
+<?php cabecera_dashboard($usuario, 'negocios', 'Negocios'); ?>
 
     <div class="contenido">
         <div class="cab-acciones">
@@ -70,7 +55,7 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
                     </div>
 
                     <div class="acciones">
-                        <a class="btn sm" href="panel.php?negocio=<?= (int)$n['id'] ?>">Ver facturas</a>
+                        <a class="btn sm" href="panel_facturas.php?negocio=<?= (int)$n['id'] ?>">Ver facturas</a>
                         <a class="btn sm gris" href="negocio_form.php?id=<?= (int)$n['id'] ?>">Editar</a>
                         <a class="btn sm verde" href="negocio_tokens.php?id=<?= (int)$n['id'] ?>">Tokens (PCs)</a>
                     </div>
@@ -80,5 +65,3 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
         <?php endif; ?>
     </div>
     <?php pie_dashboard(); ?>
-</body>
-</html>

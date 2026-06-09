@@ -8,11 +8,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_login();
-if (($usuario['rol'] ?? '') !== 'admin') {
-    header('Location: panel.php');
-    exit;
-}
+$usuario = exigir_admin();
 
 $pdo = obtener_pdo();
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -82,19 +78,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
-function h($v) { return htmlspecialchars((string)($v ?? '')); }
 $titulo = $id ? 'Editar negocio' : 'Crear negocio';
 ?>
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= $titulo ?> · Sistema de Gestión</title>
-    <link rel="stylesheet" href="assets/estilo.css">
-</head>
-<body>
-    <?php cabecera_dashboard($usuario, 'negocios'); ?>
+<?php cabecera_dashboard($usuario, 'negocios', $titulo); ?>
 
     <div class="contenido">
         <div class="cab-acciones">
@@ -102,37 +88,37 @@ $titulo = $id ? 'Editar negocio' : 'Crear negocio';
             <a class="btn gris" href="negocios.php">Volver</a>
         </div>
 
-        <div class="panel" style="max-width:560px">
+        <div class="panel form-angosto">
             <?php if ($error): ?>
                 <div class="error"><?= h($error) ?></div>
             <?php endif; ?>
             <form method="post">
-                <div class="campo" style="margin-bottom:14px">
+                <div class="campo">
                     <label>Nombre del negocio *</label>
-                    <input type="text" name="nombre" required style="width:100%"
+                    <input type="text" name="nombre" required
                            value="<?= h($negocio['nombre']) ?>">
                 </div>
-                <div class="campo" style="margin-bottom:14px">
+                <div class="campo">
                     <label>RUT</label>
-                    <input type="text" name="rut" style="width:100%"
+                    <input type="text" name="rut"
                            value="<?= h($negocio['rut']) ?>" placeholder="76.123.456-7">
                 </div>
-                <div class="campo" style="margin-bottom:14px">
+                <div class="campo">
                     <label>Teléfono</label>
-                    <input type="text" name="telefono" style="width:100%"
+                    <input type="text" name="telefono"
                            value="<?= h($negocio['telefono']) ?>" placeholder="+56 9 1234 5678">
                 </div>
-                <div class="campo" style="margin-bottom:14px">
+                <div class="campo">
                     <label>Dirección</label>
-                    <input type="text" name="direccion" style="width:100%"
+                    <input type="text" name="direccion"
                            value="<?= h($negocio['direccion']) ?>">
                 </div>
-                <div class="campo" style="margin-bottom:14px">
+                <div class="campo">
                     <label>Correo electrónico</label>
-                    <input type="email" name="correo" style="width:100%"
+                    <input type="email" name="correo"
                            value="<?= h($negocio['correo']) ?>">
                 </div>
-                <label style="display:flex;align-items:center;gap:8px;margin-bottom:18px;font-size:14px">
+                <label class="check-inline">
                     <input type="checkbox" name="activo" <?= $negocio['activo'] ? 'checked' : '' ?>>
                     Negocio activo
                 </label>
@@ -141,5 +127,3 @@ $titulo = $id ? 'Editar negocio' : 'Crear negocio';
         </div>
     </div>
     <?php pie_dashboard(); ?>
-</body>
-</html>

@@ -57,7 +57,8 @@ web/
 │   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver CONTRATO.md
 │
 ├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos)
-├── panel.php            listado de facturas + filtros (la página principal de consulta)
+├── panel_facturas.php   listado de facturas + filtros (la página principal de consulta)
+├── factura.php          detalle de una factura (cabecera + productos + botón Ver PDF)
 ├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio
 ├── login.php            formulario de ingreso
 ├── logout.php           cerrar sesión
@@ -104,10 +105,10 @@ Definición canónica en `lib/esquema.sql`. Tablas:
 - **`admin`** ve y administra todo. **`sucursal`** ve solo los negocios asignados
   en `usuario_negocio`.
 - **Toda** consulta de facturas DEBE filtrar por `negocios_visibles($usuario)`.
-  `panel.php` ya lo hace (incluye `f.negocio_id IN (...)` con los visibles antes
-  que cualquier filtro del usuario). `ver_pdf.php` valida `puede_ver_negocio()`
-  antes de servir el archivo. **Nunca** sirvas datos o PDFs de un negocio que el
-  usuario no puede ver.
+  `panel_facturas.php` ya lo hace (incluye `f.negocio_id IN (...)` con los visibles
+  antes que cualquier filtro del usuario). `ver_pdf.php` y `factura.php` validan
+  `puede_ver_negocio()` antes de servir el archivo o el detalle. **Nunca** sirvas
+  datos o PDFs de un negocio que el usuario no puede ver.
 - Las páginas de Administración (`negocios.php`, `usuarios.php`, etc.) son **solo
   admin**: redirigen si el rol no es `admin`.
 

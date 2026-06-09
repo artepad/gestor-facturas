@@ -23,8 +23,11 @@ body {
   margin: 0;
 }
 
-/* Body como columna: franja+header arriba, app en medio, footer abajo */
-html, body { height: 100%; }
+/* Body como columna: franja+header arriba, app en medio, footer abajo.
+   El body usa SOLO min-height (no height fijo) para que crezca con el
+   contenido; si no, la franja azul se ancla al alto de la ventana y el
+   contenido la tapa al hacer scroll (sobre todo en móvil). */
+html { height: 100%; }
 body { display: flex; flex-direction: column; min-height: 100vh; }
 
 /* Barras superiores (conservadas del diseño de escritorio) */
@@ -34,6 +37,18 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
   display: flex; align-items: center; gap: 14px; padding: 16px 26px;
 }
 .topbar h1 { margin: 0; font-size: 20px; font-weight: 700; }
+/* Bajada de la marca en el header (ej. "Plataforma de gestión") */
+.topbar-sub { font-size: 13px; font-weight: 400; opacity: .65;
+  margin-left: 10px; padding-left: 10px;
+  border-left: 1px solid rgba(255,255,255,.25); }
+/* Reloj en vivo del header (fecha + hora), discreto y a la derecha */
+.topbar-reloj { margin-left: auto; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #cfd6dd; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.topbar-reloj .ic { width: 16px; height: 16px; opacity: .7; }
+.reloj-fecha { font-weight: 600; }
+.reloj-fecha::after { content: '·'; margin: 0 8px; opacity: .45; font-weight: 400; }
+.reloj-hora { font-weight: 600; }
 
 /* ===== Layout con sidebar ===== */
 .app { display: flex; flex: 1; min-height: 0; }
@@ -186,7 +201,20 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
   font-size: 14px; color: var(--texto-sec); margin: 0 0 14px;
   text-transform: uppercase; letter-spacing: .5px;
 }
-.filtros { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
+.filtros { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+/* Campo de búsqueda: es el principal, más grande y ancho */
+.campo-busqueda input { min-width: 340px; padding: 11px 14px; font-size: 15px; }
+/* Negocio y Proveedor: un poco más anchos que el resto, sin pasarse */
+.campo-medio select { min-width: 195px; }
+
+/* Sin filtro de fecha (en escritorio): Búsqueda, Negocio y Proveedor llenan
+   todo el ancho del grupo. La Búsqueda crece 20% más que los otros dos. */
+@media (min-width: 769px) {
+  .filtros:not(.mostrar-fechas) .campo-busqueda { flex: 1.2 1 0; }
+  .filtros:not(.mostrar-fechas) .campo-medio    { flex: 1 1 0; }
+  .filtros:not(.mostrar-fechas) .campo > input,
+  .filtros:not(.mostrar-fechas) .campo > select { width: 100%; min-width: 0; }
+}
 .campo { display: flex; flex-direction: column; gap: 5px; }
 .campo label { font-size: 12px; font-weight: 600; color: var(--texto-sec); }
 .campo input, .campo select {
@@ -222,7 +250,8 @@ tr:hover td { background: #eef5ff; }
 
 /* Punto de estado */
 .estado { display: inline-flex; align-items: center; gap: 6px; }
-.punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+  vertical-align: middle; }
 .punto.verde { background: var(--verde-ok); }
 .punto.amarillo { background: var(--amarillo); }
 .punto.rojo { background: var(--rojo); }
@@ -249,3 +278,96 @@ tr:hover td { background: #eef5ff; }
 }
 .pie { text-align: center; color: var(--texto-tenue); font-size: 12px;
   padding: 18px; }
+
+/* ===== Inicio (home) ===== */
+.saludo { margin-top: 0; }
+.saludo-sub { color: var(--texto-sec); margin-top: -6px; }
+.grid-stats { margin-top: 18px; }
+.stat-label { font-size: 13px; color: var(--texto-sec); }
+.stat-valor { font-size: 30px; font-weight: 700; }
+.acciones-rapidas { display: flex; gap: 10px; flex-wrap: wrap; }
+.bloque-sep { margin-top: 20px; }
+
+/* ===== Formularios angostos (negocio / usuario) ===== */
+.form-angosto { max-width: 560px; }
+.form-angosto .campo { margin-bottom: 14px; }
+.form-angosto .campo input,
+.form-angosto .campo select { width: 100%; }
+.check-inline { display: flex; align-items: center; gap: 8px;
+  margin-bottom: 18px; font-size: 14px; }
+.lista-check { display: flex; flex-direction: column; gap: 6px; }
+.lista-check label { display: flex; gap: 8px; font-size: 14px; font-weight: 400; }
+
+/* Mensaje de éxito (mismo formato que .error pero verde) */
+.mensaje-exito { background: #e8f5e9; color: #1a7a3a; border: 1px solid #c8e6c9;
+  border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-bottom: 16px; }
+
+/* ===== Tokens (PCs) ===== */
+.panel.exito { border-color: var(--verde-ok); }
+.panel.exito h2 { color: #1a7a3a; }
+.token-aviso { font-size: 13px; color: var(--texto-sec); }
+.token-box { background: #0f1b2d; color: #7ee787; padding: 14px 16px;
+  border-radius: 8px; font-family: Consolas, monospace; font-size: 15px;
+  word-break: break-all; }
+.token-oculto { color: var(--texto-tenue); }
+
+/* Utilidades y variantes ===== */
+.btn.rojo { background: var(--rojo); }
+.btn.rojo:hover { background: #b02a37; }
+.nowrap { white-space: nowrap; }
+.inline-form { display: inline; margin: 0; }
+
+/* ===== Filtros: campos de fecha (ocultos hasta activar el interruptor) ===== */
+.campo-fecha { display: none; }
+.filtros.mostrar-fechas .campo-fecha { display: flex; }
+
+/* Interruptor "Filtrar por fechas": va debajo del campo de búsqueda */
+.toggle-fechas { display: flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 13px; color: var(--texto-sec); white-space: nowrap;
+  margin-top: 8px; }
+.toggle-fechas input { width: auto; min-width: 0; margin: 0; }
+
+/* Fila de botones (Buscar / Limpiar): ancho completo, separada de los filtros */
+.filtros-botones { display: flex; gap: 10px; align-items: center;
+  flex-basis: 100%; margin-top: 4px; padding-top: 14px;
+  border-top: 1px solid var(--borde); }
+
+/* Filas de la tabla que llevan al detalle */
+.fila-click { cursor: pointer; }
+
+/* ===== Detalle de factura (pares etiqueta/valor) ===== */
+.detalle-grid { display: grid; gap: 14px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.dg-item { display: flex; flex-direction: column; gap: 3px; }
+.dg-item.dg-ancho { grid-column: 1 / -1; }
+.dg-label { font-size: 12px; font-weight: 600; color: var(--texto-sec);
+  text-transform: uppercase; letter-spacing: .4px; }
+.dg-valor { font-size: 15px; color: var(--texto); }
+
+/* ===== Vista móvil ===== */
+@media (max-width: 768px) {
+  /* Fechas y su interruptor: ocultos en móvil (aunque vengan activas por URL) */
+  .campo-fecha, .filtros.mostrar-fechas .campo-fecha,
+  .toggle-fechas { display: none; }
+  /* Columnas no esenciales de la tabla: ocultas en móvil */
+  .col-ocultar-movil { display: none; }
+  /* En móvil mostramos solo la marca, sin la bajada */
+  .topbar-sub { display: none; }
+  /* Reloj compacto en móvil: solo la fecha, sin la hora */
+  .reloj-hora { display: none; }
+  .reloj-fecha::after { display: none; }   /* quita el separador colgante */
+  /* Filtros a ancho completo y ordenados */
+  .filtros { gap: 12px; }
+  .filtros .campo { width: 100%; }
+  .filtros .campo input, .filtros .campo select { width: 100%; min-width: 0; }
+  .filtros-botones { width: 100%; }
+  .filtros-botones .btn { flex: 1; text-align: center; }
+  /* Estado: solo el punto de color, centrado, sin texto, en móvil */
+  .estado-txt { display: none; }
+  .celda-estado { text-align: center; }
+  .estado { justify-content: center; }
+  /* Tabla más compacta para que entren las columnas clave */
+  th, td { padding: 9px 8px; font-size: 13px; }
+  /* Si aún así no entra, que se pueda deslizar en vez de cortarse */
+  .tabla-wrap { overflow-x: auto; }
+}

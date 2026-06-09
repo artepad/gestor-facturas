@@ -60,6 +60,20 @@ function exigir_login(): array
 }
 
 /**
+ * Exige sesion Y rol admin. Si no es admin, manda al panel.
+ * Para las paginas de Administracion (negocios, usuarios, tokens).
+ */
+function exigir_admin(): array
+{
+    $u = exigir_login();
+    if (($u['rol'] ?? '') !== 'admin') {
+        header('Location: panel_facturas.php');
+        exit;
+    }
+    return $u;
+}
+
+/**
  * IDs de negocios que el usuario puede ver.
  * admin = todos; sucursal = solo los asignados en usuario_negocio.
  */

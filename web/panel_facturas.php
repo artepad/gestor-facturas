@@ -32,8 +32,8 @@ if ($fNegocio && in_array($fNegocio, $idsVisibles, true)) {
     $params[] = $fNegocio;
 }
 if ($fProveedor !== '') {
-    $where[] = 'f.proveedor LIKE ?';
-    $params[] = "%$fProveedor%";
+    $where[] = 'f.proveedor = ?';   // viene de un combo: coincidencia exacta
+    $params[] = $fProveedor;
 }
 if ($fDesde !== '') { $where[] = 'f.fecha >= ?'; $params[] = $fDesde; }
 if ($fHasta !== '') { $where[] = 'f.fecha <= ?'; $params[] = $fHasta; }
@@ -52,6 +52,21 @@ $st->execute($params);
 $facturas = $st->fetchAll();
 // clp(), fecha_dmy() y estado_factura() viven en lib/ui.php
 
+// Lista de proveedores existentes (para el combo), limitada a los negocios
+// que el usuario puede ver.
+$proveedores = [];
+if (!empty($idsVisibles)) {
+    $ph = implode(',', array_fill(0, count($idsVisibles), '?'));
+    $stp = $pdo->prepare(
+        "SELECT DISTINCT proveedor FROM facturas
+         WHERE negocio_id IN ($ph) AND eliminada_en IS NULL
+           AND proveedor IS NOT NULL AND proveedor <> ''
+         ORDER BY proveedor"
+    );
+    $stp->execute($idsVisibles);
+    $proveedores = $stp->fetchAll(PDO::FETCH_COLUMN);
+}
+
 // Texto que indica qué negocio se está viendo
 $nombrePorId = [];
 foreach ($negocios as $n) { $nombrePorId[(int)$n['id']] = $n['nombre']; }
@@ -63,16 +78,7 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
     $viendo = 'Todos los negocios';
 }
 ?>
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Facturas · Sistema de Gestión</title>
-    <link rel="stylesheet" href="assets/estilo.css">
-</head>
-<body>
-    <?php cabecera_dashboard($usuario, 'facturas'); ?>
+<?php cabecera_dashboard($usuario, 'facturas', 'Facturas'); ?>
 
     <div class="contenido">
         <div class="cab-acciones">
@@ -84,16 +90,23 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
         </div>
         <div class="panel">
             <h2>Filtros</h2>
-            <form class="filtros" method="get">
-                <div class="campo">
+            <?php $fechasActivas = ($fDesde !== '' || $fHasta !== ''); ?>
+            <form class="filtros<?= $fechasActivas ? ' mostrar-fechas' : '' ?>" method="get">
+                <div class="campo campo-busqueda">
                     <label>Búsqueda</label>
                     <input type="text" name="q" value="<?= htmlspecialchars($fTexto) ?>"
-                           placeholder="Proveedor, razón social, N°">
+                           placeholder="N° Factura, proveedor, razón social" autofocus>
+                    <!-- Interruptor de fechas: queda justo debajo de la búsqueda. -->
+                    <label class="toggle-fechas">
+                        <input type="checkbox" id="toggleFechas" <?= $fechasActivas ? 'checked' : '' ?>>
+                        Filtrar por fechas
+                    </label>
                 </div>
                 <?php if (count($negocios) > 1): ?>
-                <div class="campo">
+                <div class="campo campo-medio">
                     <label>Negocio</label>
-                    <select name="negocio">
+                    <!-- Al elegir un negocio se busca solo, sin tocar "Buscar". -->
+                    <select name="negocio" onchange="this.form.submit()">
                         <option value="0">Todos</option>
                         <?php foreach ($negocios as $n): ?>
                             <option value="<?= (int)$n['id'] ?>"
@@ -104,25 +117,32 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
                     </select>
                 </div>
                 <?php endif; ?>
-                <div class="campo">
+                <div class="campo campo-medio">
                     <label>Proveedor</label>
-                    <input type="text" name="proveedor" value="<?= htmlspecialchars($fProveedor) ?>">
+                    <!-- Combo con los proveedores existentes; busca solo al elegir. -->
+                    <select name="proveedor" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <?php foreach ($proveedores as $prov): ?>
+                            <option value="<?= htmlspecialchars($prov) ?>"
+                                <?= $fProveedor === $prov ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($prov) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-                <div class="campo">
+                <!-- Desde/Hasta: ocultos por defecto; aparecen al marcar el interruptor.
+                     En móvil quedan ocultos (junto con el interruptor) por CSS. -->
+                <div class="campo campo-fecha">
                     <label>Desde</label>
                     <input type="date" name="desde" value="<?= htmlspecialchars($fDesde) ?>">
                 </div>
-                <div class="campo">
+                <div class="campo campo-fecha">
                     <label>Hasta</label>
                     <input type="date" name="hasta" value="<?= htmlspecialchars($fHasta) ?>">
                 </div>
-                <div class="campo">
-                    <label>&nbsp;</label>
+                <div class="filtros-botones">
                     <button class="btn" type="submit">Buscar</button>
-                </div>
-                <div class="campo">
-                    <label>&nbsp;</label>
-                    <a class="btn gris" href="panel.php">Limpiar</a>
+                    <a class="btn gris" href="panel_facturas.php">Limpiar</a>
                 </div>
             </form>
         </div>
@@ -133,14 +153,14 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
             <table>
                 <thead>
                     <tr>
-                        <th>Fecha</th>
+                        <th class="nowrap">Fecha</th>
                         <th>Proveedor</th>
                         <th>N° Factura</th>
                         <th class="total">Total</th>
-                        <th>Razón Social</th>
-                        <?php if (count($negocios) > 1): ?><th>Negocio</th><?php endif; ?>
-                        <th>Estado</th>
-                        <th>PDF</th>
+                        <th class="col-ocultar-movil">Razón Social</th>
+                        <?php if (count($negocios) > 1): ?><th class="col-ocultar-movil">Negocio</th><?php endif; ?>
+                        <th class="celda-estado">Estado</th>
+                        <th class="col-ocultar-movil">PDF</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -148,19 +168,20 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
                     <tr><td class="vacio" colspan="8">No hay facturas con esos filtros.</td></tr>
                 <?php else: foreach ($facturas as $f):
                     [$color, $txtEstado] = estado_factura($f); ?>
-                    <tr>
-                        <td><?= htmlspecialchars(fecha_dmy($f['fecha'])) ?></td>
+                    <tr class="fila-click" onclick="location.href='factura.php?id=<?= (int)$f['id'] ?>'">
+                        <td class="nowrap"><?= htmlspecialchars(fecha_dmy($f['fecha'])) ?></td>
                         <td><?= htmlspecialchars($f['proveedor']) ?></td>
                         <td><?= htmlspecialchars($f['numero_factura'] ?? '') ?></td>
                         <td class="total"><?= clp($f['total']) ?></td>
-                        <td><?= htmlspecialchars($f['razon_social'] ?? '') ?></td>
+                        <td class="col-ocultar-movil"><?= htmlspecialchars($f['razon_social'] ?? '') ?></td>
                         <?php if (count($negocios) > 1): ?>
-                            <td><?= htmlspecialchars($f['negocio_nombre']) ?></td>
+                            <td class="col-ocultar-movil"><?= htmlspecialchars($f['negocio_nombre']) ?></td>
                         <?php endif; ?>
-                        <td><span class="estado"><span class="punto <?= $color ?>"></span><?= $txtEstado ?></span></td>
-                        <td>
+                        <td class="celda-estado"><span class="estado"><span class="punto <?= $color ?>"></span><span class="estado-txt"><?= $txtEstado ?></span></span></td>
+                        <td class="col-ocultar-movil">
                             <?php if ($f['ruta_pdf']): ?>
-                                <a href="ver_pdf.php?id=<?= (int)$f['id'] ?>" target="_blank">Ver</a>
+                                <a href="ver_pdf.php?id=<?= (int)$f['id'] ?>" target="_blank"
+                                   onclick="event.stopPropagation()">Ver</a>
                             <?php else: ?>
                                 <span style="color:#aaa">—</span>
                             <?php endif; ?>
@@ -171,6 +192,19 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
             </table>
         </div>
     </div>
+    <script>
+      // El interruptor "Filtrar por fechas" muestra/oculta los campos Desde/Hasta.
+      (function () {
+        var chk = document.getElementById('toggleFechas');
+        if (!chk) return;
+        var form = chk.closest('form');
+        chk.addEventListener('change', function () {
+          form.classList.toggle('mostrar-fechas', chk.checked);
+          if (!chk.checked) {  // al desactivar, limpiar las fechas elegidas
+            form.querySelector('input[name="desde"]').value = '';
+            form.querySelector('input[name="hasta"]').value = '';
+          }
+        });
+      })();
+    </script>
     <?php pie_dashboard(); ?>
-</body>
-</html>

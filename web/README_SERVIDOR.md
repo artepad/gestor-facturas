@@ -96,7 +96,8 @@ Tras ingresar ves el panel con:
 ```
 login.php          formulario de ingreso
 logout.php         cerrar sesión
-panel.php          listado + filtros (requiere login)
+panel_facturas.php listado + filtros (requiere login)
+factura.php        detalle de una factura (requiere login)
 ver_pdf.php        sirve el PDF con control de acceso por negocio
 crear_admin.php    crea usuarios (correr 1 vez, luego borrar)
 lib/auth.php       sesión y permisos

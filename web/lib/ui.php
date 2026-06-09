@@ -3,6 +3,12 @@
  * Helpers de interfaz compartidos por las páginas del dashboard.
  */
 
+/** Escapa texto para mostrarlo seguro dentro del HTML. */
+function h($v): string
+{
+    return htmlspecialchars((string)($v ?? ''));
+}
+
 /** Íconos SVG (stroke con currentColor para que tomen el color del tema). */
 function icono(string $nombre): string
 {
@@ -15,6 +21,7 @@ function icono(string $nombre): string
         'salir'    => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
         'menu'     => '<path d="M3 12h18M3 6h18M3 18h18"/>',
         'chevron'  => '<path d="M6 9l6 6 6-6"/>',
+        'reloj'    => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     ];
     $d = $svg[$nombre] ?? '';
     return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
@@ -22,12 +29,26 @@ function icono(string $nombre): string
          . $d . '</svg>';
 }
 
-/** Abre el layout: franjas + header oscuro + sidebar + área de contenido. */
-function cabecera_dashboard(array $usuario, string $activo = 'facturas'): void
+/**
+ * Abre el layout completo: documento HTML + franjas + header oscuro + sidebar +
+ * área de contenido. Cada página solo agrega su <div class="contenido">…</div>.
+ */
+function cabecera_dashboard(array $usuario, string $activo = 'facturas', string $titulo = 'Minimark'): void
 {
     $esAdmin = ($usuario['rol'] ?? '') === 'admin';
     $nombre = htmlspecialchars($usuario['nombre'] ?? '');
     $rol = htmlspecialchars($usuario['rol'] ?? '');
+    ?>
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><?= htmlspecialchars($titulo) ?> · Minimark</title>
+    <link rel="stylesheet" href="assets/estilo.css">
+</head>
+<body>
+    <?php
     $item = function (string $id, string $txt, string $href) use ($activo) {
         $cls = 'nav-item' . ($activo === $id ? ' activo' : '');
         return "<a class=\"$cls\" href=\"$href\" title=\"$txt\">"
@@ -45,7 +66,12 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas'): void
       <button class="hamburguesa" id="btnMovil" aria-label="Abrir menú">
         <?= icono('menu') ?>
       </button>
-      <h1>Sistema de Gestión de Facturas</h1>
+      <h1>Minimark<span class="topbar-sub">Plataforma de gestión</span></h1>
+      <div class="topbar-reloj" aria-label="Fecha y hora actual">
+        <?= icono('reloj') ?>
+        <span class="reloj-fecha" id="relojFecha"></span>
+        <span class="reloj-hora" id="relojHora"></span>
+      </div>
     </header>
 
     <div class="app" id="app">
@@ -61,7 +87,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas'): void
         </div>
         <nav class="nav">
           <?= $item('home', 'Home', 'home.php') ?>
-          <?= $item('facturas', 'Facturas', 'panel.php') ?>
+          <?= $item('facturas', 'Facturas', 'panel_facturas.php') ?>
           <?php if ($esAdmin): ?>
             <div class="nav-grupo <?= $adminAbierto ? 'abierto' : '' ?>" id="grupoAdmin">
               <button class="nav-item grupo-toggle" id="btnAdmin" type="button" title="Administración">
@@ -98,7 +124,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas'): void
 function pie_dashboard(): void
 {
     ?>
-        <div class="footer-texto">Sistema de Gestión de Facturas</div>
+        <div class="footer-texto">Minimark · Plataforma de gestión</div>
       </div><!-- .main -->
     </div><!-- .app -->
     <div class="franja-azul"></div>
@@ -132,7 +158,29 @@ function pie_dashboard(): void
           }
         });
       })();
+
+      // Reloj en vivo del header: fecha + hora, se actualiza cada segundo.
+      (function () {
+        var ef = document.getElementById('relojFecha');
+        var eh = document.getElementById('relojHora');
+        if (!eh) return;
+        var dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        var meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+                     'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        function dos(n) { return n < 10 ? '0' + n : n; }
+        function tick() {
+          var d = new Date();
+          if (ef) ef.textContent = dias[d.getDay()] + ' ' + d.getDate() + ' '
+                                 + meses[d.getMonth()] + ' ' + d.getFullYear();
+          eh.textContent = dos(d.getHours()) + ':' + dos(d.getMinutes())
+                         + ':' + dos(d.getSeconds());
+        }
+        tick();
+        setInterval(tick, 1000);
+      })();
     </script>
+</body>
+</html>
     <?php
 }
 

@@ -7,11 +7,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_login();
-if (($usuario['rol'] ?? '') !== 'admin') {
-    header('Location: panel.php');
-    exit;
-}
+$usuario = exigir_admin();
 
 $pdo = obtener_pdo();
 $error = '';
@@ -94,18 +90,8 @@ if (isset($_GET['editar'])) {
     }
 }
 
-function h($v) { return htmlspecialchars((string)($v ?? '')); }
 ?>
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Usuarios · Sistema de Gestión</title>
-    <link rel="stylesheet" href="assets/estilo.css">
-</head>
-<body>
-    <?php cabecera_dashboard($usuario, 'usuarios'); ?>
+<?php cabecera_dashboard($usuario, 'usuarios', 'Usuarios'); ?>
     <div class="contenido">
         <div class="cab-acciones">
             <h2>Usuarios</h2>
@@ -113,41 +99,39 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
         </div>
 
         <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
-        <?php if ($exito): ?>
-            <div class="error" style="background:#e8f5e9;color:#1a7a3a;border-color:#c8e6c9"><?= h($exito) ?></div>
-        <?php endif; ?>
+        <?php if ($exito): ?><div class="mensaje-exito"><?= h($exito) ?></div><?php endif; ?>
 
         <?php if ($editar !== null || isset($_GET['editar'])):
             $e = $editar ?: ['id'=>0,'email'=>'','nombre'=>'','rol'=>'sucursal','negocios_ids'=>[]]; ?>
-        <div class="panel" style="max-width:560px">
+        <div class="panel form-angosto">
             <h2><?= $e['id'] ? 'Editar usuario' : 'Crear usuario' ?></h2>
             <form method="post">
                 <input type="hidden" name="accion" value="guardar">
                 <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
-                <div class="campo" style="margin-bottom:12px">
+                <div class="campo">
                     <label>Correo *</label>
-                    <input type="email" name="email" required style="width:100%" value="<?= h($e['email']) ?>">
+                    <input type="email" name="email" required value="<?= h($e['email']) ?>">
                 </div>
-                <div class="campo" style="margin-bottom:12px">
+                <div class="campo">
                     <label>Nombre</label>
-                    <input type="text" name="nombre" style="width:100%" value="<?= h($e['nombre']) ?>">
+                    <input type="text" name="nombre" value="<?= h($e['nombre']) ?>">
                 </div>
-                <div class="campo" style="margin-bottom:12px">
+                <div class="campo">
                     <label>Contraseña <?= $e['id'] ? '(dejar vacío para no cambiarla)' : '(mín. 6)' ?></label>
-                    <input type="password" name="clave" style="width:100%" <?= $e['id'] ? '' : 'required' ?>>
+                    <input type="password" name="clave" <?= $e['id'] ? '' : 'required' ?>>
                 </div>
-                <div class="campo" style="margin-bottom:12px">
+                <div class="campo">
                     <label>Rol</label>
-                    <select name="rol" id="selRol" style="width:100%">
+                    <select name="rol" id="selRol">
                         <option value="admin" <?= $e['rol']==='admin'?'selected':'' ?>>Administrador (ve todo)</option>
                         <option value="sucursal" <?= $e['rol']==='sucursal'?'selected':'' ?>>Sucursal (negocios asignados)</option>
                     </select>
                 </div>
-                <div class="campo" id="boxNegocios" style="margin-bottom:16px">
+                <div class="campo" id="boxNegocios">
                     <label>Negocios asignados (solo para Sucursal)</label>
-                    <div style="display:flex;flex-direction:column;gap:6px">
+                    <div class="lista-check">
                         <?php foreach ($negociosTodos as $n): ?>
-                            <label style="display:flex;gap:8px;font-size:14px;font-weight:400">
+                            <label>
                                 <input type="checkbox" name="negocios[]" value="<?= (int)$n['id'] ?>"
                                     <?= in_array((int)$n['id'], $e['negocios_ids'] ?? [], true) ? 'checked':'' ?>>
                                 <?= h($n['nombre']) ?>
@@ -161,7 +145,7 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
         </div>
         <?php endif; ?>
 
-        <div class="tabla-wrap" style="margin-top:18px">
+        <div class="tabla-wrap bloque-sep">
             <table>
                 <thead><tr>
                     <th>Nombre</th><th>Correo</th><th>Rol</th><th>Negocios</th><th></th>
@@ -175,13 +159,13 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
                         <td><?= h($u['email']) ?></td>
                         <td><?= $u['rol']==='admin' ? 'Administrador' : 'Sucursal' ?></td>
                         <td><?= $u['rol']==='admin' ? '<em style="color:#aaa">todos</em>' : h($u['negocios'] ?: '—') ?></td>
-                        <td style="white-space:nowrap">
+                        <td class="nowrap">
                             <a class="btn sm gris" href="usuarios.php?editar=<?= (int)$u['id'] ?>">Editar</a>
                             <?php if ((int)$u['id'] !== (int)$usuario['id']): ?>
-                            <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este usuario?')">
+                            <form method="post" class="inline-form" onsubmit="return confirm('¿Eliminar este usuario?')">
                                 <input type="hidden" name="accion" value="eliminar">
                                 <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-                                <button class="btn sm" type="submit" style="background:#dc3545">Eliminar</button>
+                                <button class="btn sm rojo" type="submit">Eliminar</button>
                             </form>
                             <?php endif; ?>
                         </td>
@@ -191,7 +175,6 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
             </table>
         </div>
     </div>
-    <?php pie_dashboard(); ?>
     <script>
       // Mostrar/ocultar negocios según el rol
       var sel = document.getElementById('selRol');
@@ -199,5 +182,4 @@ function h($v) { return htmlspecialchars((string)($v ?? '')); }
       function actualizar() { if (sel && box) box.style.display = sel.value === 'sucursal' ? '' : 'none'; }
       if (sel) { sel.addEventListener('change', actualizar); actualizar(); }
     </script>
-</body>
-</html>
+    <?php pie_dashboard(); ?>
