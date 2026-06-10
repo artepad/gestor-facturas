@@ -11,7 +11,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_admin();
+$usuario = exigir_permiso('negocios');
 
 $pdo = obtener_pdo();
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;

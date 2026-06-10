@@ -7,7 +7,7 @@
 
 require __DIR__ . '/lib/auth.php';
 
-$usuario = exigir_login();
+$usuario = exigir_permiso('facturas');
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if (!$id) { http_response_code(400); exit('Falta id.'); }
 

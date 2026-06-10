@@ -41,7 +41,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
 {
     $esAdmin = ($usuario['rol'] ?? '') === 'admin';
     $nombre = htmlspecialchars($usuario['nombre'] ?? '');
-    $rol = htmlspecialchars($usuario['rol'] ?? '');
+    $rol = htmlspecialchars(nombre_rol($usuario['rol'] ?? ''));
     ?>
 <!doctype html>
 <html lang="es">
@@ -91,9 +91,9 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
         </div>
         <nav class="nav">
           <?= $item('home', 'Home', 'home.php') ?>
-          <?= $item('facturas', 'Facturas', 'panel_facturas.php') ?>
-          <?= $item('fiados', 'Fiados', 'fiados.php') ?>
-          <?php if ($esAdmin): ?>
+          <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
+          <?php if (puede($usuario, 'fiados')): ?><?= $item('fiados', 'Fiados', 'fiados.php') ?><?php endif; ?>
+          <?php if (puede($usuario, 'negocios') || puede($usuario, 'usuarios')): ?>
             <div class="nav-grupo <?= $adminAbierto ? 'abierto' : '' ?>" id="grupoAdmin">
               <button class="nav-item grupo-toggle" id="btnAdmin" type="button" title="Administración">
                 <?= icono('admin') ?>
@@ -101,8 +101,8 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
                 <span class="chevron"><?= icono('chevron') ?></span>
               </button>
               <div class="subnav">
-                <?= $sub('negocios', 'Negocios', 'negocios.php') ?>
-                <?= $sub('usuarios', 'Usuarios', 'usuarios.php') ?>
+                <?php if (puede($usuario, 'negocios')): ?><?= $sub('negocios', 'Negocios', 'negocios.php') ?><?php endif; ?>
+                <?php if (puede($usuario, 'usuarios')): ?><?= $sub('usuarios', 'Usuarios', 'usuarios.php') ?><?php endif; ?>
               </div>
             </div>
           <?php endif; ?>

@@ -4,6 +4,7 @@
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/permisos.php';   // roles, matriz de permisos y helpers
 
 function iniciar_sesion(): void
 {
@@ -60,14 +61,15 @@ function exigir_login(): array
 }
 
 /**
- * Exige sesion Y rol admin. Si no es admin, manda al panel.
- * Para las paginas de Administracion (negocios, usuarios, tokens).
+ * Exige sesion Y rol admin. Si no es admin, manda al inicio.
+ * (Para módulos usa preferentemente exigir_permiso(); esto queda para chequeos
+ * puntuales de "solo administrador".)
  */
 function exigir_admin(): array
 {
     $u = exigir_login();
     if (($u['rol'] ?? '') !== 'admin') {
-        header('Location: panel_facturas.php');
+        header('Location: home.php');
         exit;
     }
     return $u;
@@ -75,7 +77,7 @@ function exigir_admin(): array
 
 /**
  * IDs de negocios que el usuario puede ver.
- * admin = todos; sucursal = solo los asignados en usuario_negocio.
+ * admin = todos; cualquier otro rol = solo los asignados en usuario_negocio.
  */
 function negocios_visibles(array $usuario): array
 {

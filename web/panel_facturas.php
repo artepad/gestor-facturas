@@ -2,7 +2,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_login();
+$usuario = exigir_permiso('facturas');
 $pdo = obtener_pdo();
 $negocios = negocios_visibles($usuario);
 $idsVisibles = array_map(fn($n) => (int)$n['id'], $negocios);

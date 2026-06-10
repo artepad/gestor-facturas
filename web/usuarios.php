@@ -7,7 +7,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_admin();
+$usuario = exigir_permiso('usuarios');
 
 $pdo = obtener_pdo();
 $error = '';
@@ -21,13 +21,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $email  = trim($_POST['email'] ?? '');
         $nombre = trim($_POST['nombre'] ?? '');
         $clave  = $_POST['clave'] ?? '';
-        $rol    = ($_POST['rol'] ?? 'sucursal') === 'admin' ? 'admin' : 'sucursal';
+        $rolPost = $_POST['rol'] ?? '';
+        $rol    = array_key_exists($rolPost, roles_disponibles()) ? $rolPost : 'vendedor';
         $negociosSel = array_map('intval', $_POST['negocios'] ?? []);
+
+        // Salvaguarda: no dejar el sistema sin ningún administrador
+        $degradaUltimoAdmin = false;
+        if ($uid && $rol !== 'admin') {
+            $st = $pdo->prepare("SELECT rol FROM usuarios WHERE id=?");
+            $st->execute([$uid]);
+            if ($st->fetchColumn() === 'admin') {
+                $nAdmins = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol='admin'")->fetchColumn();
+                $degradaUltimoAdmin = ($nAdmins <= 1);
+            }
+        }
 
         if ($email === '') {
             $error = 'El correo es obligatorio.';
         } elseif (!$uid && strlen($clave) < 6) {
             $error = 'La contraseña debe tener al menos 6 caracteres.';
+        } elseif ($degradaUltimoAdmin) {
+            $error = 'Debe quedar al menos un administrador. Nombra otro admin antes de cambiar este rol.';
         } else {
             try {
                 if ($uid) {
@@ -43,9 +57,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         ->execute([$email, $nombre, $rol, password_hash($clave, PASSWORD_DEFAULT)]);
                     $uid = (int)$pdo->lastInsertId();
                 }
-                // Reasignar negocios
+                // Reasignar negocios (los roles no-admin trabajan solo sus negocios)
                 $pdo->prepare("DELETE FROM usuario_negocio WHERE usuario_id=?")->execute([$uid]);
-                if ($rol === 'sucursal' && $negociosSel) {
+                if ($rol !== 'admin' && $negociosSel) {
                     $ins = $pdo->prepare("INSERT INTO usuario_negocio (usuario_id, negocio_id) VALUES (?,?)");
                     foreach ($negociosSel as $nid) { $ins->execute([$uid, $nid]); }
                 }
@@ -61,8 +75,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($uid === (int)$usuario['id']) {
             $error = 'No puedes eliminar tu propio usuario.';
         } else {
-            $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$uid]);
-            $exito = 'Usuario eliminado.';
+            $st = $pdo->prepare("SELECT rol FROM usuarios WHERE id=?");
+            $st->execute([$uid]);
+            $rolDel = $st->fetchColumn();
+            $nAdmins = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol='admin'")->fetchColumn();
+            if ($rolDel === 'admin' && $nAdmins <= 1) {
+                $error = 'No puedes eliminar al único administrador.';
+            } else {
+                $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$uid]);
+                $exito = 'Usuario eliminado.';
+            }
         }
     }
 }
@@ -90,21 +112,22 @@ if (isset($_GET['editar'])) {
     }
 }
 
+// Modo formulario (crear/editar) vs modo lista. En modo formulario mostramos
+// solo el formulario centrado; la tabla vive en la vista de lista.
+$modoFormulario = ($editar !== null || isset($_GET['editar']));
 ?>
 <?php cabecera_dashboard($usuario, 'usuarios', 'Usuarios'); ?>
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2>Usuarios</h2>
-            <a class="btn" href="usuarios.php?editar=0">+ Crear usuario</a>
-        </div>
-
-        <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
-        <?php if ($exito): ?><div class="mensaje-exito"><?= h($exito) ?></div><?php endif; ?>
-
-        <?php if ($editar !== null || isset($_GET['editar'])):
-            $e = $editar ?: ['id'=>0,'email'=>'','nombre'=>'','rol'=>'sucursal','negocios_ids'=>[]]; ?>
-        <div class="panel form-angosto">
-            <h2><?= $e['id'] ? 'Editar usuario' : 'Crear usuario' ?></h2>
+        <?php if ($modoFormulario):
+            $e = $editar ?: ['id'=>0,'email'=>'','nombre'=>'','rol'=>'vendedor','negocios_ids'=>[]]; ?>
+        <div class="form-pagina">
+            <div class="cab-acciones">
+                <h2><?= $e['id'] ? 'Editar usuario' : 'Crear usuario' ?></h2>
+                <a class="btn gris" href="usuarios.php">Volver</a>
+            </div>
+            <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
+            <?php if ($exito): ?><div class="mensaje-exito"><?= h($exito) ?></div><?php endif; ?>
+            <div class="panel">
             <form method="post">
                 <input type="hidden" name="accion" value="guardar">
                 <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
@@ -123,29 +146,43 @@ if (isset($_GET['editar'])) {
                 <div class="campo">
                     <label>Rol</label>
                     <select name="rol" id="selRol">
-                        <option value="admin" <?= $e['rol']==='admin'?'selected':'' ?>>Administrador (ve todo)</option>
-                        <option value="sucursal" <?= $e['rol']==='sucursal'?'selected':'' ?>>Sucursal (negocios asignados)</option>
+                        <?php foreach (roles_disponibles() as $rolClave => $rolNombre): ?>
+                            <option value="<?= h($rolClave) ?>" <?= $e['rol']===$rolClave?'selected':'' ?>><?= h($rolNombre) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="campo" id="boxNegocios">
-                    <label>Negocios asignados (solo para Sucursal)</label>
+                    <label>Negocios asignados</label>
+                    <p class="campo-ayuda">El usuario solo verá los negocios que marques.</p>
+                    <?php if ($negociosTodos): ?>
                     <div class="lista-check">
                         <?php foreach ($negociosTodos as $n): ?>
                             <label>
                                 <input type="checkbox" name="negocios[]" value="<?= (int)$n['id'] ?>"
                                     <?= in_array((int)$n['id'], $e['negocios_ids'] ?? [], true) ? 'checked':'' ?>>
-                                <?= h($n['nombre']) ?>
+                                <span><?= h($n['nombre']) ?></span>
                             </label>
                         <?php endforeach; ?>
                     </div>
+                    <?php else: ?>
+                    <p class="campo-ayuda">Aún no hay negocios creados.</p>
+                    <?php endif; ?>
                 </div>
-                <button class="btn" type="submit">Guardar</button>
-                <a class="btn gris" href="usuarios.php">Cancelar</a>
+                <div class="form-acciones">
+                    <button class="btn" type="submit">Guardar</button>
+                    <a class="btn gris" href="usuarios.php">Cancelar</a>
+                </div>
             </form>
+            </div>
         </div>
-        <?php endif; ?>
-
-        <div class="tabla-wrap bloque-sep">
+        <?php else: ?>
+        <div class="cab-acciones">
+            <h2>Usuarios</h2>
+            <a class="btn" href="usuarios.php?editar=0">+ Crear usuario</a>
+        </div>
+        <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
+        <?php if ($exito): ?><div class="mensaje-exito"><?= h($exito) ?></div><?php endif; ?>
+        <div class="tabla-wrap">
             <table>
                 <thead><tr>
                     <th>Nombre</th><th>Correo</th><th>Rol</th><th>Negocios</th><th></th>
@@ -157,7 +194,7 @@ if (isset($_GET['editar'])) {
                     <tr>
                         <td><?= h($u['nombre']) ?></td>
                         <td><?= h($u['email']) ?></td>
-                        <td><?= $u['rol']==='admin' ? 'Administrador' : 'Sucursal' ?></td>
+                        <td><?= h(nombre_rol($u['rol'])) ?></td>
                         <td><?= $u['rol']==='admin' ? '<em style="color:#aaa">todos</em>' : h($u['negocios'] ?: '—') ?></td>
                         <td class="nowrap">
                             <a class="btn sm gris" href="usuarios.php?editar=<?= (int)$u['id'] ?>">Editar</a>
@@ -174,12 +211,13 @@ if (isset($_GET['editar'])) {
                 </tbody>
             </table>
         </div>
+        <?php endif; ?>
     </div>
     <script>
       // Mostrar/ocultar negocios según el rol
       var sel = document.getElementById('selRol');
       var box = document.getElementById('boxNegocios');
-      function actualizar() { if (sel && box) box.style.display = sel.value === 'sucursal' ? '' : 'none'; }
+      function actualizar() { if (sel && box) box.style.display = sel.value !== 'admin' ? '' : 'none'; }
       if (sel) { sel.addEventListener('change', actualizar); actualizar(); }
     </script>
     <?php pie_dashboard(); ?>

@@ -112,20 +112,28 @@ fuente de verdad):
   `monto`, `descripcion`).
 - **`abonos`** — pagos que disminuyen la deuda (`cliente_id`, `fecha`, `monto`,
   `nota`). **Cuenta corriente**: saldo del cliente = Σ`fiados.monto` − Σ`abonos.monto`
-  (calculado, no almacenado). Acceso admin+sucursal acotado por `negocios_visibles()`.
+  (calculado, no almacenado). Acceso por permiso de módulo `fiados`, acotado por
+  `negocios_visibles()`.
 
-## Reglas de acceso (en `lib/auth.php`)
+## Roles y permisos (en `lib/permisos.php` + `lib/auth.php`)
 
-- **`exigir_login()`** al inicio de cada página protegida.
-- **`admin`** ve y administra todo. **`sucursal`** ve solo los negocios asignados
-  en `usuario_negocio`.
-- **Toda** consulta de facturas DEBE filtrar por `negocios_visibles($usuario)`.
-  `panel_facturas.php` ya lo hace (incluye `f.negocio_id IN (...)` con los visibles
-  antes que cualquier filtro del usuario). `ver_pdf.php` y `factura.php` validan
-  `puede_ver_negocio()` antes de servir el archivo o el detalle. **Nunca** sirvas
-  datos o PDFs de un negocio que el usuario no puede ver.
-- Las páginas de Administración (`negocios.php`, `usuarios.php`, etc.) son **solo
-  admin**: redirigen si el rol no es `admin`.
+- **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
+  los **módulos** que puede usar (`facturas`, `fiados`, `negocios`, `usuarios`).
+  Roles actuales: **`admin`** (todos los módulos) y **`vendedor`** (`facturas`,
+  `fiados`). `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere `ALTER`).
+- **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
+  módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
+  en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.
+- Cada página protegida llama **`exigir_permiso('modulo')`** (en `permisos.php`):
+  `exigir_login()` + chequea la matriz; si no tiene el permiso redirige a `home.php`.
+  `exigir_admin()` queda para chequeos puntuales "solo admin".
+- **Alcance por negocio** se mantiene: `negocios_visibles($usuario)` (admin = todos;
+  cualquier otro rol = asignados en `usuario_negocio`) y `puede_ver_negocio()`.
+  Toda consulta de facturas/fiados filtra por los negocios visibles, y
+  `ver_pdf.php`/`factura.php`/`cliente.php` validan `puede_ver_negocio()`. **Nunca**
+  sirvas datos de un negocio que el usuario no puede ver.
+- `usuarios.php` solo admin (`exigir_permiso('usuarios')`); incluye salvaguarda de
+  **no dejar el sistema sin ningún administrador** (al cambiar rol o eliminar).
 
 ## Convenciones importantes
 

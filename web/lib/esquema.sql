@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   email         VARCHAR(150) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   nombre        VARCHAR(150),
-  rol           ENUM('admin','sucursal') NOT NULL DEFAULT 'sucursal',
+  rol           VARCHAR(20) NOT NULL DEFAULT 'vendedor',   -- ver lib/permisos.php
   creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

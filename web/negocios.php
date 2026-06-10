@@ -2,7 +2,7 @@
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
 
-$usuario = exigir_admin();   // solo admin gestiona negocios
+$usuario = exigir_permiso('negocios');
 
 $pdo = obtener_pdo();
 // Negocios + conteo de facturas (no eliminadas) y de máquinas

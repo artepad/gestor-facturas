@@ -3,7 +3,7 @@ require __DIR__ . '/lib/auth.php';
 
 // Si ya hay sesion, al panel
 if (usuario_actual()) {
-    header('Location: panel_facturas.php');
+    header('Location: home.php');
     exit;
 }
 
@@ -12,7 +12,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $email = $_POST['email'] ?? '';
     $clave = $_POST['clave'] ?? '';
     if (login($email, $clave)) {
-        header('Location: panel_facturas.php');
+        header('Location: home.php');
         exit;
     }
     $error = 'Correo o contraseña incorrectos.';

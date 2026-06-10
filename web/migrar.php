@@ -82,4 +82,19 @@ foreach ($tablasFiados as $nombre => $ddl) {
     echo "  ~ tabla $nombre lista\n";
 }
 
+echo "\n[Roles y permisos]\n";
+// rol como VARCHAR (permite nuevos roles sin ALTER) y migra 'sucursal' -> 'vendedor'
+$tipoRol = $pdo->query(
+    "SELECT DATA_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usuarios' AND COLUMN_NAME = 'rol'"
+)->fetchColumn();
+if (strtolower((string)$tipoRol) !== 'varchar') {
+    $pdo->exec("ALTER TABLE usuarios MODIFY rol VARCHAR(20) NOT NULL DEFAULT 'vendedor'");
+    echo "  + usuarios.rol convertido a VARCHAR(20)\n";
+} else {
+    echo "  - usuarios.rol ya es VARCHAR\n";
+}
+$conv = $pdo->exec("UPDATE usuarios SET rol='vendedor' WHERE rol='sucursal'");
+echo "  ~ usuarios 'sucursal' -> 'vendedor': $conv\n";
+
 echo "\nListo. Migraciones aplicadas.\n";
