@@ -66,6 +66,7 @@ if ($verFacturas && $ids) {
             <div class="acciones-rapidas">
                 <?php if ($verFacturas): ?><a class="btn" href="panel_facturas.php">Ver facturas</a><?php endif; ?>
                 <?php if ($verFiados): ?><a class="btn" href="fiados.php">Fiados</a><?php endif; ?>
+                <?php if (puede($usuario, 'ingresos')): ?><a class="btn" href="ingresos.php">Ingresos</a><?php endif; ?>
                 <?php if ($verNegocios): ?><a class="btn gris" href="negocios.php">Gestionar negocios</a><?php endif; ?>
                 <?php if ($verUsuarios): ?><a class="btn gris" href="usuarios.php">Gestionar usuarios</a><?php endif; ?>
             </div>

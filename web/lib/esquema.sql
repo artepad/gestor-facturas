@@ -126,3 +126,87 @@ CREATE TABLE IF NOT EXISTS abonos (
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
   INDEX idx_abono_cliente (cliente_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ===== Modulo Ingresos (cortes de caja que envia Eleventa por correo) =====
+
+-- Correo crudo recibido (auditoria + permite reprocesar si cambia el parser).
+CREATE TABLE IF NOT EXISTS correos_corte (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id   INT NULL,                          -- NULL si no se pudo identificar
+  message_id   VARCHAR(255) NULL UNIQUE,          -- idempotencia (Message-ID o hash manual)
+  remitente    VARCHAR(255) NULL,
+  destinatario VARCHAR(255) NULL,                 -- corte-{slug}@... identifica el negocio
+  asunto       VARCHAR(255) NULL,
+  recibido_en  DATETIME NULL,
+  cuerpo       MEDIUMTEXT,                        -- HTML/texto tal cual llego
+  origen       VARCHAR(10) NOT NULL DEFAULT 'imap',      -- imap | manual
+  estado       VARCHAR(15) NOT NULL DEFAULT 'pendiente', -- pendiente | procesado | error
+  error        TEXT NULL,
+  procesado_en DATETIME NULL,
+  creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE SET NULL,
+  INDEX idx_correo_estado (estado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Cajeros de Eleventa (se crean solos al aparecer en un corte). El vinculo
+-- opcional a un usuario web permite reportes "por vendedor de la plataforma".
+CREATE TABLE IF NOT EXISTS cajeros (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id INT NOT NULL,
+  nombre     VARCHAR(150) NOT NULL,
+  usuario_id INT NULL,
+  creado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_cajero (negocio_id, nombre),
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Un corte = un cierre de turno/caja de Eleventa.
+CREATE TABLE IF NOT EXISTS cortes (
+  id                   INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id           INT NOT NULL,
+  correo_id            INT NULL,
+  cajero_id            INT NULL,
+  caja                 VARCHAR(80) NULL,          -- ej. "Caja Principal" (del asunto)
+  abierto_en           DATETIME NULL,
+  cerrado_en           DATETIME NOT NULL,
+  ventas_totales       DECIMAL(14,2) NULL,
+  ganancia             DECIMAL(14,2) NULL,
+  numero_ventas        INT NULL,
+  fondo_caja           DECIMAL(14,2) NULL,
+  ventas_efectivo      DECIMAL(14,2) NULL,
+  abonos_efectivo      DECIMAL(14,2) NULL,
+  entradas_caja        DECIMAL(14,2) NULL,
+  salidas_caja         DECIMAL(14,2) NULL,
+  efectivo_esperado    DECIMAL(14,2) NULL,
+  ventas_tarjeta       DECIMAL(14,2) NULL,
+  ventas_credito       DECIMAL(14,2) NULL,
+  ventas_vales         DECIMAL(14,2) NULL,
+  ventas_transferencia DECIMAL(14,2) NULL,
+  creado_en            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_corte (negocio_id, cerrado_en, cajero_id),  -- reprocesar no duplica
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (correo_id)  REFERENCES correos_corte(id) ON DELETE SET NULL,
+  FOREIGN KEY (cajero_id)  REFERENCES cajeros(id) ON DELETE SET NULL,
+  INDEX idx_corte_negocio_fecha (negocio_id, cerrado_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Movimientos de caja del corte (retiros, pagos a proveedores, entradas).
+CREATE TABLE IF NOT EXISTS corte_movimientos (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  corte_id    INT NOT NULL,
+  tipo        VARCHAR(10) NOT NULL,               -- entrada | salida
+  hora        VARCHAR(10) NULL,                   -- ej. "4:55pm" (Eleventa no da la fecha)
+  descripcion VARCHAR(255) NULL,
+  monto       DECIMAL(14,2) NOT NULL,
+  FOREIGN KEY (corte_id) REFERENCES cortes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Ventas por departamento del corte (la seccion "Ventas por Departamento").
+CREATE TABLE IF NOT EXISTS corte_departamentos (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  corte_id     INT NOT NULL,
+  departamento VARCHAR(150) NOT NULL,
+  monto        DECIMAL(14,2) NOT NULL,
+  FOREIGN KEY (corte_id) REFERENCES cortes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

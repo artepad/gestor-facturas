@@ -419,6 +419,37 @@ details.bloque[open] > summary { border-bottom: 1px solid var(--borde); }
 .tabla-mov th, .tabla-mov td { white-space: nowrap; }
 .tabla-mov .col-detalle { white-space: normal; width: 99%; }
 
+/* ===== Módulo Ingresos (cortes de Eleventa) ===== */
+/* Comparativa del período en las tarjetas resumen */
+.stat-comp { font-size: 12.5px; font-weight: 600; margin-top: 4px; }
+.comp-sube { color: var(--verde-ok); }
+.comp-baja { color: var(--rojo); }
+/* Texto secundario inline (ej. usuario web junto al cajero) */
+.texto-sec { color: var(--texto-sec); font-size: 12.5px; }
+/* Gráfico de barras simple (SVG server-rendered) */
+.grafico-scroll { overflow-x: auto; }
+.grafico-barras .barra { fill: var(--azul); opacity: .85; }
+.grafico-barras .barra:hover { opacity: 1; }
+.grafico-barras .barra-fecha { font-size: 10px; fill: var(--texto-sec); }
+/* Tablas de resumen del detalle del corte (dos columnas, total destacado) */
+.panel-titulo { font-size: 15px; margin: 0 0 10px; }
+.tabla-corte { width: 100%; border-collapse: collapse; }
+.tabla-corte td { padding: 8px 4px; font-size: 14px; border-bottom: 1px solid var(--borde); }
+.tabla-corte td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabla-corte .fila-total td { font-weight: 700; border-bottom: none; }
+/* Tabla dentro de un panel/details (sin doble recuadro) */
+.tabla-plana { border: none; border-radius: 0; box-shadow: none; }
+/* Correo original crudo */
+.correo-crudo { white-space: pre-wrap; word-break: break-word; font-size: 12.5px;
+  color: var(--texto-sec); max-height: 420px; overflow-y: auto; margin: 0; }
+details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
+/* Formulario de pegar corte: columna centrada más ancha (textarea grande) */
+.form-pagina-ancha { max-width: 760px; }
+.campo textarea { width: 100%; min-width: 0; padding: 10px 12px; font-size: 13.5px;
+  border: 1px solid var(--borde); border-radius: 8px; font-family: Consolas, monospace;
+  resize: vertical; box-sizing: border-box; }
+.campo textarea:focus { outline: none; border-color: var(--azul); }
+
 /* ===== Vista móvil ===== */
 @media (max-width: 768px) {
   /* Fechas y su interruptor: ocultos en móvil (aunque vengan activas por URL) */

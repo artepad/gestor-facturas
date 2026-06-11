@@ -50,7 +50,9 @@ web/
 ├── lib/
 │   ├── db.php           obtener_pdo() (singleton PDO), cargar_config(), responder_json()
 │   ├── auth.php         login/sesión + control de acceso por negocio
+│   ├── permisos.php     matriz RBAC rol→módulos + exigir_permiso()
 │   ├── ui.php           layout compartido (sidebar, footer) + helpers de formato + íconos SVG
+│   ├── eleventa.php     parser del correo de corte de Eleventa + registrar_corte()
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
@@ -64,6 +66,12 @@ web/
 ├── fiados.php           listado de clientes con su saldo (módulo Fiados)
 ├── cliente_form.php     crear/editar un cliente de fiados
 ├── cliente.php          ficha del cliente: saldo + registrar fiados/abonos + historial
+│
+├── ingresos.php         dashboard del módulo Ingresos (cortes de caja de Eleventa)
+├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original)
+├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron)
+├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o ?clave=setup_key)
+│
 ├── login.php            formulario de ingreso
 ├── logout.php           cerrar sesión
 │
@@ -115,12 +123,43 @@ fuente de verdad):
   (calculado, no almacenado). Acceso por permiso de módulo `fiados`, acotado por
   `negocios_visibles()`.
 
+**Módulo Ingresos** (web-nativo; los datos llegan por el correo de corte de
+Eleventa, NO por la sincronización de facturas):
+- **`correos_corte`** — cada correo crudo recibido (`cuerpo` MEDIUMTEXT,
+  `message_id` UNIQUE para idempotencia, `origen` imap|manual, `estado`
+  pendiente|procesado|error). Se guarda SIEMPRE el crudo: si Eleventa cambia el
+  formato, se ajusta `lib/eleventa.php` y se reprocesa sin perder nada.
+- **`cajeros`** — cajeros de Eleventa por negocio (UNIQUE negocio+nombre), se
+  auto-crean al aparecer en un corte; `usuario_id` opcional los vincula a un
+  usuario web.
+- **`cortes`** — un cierre de turno: caja, cajero, rango del turno, ventas
+  totales/efectivo/tarjeta/crédito/vales/transferencia, fondo, abonos,
+  entradas/salidas y esperado. UNIQUE (negocio, cerrado_en, cajero) hace el
+  reproceso idempotente (mismo patrón upsert que `api/facturas.php`).
+- **`corte_movimientos`** — entradas/salidas de caja con hora y descripción
+  (ej. pagos de pan a proveedores). Se reemplazan completos en cada reproceso.
+- **`corte_departamentos`** — ventas por departamento del corte.
+
+**Flujo de captura**: Eleventa de cada negocio manda su corte a un alias
+`corte-{slug}@minimark.cl` (forwarder de cPanel) que entrega en la casilla real
+`cortes@...` (credenciales en el bloque `cortes_imap` de `config.php`). El cron
+de cPanel corre `procesar_cortes.php` (solo CLI o `?clave=setup_key`): baja los
+correos no leídos por IMAP, identifica el negocio por el destinatario
+(`negocio_por_destinatario`, header Delivered-To → `negocios.slug`) y procesa
+todo lo pendiente con `parsear_corte_eleventa()`. `corte_pegar.php` permite
+registrar un corte pegando el correo a mano (mismo parser, `origen='manual'`,
+útil en local donde no hay IMAP). Nota: `config.php` detecta el ambiente por
+`HTTP_HOST`; en CLI (cron) no hay host, así que usa la config de producción —
+correcto en el servidor.
+
 ## Roles y permisos (en `lib/permisos.php` + `lib/auth.php`)
 
 - **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
-  los **módulos** que puede usar (`facturas`, `fiados`, `negocios`, `usuarios`).
-  Roles actuales: **`admin`** (todos los módulos) y **`vendedor`** (`facturas`,
-  `fiados`). `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere `ALTER`).
+  los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `negocios`,
+  `usuarios`). Roles actuales: **`admin`** (todos los módulos) y **`vendedor`**
+  (`facturas`, `fiados`). `usuarios.rol` es `VARCHAR(20)` (agregar roles no
+  requiere `ALTER`). El módulo `ingresos` es solo admin (diferencias de caja y
+  rendimiento por vendedor son información del dueño).
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
   módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
   en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.

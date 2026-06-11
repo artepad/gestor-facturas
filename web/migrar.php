@@ -97,4 +97,82 @@ if (strtolower((string)$tipoRol) !== 'varchar') {
 $conv = $pdo->exec("UPDATE usuarios SET rol='vendedor' WHERE rol='sucursal'");
 echo "  ~ usuarios 'sucursal' -> 'vendedor': $conv\n";
 
+echo "\n[Modulo Ingresos (cortes de Eleventa)]\n";
+// Crea las tablas del modulo Ingresos si faltan (idempotente). Mismas
+// definiciones que lib/esquema.sql.
+$tablasIngresos = [
+    'correos_corte' => "CREATE TABLE IF NOT EXISTS correos_corte (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NULL,
+        message_id VARCHAR(255) NULL UNIQUE,
+        remitente VARCHAR(255) NULL, destinatario VARCHAR(255) NULL, asunto VARCHAR(255) NULL,
+        recibido_en DATETIME NULL,
+        cuerpo MEDIUMTEXT,
+        origen VARCHAR(10) NOT NULL DEFAULT 'imap',
+        estado VARCHAR(15) NOT NULL DEFAULT 'pendiente',
+        error TEXT NULL, procesado_en DATETIME NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE SET NULL,
+        INDEX idx_correo_estado (estado)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'cajeros' => "CREATE TABLE IF NOT EXISTS cajeros (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        nombre VARCHAR(150) NOT NULL,
+        usuario_id INT NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_cajero (negocio_id, nombre),
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'cortes' => "CREATE TABLE IF NOT EXISTS cortes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        correo_id INT NULL,
+        cajero_id INT NULL,
+        caja VARCHAR(80) NULL,
+        abierto_en DATETIME NULL,
+        cerrado_en DATETIME NOT NULL,
+        ventas_totales DECIMAL(14,2) NULL,
+        ganancia DECIMAL(14,2) NULL,
+        numero_ventas INT NULL,
+        fondo_caja DECIMAL(14,2) NULL,
+        ventas_efectivo DECIMAL(14,2) NULL,
+        abonos_efectivo DECIMAL(14,2) NULL,
+        entradas_caja DECIMAL(14,2) NULL,
+        salidas_caja DECIMAL(14,2) NULL,
+        efectivo_esperado DECIMAL(14,2) NULL,
+        ventas_tarjeta DECIMAL(14,2) NULL,
+        ventas_credito DECIMAL(14,2) NULL,
+        ventas_vales DECIMAL(14,2) NULL,
+        ventas_transferencia DECIMAL(14,2) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_corte (negocio_id, cerrado_en, cajero_id),
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (correo_id)  REFERENCES correos_corte(id) ON DELETE SET NULL,
+        FOREIGN KEY (cajero_id)  REFERENCES cajeros(id) ON DELETE SET NULL,
+        INDEX idx_corte_negocio_fecha (negocio_id, cerrado_en)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'corte_movimientos' => "CREATE TABLE IF NOT EXISTS corte_movimientos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        corte_id INT NOT NULL,
+        tipo VARCHAR(10) NOT NULL,
+        hora VARCHAR(10) NULL,
+        descripcion VARCHAR(255) NULL,
+        monto DECIMAL(14,2) NOT NULL,
+        FOREIGN KEY (corte_id) REFERENCES cortes(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'corte_departamentos' => "CREATE TABLE IF NOT EXISTS corte_departamentos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        corte_id INT NOT NULL,
+        departamento VARCHAR(150) NOT NULL,
+        monto DECIMAL(14,2) NOT NULL,
+        FOREIGN KEY (corte_id) REFERENCES cortes(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+];
+foreach ($tablasIngresos as $nombre => $ddl) {
+    $pdo->exec($ddl);
+    echo "  ~ tabla $nombre lista\n";
+}
+
 echo "\nListo. Migraciones aplicadas.\n";

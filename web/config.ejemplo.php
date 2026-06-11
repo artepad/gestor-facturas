@@ -21,4 +21,20 @@ return [
 
     // --- Carpeta donde se guardan los PDF subidos (relativa a este archivo) ---
     'carpeta_pdf' => __DIR__ . '/almacen_pdf',
+
+    // --- Casilla que recibe los cortes de caja de Eleventa (módulo Ingresos) ---
+    // Eleventa de cada negocio envía su corte a esta casilla; procesar_cortes.php
+    // (cron) la lee por IMAP. Si dejas 'usuario' vacío, la lectura IMAP se omite
+    // (los cortes se pueden pegar a mano igual).
+    //
+    // Según el proveedor de correo, el 'host' cambia:
+    //   - Titan (HostGator):   imap.titan.email
+    //   - Correo del cPanel:   mail.minimark.cl
+    'cortes_imap' => [
+        'host'    => 'imap.titan.email',       // Titan Básico de HostGator
+        'puerto'  => 993,                      // IMAP con SSL
+        'usuario' => '',                       // ej. cortes@minimark.cl
+        'clave'   => '',
+        'carpeta' => 'INBOX',
+    ],
 ];
