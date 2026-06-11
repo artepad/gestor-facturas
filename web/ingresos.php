@@ -262,14 +262,14 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
                     <?php if (!$mismoNegocio): ?><th>Negocio</th><?php endif; ?>
                     <th>Caja</th><th>Cajero</th>
                     <th class="col-num">Ventas</th><th class="col-num">Efectivo</th>
-                    <th class="col-num">Tarjeta</th><th class="col-num">Salidas</th><th></th>
+                    <th class="col-num">Tarjeta</th><th class="col-num">Salidas</th>
                 </tr></thead>
                 <tbody>
                 <?php if (!$cortes): ?>
-                    <tr><td class="vacio" colspan="9">No hay cortes en el período seleccionado.<br>
+                    <tr><td class="vacio" colspan="<?= $mismoNegocio ? 7 : 8 ?>">No hay cortes en el período seleccionado.<br>
                         Los cortes llegan solos desde Eleventa, o puedes registrarlos con "+ Registrar corte".</td></tr>
                 <?php else: foreach ($cortes as $c): ?>
-                    <tr>
+                    <tr class="fila-click" onclick="location.href='corte.php?id=<?= (int)$c['id'] ?>'">
                         <td class="nowrap"><?= h(date('d-m-Y H:i', strtotime($c['cerrado_en']))) ?></td>
                         <?php if (!$mismoNegocio): ?><td><?= h($c['negocio']) ?></td><?php endif; ?>
                         <td><?= h($c['caja'] ?: '—') ?></td>
@@ -278,7 +278,6 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
                         <td class="col-num"><?= clp($c['ventas_efectivo']) ?></td>
                         <td class="col-num"><?= clp($c['ventas_tarjeta']) ?></td>
                         <td class="col-num"><?= clp($c['salidas_caja']) ?></td>
-                        <td class="nowrap"><a class="btn sm gris" href="corte.php?id=<?= (int)$c['id'] ?>">Ver</a></td>
                     </tr>
                 <?php endforeach; endif; ?>
                 </tbody>

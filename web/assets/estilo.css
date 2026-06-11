@@ -310,6 +310,39 @@ tr:hover td { background: #eef5ff; }
 .acciones-rapidas { display: flex; gap: 10px; flex-wrap: wrap; }
 .bloque-sep { margin-top: 20px; }
 
+/* ===== Tablero de inicio (home) ===== */
+.saludo-cab { margin-bottom: 20px; }
+.dash-titulo { font-size: 15px; margin: 4px 2px 12px; color: var(--texto); }
+/* Tarjetas de estado por negocio */
+.negocios-resumen { display: grid; gap: 14px; margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.nr-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  padding: 16px 18px; }
+.nr-card h3 { margin: 0 0 14px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.nr-card h3 .ic { width: 18px; height: 18px; color: var(--azul); flex-shrink: 0; }
+.nr-metricas { display: flex; gap: 10px; }
+.nr-metricas > div { flex: 1; min-width: 0; }
+.nr-m-label { display: block; font-size: 11.5px; color: var(--texto-sec); margin-bottom: 2px; }
+.nr-m-valor { font-size: 16px; font-weight: 700; white-space: nowrap; }
+/* Dos columnas (gráfico + atención); se apilan en móvil. auto-fit hace que una
+   sola columna ocupe todo el ancho si falta la otra. */
+.dash-cols { display: grid; gap: 16px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.dash-cols .panel { margin-bottom: 0; }
+/* Lista "Requiere atención" */
+.atencion-item { display: flex; align-items: center; gap: 12px; padding: 11px 0;
+  border-bottom: 1px solid var(--borde); text-decoration: none; color: var(--texto); }
+.atencion-item:last-child { border-bottom: none; }
+.atencion-item:hover { color: var(--azul); }
+.atencion-ic { display: inline-flex; color: var(--amarillo); }
+.atencion-ic .ic { width: 20px; height: 20px; }
+.atencion-txt { flex: 1; font-size: 14px; }
+.atencion-flecha { color: var(--texto-tenue); font-size: 16px; }
+.atencion-item:hover .atencion-flecha { color: var(--azul); }
+.atencion-ok { display: flex; align-items: center; gap: 10px; color: var(--verde-ok);
+  font-size: 14px; padding: 6px 0; }
+.atencion-ok .ic { width: 20px; height: 20px; }
+
 /* ===== Formularios angostos (negocio / usuario) ===== */
 .form-angosto { max-width: 560px; }
 .form-angosto .campo { margin-bottom: 14px; }
@@ -329,6 +362,12 @@ tr:hover td { background: #eef5ff; }
 
 /* Columna centrada de la vista de formulario: agrupa título + panel */
 .form-pagina { max-width: 600px; margin: 0 auto; }
+/* Campos a ancho completo dentro del panel del formulario (no los checkboxes
+   ni radios, que deben mantener su tamaño natural — ej. lista de negocios). */
+.form-pagina .campo input:not([type=checkbox]):not([type=radio]),
+.form-pagina .campo select,
+.form-pagina .campo textarea { width: 100%; }
+.form-pagina .campo { margin-bottom: 14px; }
 
 /* Texto de ayuda bajo una etiqueta de campo */
 .campo-ayuda { font-size: 12.5px; color: var(--texto-sec); margin: -2px 0 6px; }
@@ -382,6 +421,8 @@ tr:hover td { background: #eef5ff; }
 .dg-label { font-size: 12px; font-weight: 600; color: var(--texto-sec);
   text-transform: uppercase; letter-spacing: .4px; }
 .dg-valor { font-size: 15px; color: var(--texto); }
+/* Variante con los valores en negrita (ej. cabecera del detalle de un corte) */
+.detalle-grid.dg-bold .dg-valor { font-weight: 700; }
 
 /* Datos de contacto: dos columnas, valores en negrita */
 .contacto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }

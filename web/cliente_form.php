@@ -73,13 +73,13 @@ $titulo = $id ? 'Editar cliente' : 'Nuevo cliente';
 <?php cabecera_dashboard($usuario, 'fiados', $titulo); ?>
 
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2><?= $titulo ?></h2>
-            <a class="btn gris" href="<?= $id ? 'cliente.php?id=' . $id : 'fiados.php' ?>">Volver</a>
-        </div>
-
-        <div class="panel form-angosto">
+        <div class="form-pagina form-pagina-ancha">
+            <div class="cab-acciones">
+                <h2><?= $titulo ?></h2>
+                <a class="btn gris" href="<?= $id ? 'cliente.php?id=' . $id : 'fiados.php' ?>">Volver</a>
+            </div>
             <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
+            <div class="panel">
             <form method="post">
                 <?php if (!$id && count($negocios) > 1): ?>
                 <div class="campo">
@@ -117,8 +117,12 @@ $titulo = $id ? 'Editar cliente' : 'Nuevo cliente';
                     <label>Correo electrónico</label>
                     <input type="email" name="correo" value="<?= h($cliente['correo']) ?>">
                 </div>
-                <button class="btn" type="submit">Guardar</button>
+                <div class="form-acciones">
+                    <button class="btn" type="submit">Guardar</button>
+                    <a class="btn gris" href="<?= $id ? 'cliente.php?id=' . $id : 'fiados.php' ?>">Cancelar</a>
+                </div>
             </form>
+            </div>
         </div>
     </div>
     <?php pie_dashboard(); ?>

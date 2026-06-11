@@ -120,7 +120,7 @@ $modoFormulario = ($editar !== null || isset($_GET['editar']));
     <div class="contenido">
         <?php if ($modoFormulario):
             $e = $editar ?: ['id'=>0,'email'=>'','nombre'=>'','rol'=>'vendedor','negocios_ids'=>[]]; ?>
-        <div class="form-pagina">
+        <div class="form-pagina form-pagina-ancha">
             <div class="cab-acciones">
                 <h2><?= $e['id'] ? 'Editar usuario' : 'Crear usuario' ?></h2>
                 <a class="btn gris" href="usuarios.php">Volver</a>
@@ -128,20 +128,20 @@ $modoFormulario = ($editar !== null || isset($_GET['editar']));
             <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
             <?php if ($exito): ?><div class="mensaje-exito"><?= h($exito) ?></div><?php endif; ?>
             <div class="panel">
-            <form method="post">
+            <form method="post" autocomplete="off">
                 <input type="hidden" name="accion" value="guardar">
                 <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
                 <div class="campo">
                     <label>Correo *</label>
-                    <input type="email" name="email" required value="<?= h($e['email']) ?>">
+                    <input type="email" name="email" required value="<?= h($e['email']) ?>" autocomplete="off">
                 </div>
                 <div class="campo">
                     <label>Nombre</label>
-                    <input type="text" name="nombre" value="<?= h($e['nombre']) ?>">
+                    <input type="text" name="nombre" value="<?= h($e['nombre']) ?>" autocomplete="off">
                 </div>
                 <div class="campo">
                     <label>Contraseña <?= $e['id'] ? '(dejar vacío para no cambiarla)' : '(mín. 6)' ?></label>
-                    <input type="password" name="clave" <?= $e['id'] ? '' : 'required' ?>>
+                    <input type="password" name="clave" <?= $e['id'] ? '' : 'required' ?> autocomplete="new-password">
                 </div>
                 <div class="campo">
                     <label>Rol</label>

@@ -51,7 +51,7 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
         </div>
 
         <div class="panel">
-            <div class="detalle-grid">
+            <div class="detalle-grid dg-bold">
                 <div class="dg-item"><span class="dg-label">Negocio</span><span class="dg-valor"><?= h($corte['negocio']) ?></span></div>
                 <div class="dg-item"><span class="dg-label">Caja</span><span class="dg-valor"><?= h($corte['caja'] ?: '—') ?></span></div>
                 <div class="dg-item"><span class="dg-label">Cajero</span><span class="dg-valor"><?= h($corte['cajero'] ?: '—') ?></span></div>

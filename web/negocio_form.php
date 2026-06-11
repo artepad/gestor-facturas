@@ -83,15 +83,15 @@ $titulo = $id ? 'Editar negocio' : 'Crear negocio';
 <?php cabecera_dashboard($usuario, 'negocios', $titulo); ?>
 
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2><?= $titulo ?></h2>
-            <a class="btn gris" href="negocios.php">Volver</a>
-        </div>
-
-        <div class="panel form-angosto">
+        <div class="form-pagina form-pagina-ancha">
+            <div class="cab-acciones">
+                <h2><?= $titulo ?></h2>
+                <a class="btn gris" href="negocios.php">Volver</a>
+            </div>
             <?php if ($error): ?>
                 <div class="error"><?= h($error) ?></div>
             <?php endif; ?>
+            <div class="panel">
             <form method="post">
                 <div class="campo">
                     <label>Nombre del negocio *</label>
@@ -122,8 +122,12 @@ $titulo = $id ? 'Editar negocio' : 'Crear negocio';
                     <input type="checkbox" name="activo" <?= $negocio['activo'] ? 'checked' : '' ?>>
                     Negocio activo
                 </label>
-                <button class="btn" type="submit">Guardar</button>
+                <div class="form-acciones">
+                    <button class="btn" type="submit">Guardar</button>
+                    <a class="btn gris" href="negocios.php">Cancelar</a>
+                </div>
             </form>
+            </div>
         </div>
     </div>
     <?php pie_dashboard(); ?>
