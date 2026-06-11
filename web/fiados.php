@@ -97,9 +97,9 @@ $viendo = $viendo ?? 'Todos los negocios';
         </div>
 
         <div class="resumen">
-            <?= count($clientes) ?> cliente(s) ·
-            Total adeudado: <strong class="saldo-deuda"><?= clp($totalDeuda) ?></strong>
-            <span class="badge-negocio" style="margin-left:8px">
+            <span><?= count($clientes) ?> cliente(s) ·
+                Total adeudado: <strong class="saldo-deuda"><?= clp($totalDeuda) ?></strong></span>
+            <span class="badge-negocio">
                 <?= icono('negocios') ?> Viendo: <strong><?= h($viendo) ?></strong>
             </span>
         </div>

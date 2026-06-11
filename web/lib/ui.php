@@ -9,27 +9,30 @@ function h($v): string
     return htmlspecialchars((string)($v ?? ''));
 }
 
-/** Íconos SVG (stroke con currentColor para que tomen el color del tema). */
-function icono(string $nombre): string
+/** Íconos SVG (stroke con currentColor para que tomen el color del tema).
+ *  $extra agrega clases CSS al <svg> (ej. para alternar dos íconos en un botón). */
+function icono(string $nombre, string $extra = ''): string
 {
     $svg = [
         'home'     => '<path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/><path d="M9 21v-6h6v6"/>',
         'facturas' => '<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
-        'admin'    => '<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/>',
+        'admin'    => '<path d="M3 6h18M3 12h18M3 18h18"/><circle cx="9" cy="6" r="2.4" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.4" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="2.4" fill="currentColor" stroke="none"/>',
         'negocios' => '<path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9 21v-6h6v6"/>',
         'usuarios' => '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 5a3 3 0 0 1 0 6"/><path d="M18 20c0-2-1-3.5-2.5-4.3"/>',
         'salir'    => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
         'menu'     => '<path d="M3 12h18M3 6h18M3 18h18"/>',
+        'flecha-izq' => '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
         'chevron'  => '<path d="M6 9l6 6 6-6"/>',
         'reloj'    => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
         'fiados'   => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/>',
         'basurero' => '<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
         'lapiz'    => '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
         'documento'=> '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
-        'ingresos' => '<path d="M3 21h18"/><path d="M6 17v-5M11 17V7M16 17v-3M21 17V4"/><path d="M3 13l5-5 4 4 6-7"/>',
+        'ingresos' => '<circle cx="12" cy="12" r="9"/><path d="M12 6.5v11"/><path d="M14.6 9c-.5-.9-1.5-1.3-2.6-1.3-1.4 0-2.6.8-2.6 2 0 1.2 1.1 1.7 2.6 2.1 1.5.4 2.6.9 2.6 2.1 0 1.2-1.2 2-2.6 2-1.1 0-2.1-.4-2.6-1.3"/>',
     ];
     $d = $svg[$nombre] ?? '';
-    return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    $clase = 'ic' . ($extra !== '' ? ' ' . $extra : '');
+    return '<svg class="' . $clase . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
          . 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
          . $d . '</svg>';
 }
@@ -81,20 +84,24 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
 
     <div class="app" id="app">
     <script>
-      if (localStorage.getItem('sidebar') === 'colapsado')
+      // El modo "colapsado" (íconos sin texto) es solo de escritorio; en móvil
+      // el menú es un overlay de ancho completo, así que ahí no se aplica.
+      if (localStorage.getItem('sidebar') === 'colapsado'
+          && !window.matchMedia('(max-width: 768px)').matches)
         document.getElementById('app').classList.add('colapsado');
     </script>
       <aside class="sidebar">
         <div class="sidebar-top">
-          <button class="toggle" id="btnToggle" aria-label="Contraer menú">
-            <?= icono('menu') ?>
+          <button class="toggle" id="btnToggle" aria-label="Contraer o cerrar el menú">
+            <?= icono('menu', 'ic-menu') ?>
+            <?= icono('flecha-izq', 'ic-cerrar') ?>
           </button>
         </div>
         <nav class="nav">
           <?= $item('home', 'Home', 'home.php') ?>
+          <?php if (puede($usuario, 'ingresos')): ?><?= $item('ingresos', 'Ingresos', 'ingresos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'fiados')): ?><?= $item('fiados', 'Fiados', 'fiados.php') ?><?php endif; ?>
-          <?php if (puede($usuario, 'ingresos')): ?><?= $item('ingresos', 'Ingresos', 'ingresos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'negocios') || puede($usuario, 'usuarios')): ?>
             <div class="nav-grupo <?= $adminAbierto ? 'abierto' : '' ?>" id="grupoAdmin">
               <button class="nav-item grupo-toggle" id="btnAdmin" type="button" title="Administración">
@@ -124,6 +131,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
       </aside>
       <div class="backdrop" id="backdrop"></div>
       <div class="main">
+        <div class="main-scroll">
     <?php
 }
 
@@ -131,6 +139,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
 function pie_dashboard(): void
 {
     ?>
+        </div><!-- .main-scroll -->
         <div class="footer-texto">Minimark · Plataforma de gestión</div>
       </div><!-- .main -->
     </div><!-- .app -->
@@ -143,7 +152,10 @@ function pie_dashboard(): void
         var b = document.getElementById('backdrop');
         var ga = document.getElementById('grupoAdmin');
         var ba = document.getElementById('btnAdmin');
+        var esMovil = function () { return window.matchMedia('(max-width: 768px)').matches; };
         if (t) t.addEventListener('click', function () {
+          // En móvil este botón CIERRA el menú; en escritorio lo colapsa.
+          if (esMovil()) { app.classList.remove('movil-abierto'); return; }
           app.classList.toggle('colapsado');
           localStorage.setItem('sidebar',
             app.classList.contains('colapsado') ? 'colapsado' : 'expandido');
@@ -153,6 +165,12 @@ function pie_dashboard(): void
         });
         if (b) b.addEventListener('click', function () {
           app.classList.remove('movil-abierto');
+        });
+        // El modo colapsado no aplica en móvil: lo quitamos al pasar a móvil y
+        // lo restauramos en escritorio según lo guardado.
+        window.addEventListener('resize', function () {
+          if (esMovil()) app.classList.remove('colapsado');
+          else if (localStorage.getItem('sidebar') === 'colapsado') app.classList.add('colapsado');
         });
         if (ba) ba.addEventListener('click', function () {
           // Si el sidebar esta colapsado, primero lo expandimos

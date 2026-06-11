@@ -28,7 +28,12 @@ body {
    contenido; si no, la franja azul se ancla al alto de la ventana y el
    contenido la tapa al hacer scroll (sobre todo en móvil). */
 html { height: 100%; }
-body { display: flex; flex-direction: column; min-height: 100vh; }
+/* App shell: el body ocupa exactamente la ventana y NO scrollea; solo el área
+   de contenido (.main-scroll) se desplaza. Así la barra superior, el menú
+   lateral y el pie quedan fijos. (dvh evita el corte por la barra del navegador
+   en móvil.) */
+body { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+  overflow: hidden; }
 
 /* Barras superiores (conservadas del diseño de escritorio) */
 .franja { height: 5px; background: var(--verde); flex-shrink: 0; }
@@ -71,10 +76,16 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
   padding: 6px; border-radius: 6px; display: flex;
 }
 .toggle:hover { background: rgba(255,255,255,.1); color: #fff; }
-.toggle .ic { width: 22px; height: 22px; }
+.toggle { position: relative; }
+.toggle .ic { width: 22px; height: 22px;
+  transition: opacity .2s ease, transform .25s ease; }
+/* La flecha de cerrar se apila encima de la hamburguesa; por defecto oculta.
+   Solo aparece en móvil con el menú abierto (ver media query). */
+.toggle .ic-cerrar { position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) translateX(-4px); opacity: 0; }
 
 .sidebar .nav { display: flex; flex-direction: column; gap: 4px;
-  padding: 6px 12px 14px; flex: 1; }
+  padding: 6px 12px 14px; flex: 1; overflow-y: auto; }
 .nav-item {
   display: flex; align-items: center; gap: 12px; text-decoration: none;
   color: #cfd6dd; font-size: 14px; font-weight: 600; padding: 11px 12px;
@@ -122,9 +133,12 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 .nav-item.salir { color: #f3b0b0; }
 .nav-item.salir:hover { background: rgba(220,53,69,.2); color: #fff; }
 
-/* Área principal: columna para empujar el footer-texto al fondo */
-.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.main .contenido { flex: 1; width: 100%; }
+/* Área principal: columna con la zona scrollable + el pie fijo abajo */
+.main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* La ÚNICA zona que scrollea. Ancho completo para que la barra de scroll quede
+   al borde de la ventana; el contenido sigue centrado por su propio max-width. */
+.main-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.main-scroll .contenido { width: 100%; }
 
 /* Footer: el texto vive dentro del main; la franja azul cruza todo el ancho.
    Así el sidebar oscuro llega hasta abajo (hasta la franja azul). */
@@ -151,6 +165,13 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
     background: rgba(0,0,0,.4); opacity: 0; pointer-events: none;
     transition: opacity .2s; }
   .app.movil-abierto .backdrop { opacity: 1; pointer-events: auto; }
+  /* El botón de cerrar queda arriba a la izquierda, donde estaba la
+     hamburguesa que abrió el menú (se siente el mismo botón). */
+  .sidebar-top { justify-content: flex-start; }
+  /* Con el menú abierto, el botón del menú muestra la flecha de cerrar
+     (crossfade suave con la hamburguesa). */
+  .app.movil-abierto .toggle .ic-menu { opacity: 0; transform: translateX(4px); }
+  .app.movil-abierto .toggle .ic-cerrar { opacity: 1; transform: translate(-50%, -50%); }
 }
 @media (min-width: 769px) {
   .hamburguesa { display: none; }
@@ -257,7 +278,8 @@ tr:hover td { background: #eef5ff; }
 .punto.rojo { background: var(--rojo); }
 
 .vacio { text-align: center; color: var(--texto-tenue); padding: 40px; }
-.resumen { color: var(--texto-sec); font-size: 13px; margin: 14px 2px; }
+.resumen { color: var(--texto-sec); font-size: 13px; margin: 16px 2px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 
 /* Login */
 .login-wrap { min-height: 100vh; display: flex; align-items: center;
@@ -449,6 +471,30 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
   border: 1px solid var(--borde); border-radius: 8px; font-family: Consolas, monospace;
   resize: vertical; box-sizing: border-box; }
 .campo textarea:focus { outline: none; border-color: var(--azul); }
+
+/* Tarjetas resumen del período: grilla uniforme, la primera destacada */
+.ingresos-stats { display: grid; gap: 14px; margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+.stat-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 5px; }
+.stat-card .stat-label { font-size: 12.5px; color: var(--texto-sec); }
+.stat-card .stat-valor { font-size: 25px; font-weight: 700; line-height: 1.1; }
+.stat-card.destacado { border-top: 3px solid var(--azul); }
+.stat-card.destacado .stat-valor { color: var(--azul); font-size: 28px; }
+.stat-comp .texto-tenue { font-weight: 400; }
+/* Columnas numéricas alineadas a la derecha (montos) */
+.col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th.col-num { text-align: right; }
+/* Aviso plegable de correos sin procesar (mismo patrón details.bloque) */
+.bloque-aviso { border-color: #f5c6cb; background: #fdf3f4; }
+.bloque-aviso > summary { color: var(--rojo); }
+.bloque-aviso > summary .ic { width: 16px; height: 16px; }
+.bloque-aviso .aviso-hint { font-weight: 400; color: var(--texto-sec); }
+.bloque-aviso[open] > summary { border-bottom-color: #f5c6cb; }
+.texto-ayuda { font-size: 13px; color: var(--texto-sec); margin: 0 0 12px; }
+/* Etiqueta de monto sobre cada barra del gráfico */
+.grafico-barras .barra-monto { font-size: 9.5px; fill: var(--texto-sec);
+  font-variant-numeric: tabular-nums; }
 
 /* ===== Vista móvil ===== */
 @media (max-width: 768px) {
