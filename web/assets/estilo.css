@@ -181,16 +181,20 @@ body { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
 .grid-negocios { display: grid; gap: 18px;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .negocio-card {
-  background: #fff; border: 1px solid var(--borde); border-radius: 10px;
-  padding: 20px 22px; display: flex; flex-direction: column; gap: 4px;
+  background: #fff; border: 1px solid var(--borde); border-radius: 12px;
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 12px;
+  transition: border-color .15s, box-shadow .15s;
 }
-.negocio-card.inactivo { opacity: .55; }
-.negocio-card h3 { margin: 0 0 2px; font-size: 17px; }
-.negocio-card .rut { color: var(--texto-sec); font-size: 13px; margin-bottom: 10px; }
-.negocio-card .dato { font-size: 13px; color: var(--texto); display: flex; gap: 8px; }
-.negocio-card .dato .ic { color: var(--azul); width: 18px; }
+.negocio-card:hover { border-color: var(--azul); box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+.negocio-card.inactivo { opacity: .6; }
+.nc-cabecera { display: flex; align-items: center; gap: 12px; }
+.negocio-card h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.negocio-card .rut { color: var(--texto-sec); font-size: 12.5px; margin-top: 2px; }
+.nc-datos { display: flex; flex-direction: column; gap: 7px; }
+.negocio-card .dato { font-size: 13px; color: var(--texto); display: flex; align-items: center; gap: 9px; }
+.negocio-card .dato .ic { width: 16px; height: 16px; color: var(--azul); flex-shrink: 0; }
 .negocio-card .nfact {
-  margin: 12px 0; font-size: 13px; color: var(--texto-sec);
+  font-size: 12.5px; color: var(--texto-sec);
   border-top: 1px solid var(--borde); padding-top: 12px;
 }
 .negocio-card .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
@@ -284,8 +288,11 @@ tr:hover td { background: #eef5ff; }
 /* Login */
 /* ===== Módulo Herramientas ===== */
 /* Tablero: tarjeta por herramienta */
+/* 2 columnas con filas de igual altura: todas las tarjetas quedan idénticas.
+   Con 3 herramientas: Contador | Etiquetas (fila 1), Ofertas | — (fila 2). */
 .herramientas-grid { display: grid; gap: 16px; margin-top: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; }
+@media (max-width: 768px) { .herramientas-grid { grid-template-columns: 1fr; } }
 .herramienta-card { display: flex; flex-direction: column; gap: 6px;
   background: #fff; border: 1px solid var(--borde); border-radius: 12px;
   padding: 20px 22px; text-decoration: none; color: var(--texto);
@@ -293,9 +300,10 @@ tr:hover td { background: #eef5ff; }
 .herramienta-card:hover { border-color: var(--azul); box-shadow: 0 2px 12px rgba(0,0,0,.06); }
 .herramienta-card h3 { margin: 8px 0 0; font-size: 16px; }
 .herramienta-card p { margin: 0; font-size: 13px; color: var(--texto-sec); }
-.herramienta-card .h-ic { width: 44px; height: 44px; border-radius: 10px;
+/* Insignia de ícono en cuadro redondeado (compartida por las tarjetas) */
+.h-ic { width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
   background: #e8f1fb; color: var(--azul); display: flex; align-items: center; justify-content: center; }
-.herramienta-card .h-ic .ic { width: 24px; height: 24px; }
+.h-ic .ic { width: 24px; height: 24px; }
 .herramienta-card.proximo { opacity: .65; }
 .herramienta-card .h-badge { margin-top: 6px; align-self: flex-start; font-size: 11px;
   color: var(--texto-sec); background: #eef1f4; padding: 3px 10px; border-radius: 10px; }
@@ -329,6 +337,56 @@ tr:hover td { background: #eef5ff; }
   .tabla-caja th, .tabla-caja td { padding: 7px 4px; font-size: 13px; }
   .tabla-caja input { width: 100%; min-width: 54px; }
 }
+/* Gestor de etiquetas: tabla del formulario (nombre + precio por fila) */
+.tabla-etiquetas { width: 100%; border-collapse: collapse; }
+.tabla-etiquetas th { text-align: left; font-size: 11.5px; color: var(--texto-sec);
+  font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
+  padding: 6px 8px; border-bottom: 1px solid var(--borde); background: none; }
+.tabla-etiquetas td { padding: 5px 8px; border-bottom: 1px solid var(--borde); font-size: 14px; }
+.tabla-etiquetas .et-col-num, .tabla-etiquetas .et-num { width: 34px; }
+.tabla-etiquetas .et-num { color: var(--texto-sec); font-variant-numeric: tabular-nums; }
+.tabla-etiquetas .col-num { text-align: right; white-space: nowrap; }
+.tabla-etiquetas .et-peso { color: var(--texto-sec); margin-right: 4px; }
+.tabla-etiquetas input { padding: 7px 9px; border: 1px solid var(--borde);
+  border-radius: 6px; font: inherit; }
+.tabla-etiquetas .et-nombre { width: 100%; }
+.tabla-etiquetas .et-precio { width: 110px; text-align: right; }
+.tabla-etiquetas input:focus { outline: none; border-color: var(--azul); }
+
+/* Constructor de etiquetas de oferta */
+.oferta-tipos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.tipo-btn { font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer;
+  background: #fff; border: 1px solid var(--borde); border-radius: 8px; padding: 9px 16px; }
+.tipo-btn.t-normal { color: #e74c3c; }
+.tipo-btn.t-percentage { color: #d68910; }
+.tipo-btn.t-quantity { color: #8e44ad; }
+.tipo-btn.t-daily { color: #2471a3; }
+.tipo-btn.activo.t-normal { background: #e74c3c; border-color: #e74c3c; color: #fff; }
+.tipo-btn.activo.t-percentage { background: #e67e22; border-color: #e67e22; color: #fff; }
+.tipo-btn.activo.t-quantity { background: #8e44ad; border-color: #8e44ad; color: #fff; }
+.tipo-btn.activo.t-daily { background: #3498db; border-color: #3498db; color: #fff; }
+.oferta-fila { display: flex; gap: 14px; flex-wrap: wrap; }
+.oferta-fila .campo { flex: 1; min-width: 130px; }
+.oferta-form .campo { margin-bottom: 12px; }
+.oferta-form .campo.campo-ancho { flex: 2; }
+.oferta-form .campo.campo-medio { max-width: 220px; }
+.oferta-form .campo input, .oferta-form .campo select { width: 100%; }
+.oferta-error { color: var(--rojo); font-size: 13px; min-height: 18px; margin-top: 4px; }
+/* Cola de 4 ofertas */
+.cola-ofertas { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.cola-slot { border: 1px solid var(--borde); border-radius: 10px; min-height: 88px; padding: 10px 12px; }
+.cola-slot.llena { border-top: 3px solid var(--borde); }
+.cs-top { display: flex; align-items: center; justify-content: space-between; }
+.cs-tipo { font-size: 12px; font-weight: 700; }
+.cs-x { background: none; border: none; cursor: pointer; color: var(--texto-tenue);
+  font-size: 18px; line-height: 1; padding: 0 2px; }
+.cs-x:hover { color: var(--rojo); }
+.cs-prod { font-size: 13px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-precio { font-size: 13.5px; font-weight: 700; color: var(--verde-ok); margin-top: 2px; }
+.cs-vacio { height: 100%; min-height: 66px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; color: var(--texto-tenue); font-size: 12px; }
+.cs-vacio span { font-size: 18px; font-weight: 700; color: var(--borde); }
+
 .caja-total { text-align: center; }
 .caja-total-label { font-size: 13px; color: var(--texto-sec);
   text-transform: uppercase; letter-spacing: .5px; }

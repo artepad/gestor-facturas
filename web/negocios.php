@@ -31,22 +31,20 @@ $negocios = $pdo->query(
             <div class="grid-negocios">
             <?php foreach ($negocios as $n): ?>
                 <div class="negocio-card <?= $n['activo'] ? '' : 'inactivo' ?>">
-                    <h3>
-                        <?= h($n['nombre']) ?>
-                        <?php if (!$n['activo']): ?>
-                            <span class="badge-inactivo">inactivo</span>
-                        <?php endif; ?>
-                    </h3>
-                    <div class="rut"><?= $n['rut'] ? 'RUT ' . h($n['rut']) : h($n['slug']) ?></div>
+                    <div class="nc-cabecera">
+                        <span class="h-ic"><?= icono('negocios') ?></span>
+                        <div>
+                            <h3><?= h($n['nombre']) ?><?php if (!$n['activo']): ?> <span class="badge-inactivo">inactivo</span><?php endif; ?></h3>
+                            <div class="rut"><?= $n['rut'] ? 'RUT ' . h($n['rut']) : h($n['slug']) ?></div>
+                        </div>
+                    </div>
 
-                    <?php if ($n['telefono']): ?>
-                        <div class="dato"><span class="ic">📞</span><?= h($n['telefono']) ?></div>
-                    <?php endif; ?>
-                    <?php if ($n['direccion']): ?>
-                        <div class="dato"><span class="ic">📍</span><?= h($n['direccion']) ?></div>
-                    <?php endif; ?>
-                    <?php if ($n['correo']): ?>
-                        <div class="dato"><span class="ic">📧</span><?= h($n['correo']) ?></div>
+                    <?php if ($n['telefono'] || $n['direccion'] || $n['correo']): ?>
+                    <div class="nc-datos">
+                        <?php if ($n['telefono']): ?><div class="dato"><?= icono('telefono') ?><span><?= h($n['telefono']) ?></span></div><?php endif; ?>
+                        <?php if ($n['direccion']): ?><div class="dato"><?= icono('ubicacion') ?><span><?= h($n['direccion']) ?></span></div><?php endif; ?>
+                        <?php if ($n['correo']): ?><div class="dato"><?= icono('correo') ?><span><?= h($n['correo']) ?></span></div><?php endif; ?>
+                    </div>
                     <?php endif; ?>
 
                     <div class="nfact">

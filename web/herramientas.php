@@ -25,12 +25,17 @@ $usuario = exigir_permiso('herramientas');
                    Las monedas se cuentan por peso.</p>
             </a>
 
-            <div class="herramienta-card proximo">
+            <a class="herramienta-card" href="herramienta_etiquetas.php">
                 <span class="h-ic"><?= icono('etiqueta') ?></span>
                 <h3>Gestor de Etiquetas</h3>
-                <p>Genera e imprime etiquetas de precio para los productos.</p>
-                <span class="h-badge">Próximamente</span>
-            </div>
+                <p>Crea etiquetas de precio para los productos, listas para imprimir o guardar en PDF.</p>
+            </a>
+
+            <a class="herramienta-card" href="herramienta_ofertas.php">
+                <span class="h-ic"><?= icono('oferta') ?></span>
+                <h3>Etiquetas de Ofertas</h3>
+                <p>Crea etiquetas de oferta llamativas: descuentos, %, 3x y producto del día.</p>
+            </a>
         </div>
     </div>
     <?php pie_dashboard(); ?>
