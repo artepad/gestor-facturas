@@ -1,3 +1,8 @@
+> ⚠️ **Documento histórico (Fase 1).** Para la puesta en producción actual
+> —con todos los módulos (Fiados, Ingresos, Herramientas, Productos) y el
+> endurecimiento de seguridad— usa **[`DESPLIEGUE.md`](DESPLIEGUE.md)**. Este
+> README quedó como referencia de la primera fase (solo recepción de facturas).
+
 # Servidor web (admin.minimark.cl) — Fase 1: recepción de facturas
 
 Esta carpeta `web/` contiene la API que recibe las facturas sincronizadas

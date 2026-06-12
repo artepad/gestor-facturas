@@ -17,7 +17,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $email  = trim($_POST['email'] ?? '');
     $clave  = $_POST['clave'] ?? '';
     $nombre = trim($_POST['nombre'] ?? '');
-    $rol    = ($_POST['rol'] ?? 'admin') === 'sucursal' ? 'sucursal' : 'admin';
+    $rol    = ($_POST['rol'] ?? 'admin') === 'vendedor' ? 'vendedor' : 'admin';
 
     if ($email === '' || $clave === '') {
         $mensaje = 'Correo y contraseña son obligatorios.';

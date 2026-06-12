@@ -9,9 +9,13 @@ require_once __DIR__ . '/permisos.php';   // roles, matriz de permisos y helpers
 function iniciar_sesion(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
+        // En HTTPS (produccion) la cookie va marcada Secure para que nunca viaje
+        // por HTTP. En local (XAMPP por http) queda en false para no romper el login.
+        $https = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off');
         session_start([
             'cookie_httponly' => true,
             'cookie_samesite' => 'Lax',
+            'cookie_secure'   => $https,
         ]);
     }
 }

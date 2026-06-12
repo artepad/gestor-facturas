@@ -3,10 +3,17 @@
 # No listar archivos de las carpetas
 Options -Indexes
 
-# Bloquear acceso directo a archivos sensibles
-<FilesMatch "(config\.php|config\.ejemplo\.php|\.sql)$">
+# Bloquear acceso directo a archivos sensibles (config, esquema, documentacion,
+# configuracion de proyecto). Los .php de la app se sirven normal; estos no.
+<FilesMatch "(config\.php|config\.ejemplo\.php|\.sql|\.md|\.yaml|\.yml|\.gitignore|\.gitattributes|composer\.(json|lock))$">
     Require all denied
 </FilesMatch>
+
+# Denegar cualquier archivo oculto (.git, .env, etc.) y la carpeta .git completa.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+RedirectMatch 404 /\.git
 
 # Reenviar el header Authorization a PHP. Algunos Apache (ej. XAMPP con
 # mod_php) lo omiten, dejando vacío $_SERVER['HTTP_AUTHORIZATION'] y rompiendo
