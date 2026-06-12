@@ -36,6 +36,20 @@ $usuario = exigir_permiso('herramientas');
                 <h3>Etiquetas de Ofertas</h3>
                 <p>Crea etiquetas de oferta llamativas: descuentos, %, 3x y producto del día.</p>
             </a>
+
+            <a class="herramienta-card" href="herramienta_productos.php">
+                <span class="h-ic"><?= icono('inventario') ?></span>
+                <h3>Base de Datos de Productos</h3>
+                <p>Carga el catálogo de Eleventa (Excel) para que el Gestor de Etiquetas
+                   busque por código de barras.</p>
+            </a>
+
+            <a class="herramienta-card" href="herramienta_catalogo.php">
+                <span class="h-ic"><?= icono('codigo-barras') ?></span>
+                <h3>Consultar Catálogo</h3>
+                <p>Busca productos por nombre o código y ve su precio al instante.
+                   Escanea el código de barras con la cámara del celular.</p>
+            </a>
         </div>
     </div>
     <?php pie_dashboard(); ?>

@@ -210,3 +210,38 @@ CREATE TABLE IF NOT EXISTS corte_departamentos (
   monto        DECIMAL(14,2) NOT NULL,
   FOREIGN KEY (corte_id) REFERENCES cortes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ===== Base de Datos de Productos (catalogo cargado desde el Excel de Eleventa) =====
+
+-- Catalogo de productos por negocio. Lo usa el Gestor de Etiquetas para buscar
+-- por codigo de barra o por nombre. Se reemplaza completo en cada carga de Excel.
+CREATE TABLE IF NOT EXISTS productos (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id     INT NOT NULL,
+  codigo         VARCHAR(40)  NOT NULL,           -- codigo de barra / codigo Eleventa
+  nombre         VARCHAR(255) NOT NULL,
+  precio_costo   DECIMAL(14,2) NULL,
+  precio_venta   DECIMAL(14,2) NULL,
+  precio_mayoreo DECIMAL(14,2) NULL,
+  departamento   VARCHAR(150) NULL,
+  tipo_venta     VARCHAR(30)  NULL,
+  carga_id       INT NULL,                        -- de que subida vino
+  UNIQUE KEY uq_producto (negocio_id, codigo),    -- 1 codigo por negocio
+  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  INDEX idx_producto_negocio (negocio_id),
+  INDEX idx_producto_nombre (negocio_id, nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Una carga = una subida de Excel. Da la "ultima actualizacion" y el historial.
+CREATE TABLE IF NOT EXISTS producto_cargas (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id      INT NOT NULL,
+  archivo_nombre  VARCHAR(255) NULL,
+  total_productos INT NOT NULL DEFAULT 0,
+  total_omitidos  INT NOT NULL DEFAULT 0,          -- filas sin codigo/nombre descartadas
+  cargado_por     INT NULL,
+  cargado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id)  REFERENCES negocios(id)  ON DELETE CASCADE,
+  FOREIGN KEY (cargado_por) REFERENCES usuarios(id)  ON DELETE SET NULL,
+  INDEX idx_carga_negocio (negocio_id, cargado_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

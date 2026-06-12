@@ -175,4 +175,42 @@ foreach ($tablasIngresos as $nombre => $ddl) {
     echo "  ~ tabla $nombre lista\n";
 }
 
+echo "\n[Base de Datos de Productos (catalogo Eleventa)]\n";
+// Crea las tablas del catalogo de productos si faltan (idempotente). Mismas
+// definiciones que lib/esquema.sql.
+$tablasProductos = [
+    'productos' => "CREATE TABLE IF NOT EXISTS productos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        codigo VARCHAR(40) NOT NULL,
+        nombre VARCHAR(255) NOT NULL,
+        precio_costo DECIMAL(14,2) NULL,
+        precio_venta DECIMAL(14,2) NULL,
+        precio_mayoreo DECIMAL(14,2) NULL,
+        departamento VARCHAR(150) NULL,
+        tipo_venta VARCHAR(30) NULL,
+        carga_id INT NULL,
+        UNIQUE KEY uq_producto (negocio_id, codigo),
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        INDEX idx_producto_negocio (negocio_id),
+        INDEX idx_producto_nombre (negocio_id, nombre)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'producto_cargas' => "CREATE TABLE IF NOT EXISTS producto_cargas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        archivo_nombre VARCHAR(255) NULL,
+        total_productos INT NOT NULL DEFAULT 0,
+        total_omitidos INT NOT NULL DEFAULT 0,
+        cargado_por INT NULL,
+        cargado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (cargado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+        INDEX idx_carga_negocio (negocio_id, cargado_en)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+];
+foreach ($tablasProductos as $nombre => $ddl) {
+    $pdo->exec($ddl);
+    echo "  ~ tabla $nombre lista\n";
+}
+
 echo "\nListo. Migraciones aplicadas.\n";

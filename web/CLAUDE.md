@@ -53,6 +53,7 @@ web/
 │   ├── permisos.php     matriz RBAC rol→módulos + exigir_permiso()
 │   ├── ui.php           layout compartido (sidebar, footer) + helpers de formato + íconos SVG
 │   ├── eleventa.php     parser del correo de corte de Eleventa + registrar_corte()
+│   ├── productos.php    carga del catálogo Excel de Eleventa + estado + búsqueda de productos
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
@@ -71,6 +72,17 @@ web/
 ├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original)
 ├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron)
 ├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o ?clave=setup_key)
+│
+├── herramientas.php           tablero del módulo Herramientas (tarjetas)
+├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso)
+├── herramienta_etiquetas.php  gestor de etiquetas de precio (+ buscador desde el catálogo)
+├── etiquetas_imprimir.php     hoja A4 imprimible de etiquetas de precio (página desnuda)
+├── herramienta_ofertas.php    creador de etiquetas de oferta (4 tipos)
+├── ofertas_imprimir.php       hoja A4 imprimible de etiquetas de oferta (página desnuda)
+├── herramienta_productos.php  Base de Datos de Productos: carga el Excel de Eleventa por negocio
+├── productos_buscar.php       endpoint JSON de búsqueda del catálogo (lo usa el gestor de etiquetas)
+├── herramienta_catalogo.php   Consultar Catálogo: buscador + escáner de cámara de productos
+├── catalogo_buscar.php        endpoint JSON con todos los campos del producto (lo usa Consultar Catálogo)
 │
 ├── login.php            formulario de ingreso
 ├── logout.php           cerrar sesión
@@ -151,6 +163,49 @@ registrar un corte pegando el correo a mano (mismo parser, `origen='manual'`,
 útil en local donde no hay IMAP). Nota: `config.php` detecta el ambiente por
 `HTTP_HOST`; en CLI (cron) no hay host, así que usa la config de producción —
 correcto en el servidor.
+
+**Módulo Herramientas** (utilidades operativas, web-nativo). Tablero de tarjetas
+(`herramientas.php`) gateado por el permiso `herramientas` (lo tienen `admin` y
+`vendedor`). Incluye el contador de caja, el gestor de etiquetas de precio, el
+creador de etiquetas de oferta y la Base de Datos de Productos. Las páginas
+`*_imprimir.php` son "desnudas" (sin layout) para imprimir limpio vía
+`window.print()`.
+
+**Base de Datos de Productos** (catálogo por negocio que alimenta el gestor de
+etiquetas):
+- **`productos`** — catálogo de cada negocio (`negocio_id`, `codigo` único por
+  negocio, `nombre`, `precio_costo/venta/mayoreo`, `departamento`, `tipo_venta`,
+  `carga_id`). Se **reemplaza completo** en cada carga de Excel.
+- **`producto_cargas`** — una fila por subida de Excel (`archivo_nombre`,
+  `total_productos`, `total_omitidos`, `cargado_por`, `cargado_en`). Da la "última
+  actualización" (`MAX(cargado_en)`) y el historial; no se borra al reemplazar.
+
+**Flujo**: el usuario exporta el catálogo desde Eleventa a un `.xlsx` y lo sube en
+`herramienta_productos.php` (selector de negocio acotado por `negocios_visibles`).
+`lib/productos.php` lo parsea con **`ZipArchive`+`SimpleXML` nativos** (un `.xlsx`
+es un zip de XML; **no se usa Composer ni PhpSpreadsheet**): mapea columnas por el
+texto del encabezado (resiste reordenamientos), parsea los precios como texto
+chileno (`$2.000`→`2000`) y descarta filas sin código/nombre. `reemplazar_catalogo()`
+hace un **reemplazo transaccional** (registra la carga, `DELETE` del catálogo,
+`INSERT` por lotes; `rollBack` si algo falla). **Salvaguardas anti-borrado**: un
+archivo vacío/equivocado nunca borra el catálogo (falla antes), y "Vaciar catálogo"
+exige escribir `ELIMINAR`. `estado_actualizacion()` calcula el aviso de antigüedad
+(≤6 días ok, 7–14 naranja, >14 rojo) que se muestra en el administrador y en el
+gestor de etiquetas. `buscar_productos()` (vía `productos_buscar.php`, JSON)
+resuelve el autocompletar: por código de barras (prefijo) o por nombre (`LIKE`).
+
+**Consultar Catálogo** (`herramienta_catalogo.php`, solo lectura): buscador
+móvil-primero del catálogo. Búsqueda en vivo (debounce) contra `catalogo_buscar.php`
+(`consultar_catalogo()` devuelve **todos** los campos; `departamentos_de_negocio()`
+puebla el filtro de departamento), resultados como tarjetas. **Escáner de código
+de barras híbrido**: usa el `BarcodeDetector` nativo del navegador cuando existe
+(Android/Chrome) y **carga `assets/zxing.min.js` de forma diferida** como respaldo
+(iPhone/Safari) — un único camino de cámara (`getUserMedia` con cámara trasera)
+con dos decodificadores. Requiere **HTTPS** para la cámara (ya lo es en producción;
+para probar en celular hay que abrir el dominio, no una IP local). `zxing.min.js`
+es la librería `@zxing/library` vendorizada (un asset estático, sin Composer/npm).
+El botón "Crear etiqueta" de cada resultado abre `herramienta_etiquetas.php?nombre=&precio=`
+con la primera fila precargada.
 
 ## Roles y permisos (en `lib/permisos.php` + `lib/auth.php`)
 
