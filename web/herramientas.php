@@ -1,0 +1,36 @@
+<?php
+/**
+ * Módulo Herramientas: tablero de utilidades operativas. Cada herramienta es
+ * una tarjeta que lleva a su propia página. Para agregar una nueva, basta con
+ * añadir una tarjeta aquí y crear su archivo.
+ */
+
+require __DIR__ . '/lib/auth.php';
+require __DIR__ . '/lib/ui.php';
+
+$usuario = exigir_permiso('herramientas');
+?>
+<?php cabecera_dashboard($usuario, 'herramientas', 'Herramientas'); ?>
+    <div class="contenido">
+        <div class="cab-acciones">
+            <h2>Herramientas</h2>
+        </div>
+        <p class="saludo-sub">Utilidades para el día a día del negocio.</p>
+
+        <div class="herramientas-grid">
+            <a class="herramienta-card" href="herramienta_caja.php">
+                <span class="h-ic"><?= icono('calculadora') ?></span>
+                <h3>Contador de Caja</h3>
+                <p>Cuenta billetes y monedas para cuadrar la caja en minutos.
+                   Las monedas se cuentan por peso.</p>
+            </a>
+
+            <div class="herramienta-card proximo">
+                <span class="h-ic"><?= icono('etiqueta') ?></span>
+                <h3>Gestor de Etiquetas</h3>
+                <p>Genera e imprime etiquetas de precio para los productos.</p>
+                <span class="h-badge">Próximamente</span>
+            </div>
+        </div>
+    </div>
+    <?php pie_dashboard(); ?>
