@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Detalle de un corte de caja: resumen completo, movimientos (entradas y
  * salidas), ventas por departamento y el correo original como respaldo.
