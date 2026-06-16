@@ -18,6 +18,13 @@ $usuario = exigir_permiso('herramientas');
         <p class="saludo-sub">Utilidades para el día a día del negocio.</p>
 
         <div class="herramientas-grid">
+            <a class="herramienta-card" href="herramienta_catalogo.php">
+                <span class="h-ic"><?= icono('codigo-barras') ?></span>
+                <h3>Consultar Catálogo</h3>
+                <p>Busca productos por nombre o código y ve su precio al instante.
+                   Escanea el código de barras con la cámara del celular.</p>
+            </a>
+
             <a class="herramienta-card" href="herramienta_caja.php">
                 <span class="h-ic"><?= icono('calculadora') ?></span>
                 <h3>Contador de Caja</h3>
@@ -42,13 +49,6 @@ $usuario = exigir_permiso('herramientas');
                 <h3>Base de Datos de Productos</h3>
                 <p>Carga el catálogo de Eleventa (Excel) para que el Gestor de Etiquetas
                    busque por código de barras.</p>
-            </a>
-
-            <a class="herramienta-card" href="herramienta_catalogo.php">
-                <span class="h-ic"><?= icono('codigo-barras') ?></span>
-                <h3>Consultar Catálogo</h3>
-                <p>Busca productos por nombre o código y ve su precio al instante.
-                   Escanea el código de barras con la cámara del celular.</p>
             </a>
         </div>
     </div>

@@ -1,12 +1,11 @@
 <?php
 /**
- * Herramienta "Gestor de Etiquetas": crea etiquetas de precio para los
- * productos. El usuario llena nombre + precio de cada producto y al generar se
+ * Herramienta "Gestor de Etiquetas": crea etiquetas de precio. El usuario llena
+ * nombre + precio de cada producto (o los busca en el catálogo) y al generar se
  * abre una hoja lista para imprimir o guardar como PDF (ver etiquetas_imprimir.php).
  *
- * El buscador autocompleta nombre y precio desde la Base de Datos de Productos
- * (catálogo de Eleventa): se escribe o escanea el código de barras y se llena la
- * siguiente fila libre. El catálogo se administra en herramienta_productos.php.
+ * El buscador autocompleta desde la Base de Datos de Productos (catálogo de
+ * Eleventa): se escribe o escanea el código y se llena la primera fila libre.
  */
 
 require __DIR__ . '/lib/auth.php';
@@ -17,15 +16,12 @@ $usuario  = exigir_permiso('herramientas');
 $pdo      = obtener_pdo();
 $negocios = negocios_visibles($usuario);
 
-// Negocio del que se busca el catálogo. Por GET para poder cambiarlo.
 $negocioId = (int)($_GET['negocio'] ?? 0);
 if ($negocioId && !puede_ver_negocio($usuario, $negocioId)) $negocioId = 0;
 if (!$negocioId && $negocios) $negocioId = (int)$negocios[0]['id'];
 
-// Estado del catálogo (para avisar si está desactualizado).
-$ultima = $negocioId ? ultima_carga($pdo, $negocioId) : null;
 $totalP = $negocioId ? contar_productos($pdo, $negocioId) : 0;
-$estado = estado_actualizacion($ultima['cargado_en'] ?? null);
+$estado = estado_actualizacion(($negocioId ? ultima_carga($pdo, $negocioId) : null)['cargado_en'] ?? null);
 
 $FILAS = 14;   // una hoja A4 = 14 etiquetas (2 columnas x 7 filas)
 
@@ -40,80 +36,58 @@ $prePrecio = preg_replace('/[^\d]/', '', (string)($_GET['precio'] ?? ''));
             <a class="btn gris" href="herramientas.php">Volver</a>
         </div>
 
-        <!-- Buscador desde la base de datos de productos -->
-        <div class="panel">
-            <div class="et-buscar-cab">
-                <h2 class="panel-titulo">Buscar en la base de datos</h2>
+        <form method="post" action="etiquetas_imprimir.php" target="_blank" class="panel et-panel">
+
+            <!-- Buscador del catálogo + selector de negocio -->
+            <?php if (count($negocios) > 1 || $totalP > 0): ?>
+            <div class="et-buscar-fila">
+                <?php if ($totalP > 0): ?>
+                    <div class="et-buscar" data-negocio="<?= $negocioId ?>">
+                        <span class="et-buscar-ic"><?= icono('lupa') ?></span>
+                        <input type="text" id="etBuscar" placeholder="Buscar producto por nombre o código…" autocomplete="off">
+                        <div class="et-resultados" id="etResultados" hidden></div>
+                    </div>
+                <?php else: ?>
+                    <p class="et-hint et-hint-grande">Este negocio no tiene catálogo cargado.
+                       <a href="herramienta_productos.php?negocio=<?= $negocioId ?>">Cargar productos →</a></p>
+                <?php endif; ?>
                 <?php if (count($negocios) > 1): ?>
-                <form method="get" class="selector-negocio">
-                    <label for="negocio">Negocio:</label>
-                    <select name="negocio" id="negocio" onchange="this.form.submit()">
+                    <select class="et-negocio-sel" onchange="location.href='herramienta_etiquetas.php?negocio='+this.value">
                         <?php foreach ($negocios as $n): ?>
                             <option value="<?= (int)$n['id'] ?>" <?= (int)$n['id'] === $negocioId ? 'selected' : '' ?>>
                                 <?= h($n['nombre']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
-                </form>
                 <?php endif; ?>
             </div>
-
-            <?php if ($totalP === 0): ?>
-                <p class="texto-ayuda">Este negocio aún no tiene catálogo cargado.
-                   <a href="herramienta_productos.php?negocio=<?= $negocioId ?>">Cargar la base de datos de productos →</a></p>
-            <?php else: ?>
-                <?php if ($estado['nivel'] === 'naranja' || $estado['nivel'] === 'rojo'): ?>
-                    <div class="aviso-flash flash-<?= $estado['nivel'] === 'rojo' ? 'error' : 'aviso' ?>" style="margin-bottom:12px;">
-                        <?= h($estado['texto']) ?>.
-                        <a href="herramienta_productos.php?negocio=<?= $negocioId ?>">Actualizar →</a>
-                    </div>
-                <?php endif; ?>
-                <p class="texto-ayuda">Escanea el código de barras o escribe el nombre y elige el producto:
-                   se agrega a la primera fila libre. <strong>Enter</strong> agrega el primer resultado
-                   (ideal para escanear varios seguidos).</p>
-                <div class="et-buscar" data-negocio="<?= $negocioId ?>">
-                    <span class="et-buscar-ic"><?= icono('lupa') ?></span>
-                    <input type="text" id="etBuscar" placeholder="Código de barras o nombre del producto…"
-                           autocomplete="off">
-                    <div class="et-resultados" id="etResultados" hidden></div>
+            <?php if ($totalP > 0 && ($estado['nivel'] === 'naranja' || $estado['nivel'] === 'rojo')): ?>
+                <div class="aviso-flash flash-<?= $estado['nivel'] === 'rojo' ? 'error' : 'aviso' ?>">
+                    <?= h($estado['texto']) ?>. <a href="herramienta_productos.php?negocio=<?= $negocioId ?>">Actualizar →</a>
                 </div>
             <?php endif; ?>
-        </div>
+            <?php endif; ?>
 
-        <div class="panel">
-            <p class="texto-ayuda">Escribe el nombre y el precio de cada producto. Al generar se abre una
-                hoja lista para <strong>imprimir o guardar como PDF</strong> (hasta 14 etiquetas por hoja).
-                Las filas vacías se omiten.</p>
+            <!-- 14 etiquetas en dos columnas (espejo de la hoja A4) -->
+            <div class="et-grid">
+                <?php for ($i = 1; $i <= $FILAS; $i++): ?>
+                    <?php $vN = $i === 1 ? $preNombre : ''; $vP = $i === 1 ? $prePrecio : ''; ?>
+                    <div class="et-fila<?= $i === 1 && $preNombre !== '' ? ' et-fila-nueva' : '' ?>">
+                        <span class="et-n"><?= sprintf('%02d', $i) ?></span>
+                        <input type="text" name="nombre[]" class="et-nombre" maxlength="120"
+                               placeholder="Producto" autocomplete="off" value="<?= h($vN) ?>">
+                        <span class="et-precio-wrap"><span class="et-peso">$</span><input type="text"
+                               name="precio[]" class="et-precio" inputmode="numeric" placeholder="0"
+                               autocomplete="off" value="<?= h($vP) ?>"></span>
+                    </div>
+                <?php endfor; ?>
+            </div>
 
-            <form method="post" action="etiquetas_imprimir.php" target="_blank">
-                <table class="tabla-etiquetas">
-                    <thead><tr>
-                        <th class="et-col-num">#</th>
-                        <th>Producto</th>
-                        <th class="col-num">Precio</th>
-                    </tr></thead>
-                    <tbody>
-                    <?php for ($i = 1; $i <= $FILAS; $i++): ?>
-                        <?php $vN = $i === 1 ? $preNombre : ''; $vP = $i === 1 ? $prePrecio : ''; ?>
-                        <tr<?= $i === 1 && $preNombre !== '' ? ' class="et-fila-nueva"' : '' ?>>
-                            <td class="et-num"><?= sprintf('%02d', $i) ?></td>
-                            <td><input type="text" name="nombre[]" class="et-nombre" maxlength="120"
-                                       placeholder="Nombre del producto" autocomplete="off" value="<?= h($vN) ?>"></td>
-                            <td class="col-num">
-                                <span class="et-peso">$</span><input type="text" name="precio[]"
-                                    class="et-precio" inputmode="numeric" placeholder="0" autocomplete="off" value="<?= h($vP) ?>">
-                            </td>
-                        </tr>
-                    <?php endfor; ?>
-                    </tbody>
-                </table>
-
-                <div class="form-acciones">
-                    <button class="btn" type="submit">Generar etiquetas</button>
-                    <button class="btn gris" type="reset">Limpiar</button>
-                </div>
-            </form>
-        </div>
+            <div class="form-acciones et-acciones">
+                <button class="btn" type="submit">Generar etiquetas</button>
+                <button class="btn gris" type="reset">Limpiar</button>
+            </div>
+        </form>
     </div>
 
     <script>
@@ -128,17 +102,21 @@ $prePrecio = preg_replace('/[^\d]/', '', (string)($_GET['precio'] ?? ''));
 
         function fmt(n) { return Number(n || 0).toLocaleString('es-CL'); }
 
-        // Coloca un producto en la primera fila vacía (o reemplaza la última si está llena).
+        // Coloca un producto en la primera fila vacía.
         function agregar(p) {
-          var nombres = document.querySelectorAll('.et-nombre');
-          var precios = document.querySelectorAll('.et-precio');
-          var i = 0;
-          for (; i < nombres.length; i++) { if (!nombres[i].value.trim() && !precios[i].value.trim()) break; }
-          if (i >= nombres.length) { alert('La hoja ya tiene las 14 etiquetas llenas.'); return; }
-          nombres[i].value = p.nombre;
-          precios[i].value = p.precio_venta ? Math.round(p.precio_venta) : '';
-          nombres[i].closest('tr').classList.add('et-fila-nueva');
-          setTimeout(function () { nombres[i].closest('tr').classList.remove('et-fila-nueva'); }, 900);
+          var filas = document.querySelectorAll('.et-fila');
+          for (var i = 0; i < filas.length; i++) {
+            var nom = filas[i].querySelector('.et-nombre');
+            var pre = filas[i].querySelector('.et-precio');
+            if (!nom.value.trim() && !pre.value.trim()) {
+              nom.value = p.nombre;
+              pre.value = p.precio_venta ? Math.round(p.precio_venta) : '';
+              filas[i].classList.add('et-fila-nueva');
+              setTimeout(function (f) { return function () { f.classList.remove('et-fila-nueva'); }; }(filas[i]), 900);
+              return;
+            }
+          }
+          alert('La hoja ya tiene las 14 etiquetas llenas.');
         }
 
         function pintar(lista) {

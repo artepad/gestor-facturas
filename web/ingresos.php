@@ -43,7 +43,7 @@ $fCajero = (int)($_GET['cajero'] ?? 0);
 // --- Condición base (negocios visibles + filtros) ---
 $ids = $fNegocio ? [$fNegocio] : $idsVisibles;
 $resumen = ['ventas' => 0, 'efectivo' => 0, 'tarjeta' => 0, 'transferencia' => 0,
-            'salidas' => 0, 'n' => 0];
+            'salidas' => 0, 'n' => 0, 'nventas' => 0];
 $resumenAnt = null;
 $cortes = []; $porCajero = []; $porDia = []; $cajerosFiltro = [];
 $pendientes = []; $correosError = 0;
@@ -56,12 +56,12 @@ if ($ids) {
 
     $sumas = "COALESCE(SUM(c.ventas_totales),0), COALESCE(SUM(c.ventas_efectivo),0),
               COALESCE(SUM(c.ventas_tarjeta),0), COALESCE(SUM(c.ventas_transferencia),0),
-              COALESCE(SUM(c.salidas_caja),0), COUNT(*)";
+              COALESCE(SUM(c.salidas_caja),0), COUNT(*), COALESCE(SUM(c.numero_ventas),0)";
 
     $st = $pdo->prepare("SELECT $sumas FROM cortes c WHERE $cond");
     $st->execute($par);
     [$resumen['ventas'], $resumen['efectivo'], $resumen['tarjeta'],
-     $resumen['transferencia'], $resumen['salidas'], $resumen['n']] =
+     $resumen['transferencia'], $resumen['salidas'], $resumen['n'], $resumen['nventas']] =
         array_values($st->fetch(PDO::FETCH_NUM));
 
     // Período anterior equivalente (mismos días hacia atrás) para la comparativa
@@ -226,9 +226,9 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
 
         <!-- Lo más importante: resumen del período -->
         <div class="ingresos-stats">
-            <div class="stat-card destacado">
+            <div class="stat-card t-azul">
                 <span class="stat-label">Ventas del período</span>
-                <span class="stat-valor"><?= clp($resumen['ventas']) ?: '$0' ?></span>
+                <span class="stat-valor valor-azul"><?= clp($resumen['ventas']) ?: '$0' ?></span>
                 <?php if ($variacion !== null): ?>
                 <span class="stat-comp <?= $variacion >= 0 ? 'comp-sube' : 'comp-baja' ?>">
                     <?= ($variacion >= 0 ? '▲ +' : '▼ ') . number_format($variacion, 1, ',', '.') ?>%
@@ -236,31 +236,31 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
                 </span>
                 <?php endif; ?>
             </div>
-            <div class="stat-card">
+            <div class="stat-card t-verde">
                 <span class="stat-label">Efectivo</span>
                 <span class="stat-valor"><?= clp($resumen['efectivo']) ?: '$0' ?></span>
             </div>
-            <div class="stat-card">
+            <div class="stat-card t-morado">
                 <span class="stat-label">Tarjeta + transferencia</span>
                 <span class="stat-valor"><?= clp($resumen['tarjeta'] + $resumen['transferencia']) ?: '$0' ?></span>
             </div>
-            <div class="stat-card">
+            <div class="stat-card t-rojo">
                 <span class="stat-label">Salidas de caja</span>
                 <span class="stat-valor"><?= clp($resumen['salidas']) ?: '$0' ?></span>
             </div>
-            <div class="stat-card">
-                <span class="stat-label">Cortes</span>
-                <span class="stat-valor"><?= (int)$resumen['n'] ?></span>
+            <div class="stat-card t-naranjo stat-centro">
+                <span class="stat-label">Número de ventas</span>
+                <span class="stat-valor"><?= number_format((int)$resumen['nventas'], 0, ',', '.') ?></span>
             </div>
         </div>
 
         <!-- Tabla de cortes: el contenido principal, siempre visible -->
-        <div class="tabla-wrap">
+        <div class="tabla-wrap tabla-cortes">
             <table>
                 <thead><tr>
                     <th>Cierre</th>
                     <?php if (!$mismoNegocio): ?><th>Negocio</th><?php endif; ?>
-                    <th>Caja</th><th>Cajero</th>
+                    <th>Caja</th><th class="col-cajero">Cajero</th>
                     <th class="col-num">Ventas</th><th class="col-num">Efectivo</th>
                     <th class="col-num">Tarjeta</th><th class="col-num">Salidas</th>
                 </tr></thead>
@@ -270,10 +270,12 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
                         Los cortes llegan solos desde Eleventa, o puedes registrarlos con "+ Registrar corte".</td></tr>
                 <?php else: foreach ($cortes as $c): ?>
                     <tr class="fila-click" onclick="location.href='corte.php?id=<?= (int)$c['id'] ?>'">
-                        <td class="nowrap"><?= h(date('d-m-Y H:i', strtotime($c['cerrado_en']))) ?></td>
+                        <td class="nowrap col-cierre">
+                            <span class="f-fecha"><?= h(date('d-m-Y', strtotime($c['cerrado_en']))) ?></span><span class="f-hora"><?= h(date('H:i', strtotime($c['cerrado_en']))) ?></span>
+                        </td>
                         <?php if (!$mismoNegocio): ?><td><?= h($c['negocio']) ?></td><?php endif; ?>
                         <td><?= h($c['caja'] ?: '—') ?></td>
-                        <td><?= h($c['cajero'] ?: '—') ?></td>
+                        <td class="col-cajero"><?= h($c['cajero'] ?: '—') ?></td>
                         <td class="col-num"><?= clp($c['ventas_totales']) ?></td>
                         <td class="col-num"><?= clp($c['ventas_efectivo']) ?></td>
                         <td class="col-num"><?= clp($c['ventas_tarjeta']) ?></td>

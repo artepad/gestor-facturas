@@ -337,21 +337,20 @@ tr:hover td { background: #eef5ff; }
   .tabla-caja th, .tabla-caja td { padding: 7px 4px; font-size: 13px; }
   .tabla-caja input { width: 100%; min-width: 54px; }
 }
-/* Gestor de etiquetas: tabla del formulario (nombre + precio por fila) */
-.tabla-etiquetas { width: 100%; border-collapse: collapse; }
-.tabla-etiquetas th { text-align: left; font-size: 11.5px; color: var(--texto-sec);
-  font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
-  padding: 6px 8px; border-bottom: 1px solid var(--borde); background: none; }
-.tabla-etiquetas td { padding: 5px 8px; border-bottom: 1px solid var(--borde); font-size: 14px; }
-.tabla-etiquetas .et-col-num, .tabla-etiquetas .et-num { width: 34px; }
-.tabla-etiquetas .et-num { color: var(--texto-sec); font-variant-numeric: tabular-nums; }
-.tabla-etiquetas .col-num { text-align: right; white-space: nowrap; }
-.tabla-etiquetas .et-peso { color: var(--texto-sec); margin-right: 4px; }
-.tabla-etiquetas input { padding: 7px 9px; border: 1px solid var(--borde);
-  border-radius: 6px; font: inherit; }
-.tabla-etiquetas .et-nombre { width: 100%; }
-.tabla-etiquetas .et-precio { width: 110px; text-align: right; }
-.tabla-etiquetas input:focus { outline: none; border-color: var(--azul); }
+/* Gestor de etiquetas: 14 campos en dos columnas (espejo de la hoja A4) */
+.et-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 28px; }
+.et-fila { display: flex; align-items: center; gap: 10px; }
+.et-n { width: 22px; flex-shrink: 0; text-align: right; font-size: 12px;
+  color: var(--texto-tenue); font-variant-numeric: tabular-nums; }
+.et-fila .et-nombre { flex: 1; min-width: 0; height: 40px; padding: 0 12px;
+  border: 1px solid var(--borde); border-radius: 8px; font: inherit; }
+.et-precio-wrap { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.et-precio-wrap .et-peso { color: var(--texto-sec); }
+.et-fila .et-precio { width: 92px; height: 40px; padding: 0 10px; border: 1px solid var(--borde);
+  border-radius: 8px; font: inherit; text-align: right; }
+.et-fila input:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px rgba(21,101,192,.10); }
+.et-fila-nueva input { background: #fffbe6; transition: background .9s ease; }
+.et-acciones { margin-top: 4px; }
 
 /* Constructor de etiquetas de oferta */
 .oferta-tipos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -445,14 +444,19 @@ tr:hover td { background: #eef5ff; }
 .btn.peligro:disabled { background: #e3a3a8; cursor: not-allowed; }
 
 /* Buscador del Gestor de Etiquetas */
-.et-buscar-cab { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-.et-buscar-cab .selector-negocio { margin-bottom: 0; }
-.et-buscar { position: relative; display: flex; align-items: center; }
-.et-buscar-ic { position: absolute; left: 12px; color: var(--texto-tenue); display: flex; pointer-events: none; }
+.et-panel { display: flex; flex-direction: column; gap: 16px; }
+.et-buscar-fila { display: flex; gap: 12px; align-items: center; }
+.et-negocio-sel { height: 46px; flex-shrink: 0; padding: 0 12px; border: 1px solid var(--borde);
+  border-radius: 10px; font: inherit; font-size: 14px; background: #fff; }
+.et-hint { margin: 0; font-size: 13px; color: var(--texto-sec); }
+.et-hint-grande { flex: 1; }
+.et-buscar { position: relative; flex: 1; display: flex; align-items: center; }
+.et-buscar-ic { position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--texto-tenue); display: flex; pointer-events: none; }
 .et-buscar-ic .ic { width: 18px; height: 18px; }
-.et-buscar input { width: 100%; padding: 11px 12px 11px 40px; border: 1px solid var(--borde);
-  border-radius: 8px; font: inherit; }
-.et-buscar input:focus { outline: none; border-color: var(--azul); }
+.et-buscar input { width: 100%; height: 46px; padding: 0 14px 0 42px; border: 1px solid var(--borde);
+  border-radius: 10px; font: inherit; font-size: 16px; }   /* 16px evita el zoom de iOS */
+.et-buscar input:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px rgba(21,101,192,.12); }
 .et-resultados { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
   background: #fff; border: 1px solid var(--borde); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12);
   max-height: 320px; overflow-y: auto; }
@@ -464,7 +468,11 @@ tr:hover td { background: #eef5ff; }
 .er-nom { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .er-precio { font-size: 13.5px; font-weight: 700; color: var(--verde-ok); white-space: nowrap; }
 .et-res-vacio { padding: 12px; color: var(--texto-tenue); font-size: 13px; text-align: center; }
-.et-fila-nueva input { background: #fffbe6; transition: background .9s ease; }
+@media (max-width: 640px) {
+  .et-buscar-fila { flex-direction: column; align-items: stretch; }
+  .et-negocio-sel { width: 100%; }
+  .et-grid { grid-template-columns: 1fr; }
+}
 
 /* ===== Consultar Catálogo ===== */
 .cat-panel { display: flex; flex-direction: column; gap: 16px; }
@@ -778,13 +786,29 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
 
 /* Tarjetas resumen del período: grilla uniforme, la primera destacada */
 .ingresos-stats { display: grid; gap: 14px; margin-bottom: 20px;
-  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); grid-auto-rows: 1fr; }
 .stat-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
   padding: 16px 18px; display: flex; flex-direction: column; gap: 5px; }
 .stat-card .stat-label { font-size: 12.5px; color: var(--texto-sec); }
 .stat-card .stat-valor { font-size: 25px; font-weight: 700; line-height: 1.1; }
-.stat-card.destacado { border-top: 3px solid var(--azul); }
-.stat-card.destacado .stat-valor { color: var(--azul); font-size: 28px; }
+/* Color de la franja superior de cada métrica (el número queda en su color normal) */
+.stat-card.t-azul    { border-top: 3px solid var(--azul); }
+.stat-card.t-rojo    { border-top: 3px solid var(--rojo); }
+.stat-card.t-verde   { border-top: 3px solid var(--verde-ok); }
+.stat-card.t-morado  { border-top: 3px solid #8e44ad; }
+.stat-card.t-naranjo { border-top: 3px solid #e67e22; }
+.stat-valor.valor-azul   { color: var(--azul); }      /* valores coloreados (Home / Ingresos) */
+.stat-valor.valor-verde  { color: var(--verde-ok); }
+.stat-valor.valor-naranjo{ color: #e67e22; }
+.stat-valor.valor-rojo   { color: var(--rojo); }
+.stat-card.stat-centro { align-items: center; text-align: center; }
+/* Tabla de cortes: en escritorio fecha y hora en una línea */
+.tabla-cortes .f-hora { margin-left: 5px; }
+@media (max-width: 600px) {
+  .tabla-cortes .col-cajero { display: none; }            /* ocultar Cajero en móvil */
+  .tabla-cortes .f-hora { display: block; margin-left: 0;  /* hora debajo de la fecha */
+    font-size: 12px; color: var(--texto-sec); }
+}
 .stat-comp .texto-tenue { font-weight: 400; }
 /* Columnas numéricas alineadas a la derecha (montos) */
 .col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

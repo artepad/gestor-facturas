@@ -112,12 +112,21 @@ if ($facturasRevisar > 0) $alertas[] = ['facturas', "$facturasRevisar factura(s)
 if ($correosError > 0)    $alertas[] = ['ingresos', "$correosError corte(s) sin procesar", 'ingresos.php'];
 if ($nClientesDeuda > 0)  $alertas[] = ['fiados', "$nClientesDeuda cliente(s) con deuda", 'fiados.php'];
 
-// --- KPIs en orden de importancia (el primero se destaca) ---
+// Número de ventas del día (suma de las transacciones de los cortes de hoy)
+$nVentasHoy = 0;
+if ($ids && $verIngresos) {
+    $st = $pdo->prepare("SELECT COALESCE(SUM(numero_ventas),0) FROM cortes
+        WHERE negocio_id IN ($ph) AND DATE(cerrado_en) = ?");
+    $st->execute([...$ids, $hoy]);
+    $nVentasHoy = (int)$st->fetchColumn();
+}
+
+// --- KPIs (cada uno con el color de su valor) ---
 $kpis = [];
-if ($verIngresos) $kpis[] = ['Ventas del mes', clp($ventasMes) ?: '$0', 'comp' => $varVentas];
-if ($verFiados)   $kpis[] = ['Por cobrar', clp($deudaTotal) ?: '$0', 'sub' => $nClientesDeuda . ' cliente(s)'];
-if ($verFacturas) $kpis[] = ['Compras del mes', clp($comprasMes) ?: '$0', 'sub' => $nFacturasMes . ' factura(s)'];
-if ($verNegocios) $kpis[] = ['Negocios', (string)$nNegocios, 'sub' => 'activos en la plataforma'];
+if ($verIngresos) $kpis[] = ['Ventas del mes', clp($ventasMes) ?: '$0', 'color' => 'valor-verde', 'comp' => $varVentas];
+if ($verFacturas) $kpis[] = ['Compras del mes', clp($comprasMes) ?: '$0', 'color' => 'valor-naranjo', 'sub' => $nFacturasMes . ' factura(s)'];
+if ($verFiados)   $kpis[] = ['Por cobrar', clp($deudaTotal) ?: '$0', 'color' => 'valor-rojo', 'sub' => $nClientesDeuda . ' cliente(s)'];
+if ($verIngresos) $kpis[] = ['Número de ventas del día', number_format($nVentasHoy, 0, ',', '.'), 'sub' => 'ventas de hoy'];
 ?>
 <?php cabecera_dashboard($usuario, 'home', 'Inicio'); ?>
     <div class="contenido">
@@ -128,10 +137,10 @@ if ($verNegocios) $kpis[] = ['Negocios', (string)$nNegocios, 'sub' => 'activos e
 
         <?php if ($kpis): ?>
         <div class="ingresos-stats">
-            <?php foreach ($kpis as $i => $k): ?>
-            <div class="stat-card <?= $i === 0 ? 'destacado' : '' ?>">
+            <?php foreach ($kpis as $k): ?>
+            <div class="stat-card">
                 <span class="stat-label"><?= h($k[0]) ?></span>
-                <span class="stat-valor"><?= h($k[1]) ?></span>
+                <span class="stat-valor <?= h($k['color'] ?? '') ?>"><?= h($k[1]) ?></span>
                 <?php if (array_key_exists('comp', $k) && $k['comp'] !== null): ?>
                     <span class="stat-comp <?= $k['comp'] >= 0 ? 'comp-sube' : 'comp-baja' ?>">
                         <?= ($k['comp'] >= 0 ? '▲ +' : '▼ ') . number_format($k['comp'], 1, ',', '.') ?>%
@@ -220,15 +229,5 @@ if ($verNegocios) $kpis[] = ['Negocios', (string)$nNegocios, 'sub' => 'activos e
             <?php endif; ?>
         </div>
 
-        <div class="panel bloque-sep">
-            <h2 class="panel-titulo">Accesos rápidos</h2>
-            <div class="acciones-rapidas">
-                <?php if ($verIngresos): ?><a class="btn" href="ingresos.php">Ingresos</a><?php endif; ?>
-                <?php if ($verFacturas): ?><a class="btn" href="panel_facturas.php">Ver facturas</a><?php endif; ?>
-                <?php if ($verFiados): ?><a class="btn" href="fiados.php">Fiados</a><?php endif; ?>
-                <?php if ($verNegocios): ?><a class="btn gris" href="negocios.php">Gestionar negocios</a><?php endif; ?>
-                <?php if ($verUsuarios): ?><a class="btn gris" href="usuarios.php">Gestionar usuarios</a><?php endif; ?>
-            </div>
-        </div>
     </div>
     <?php pie_dashboard(); ?>
