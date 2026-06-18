@@ -61,6 +61,7 @@ web/
 │   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver CONTRATO.md
 │
 ├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos)
+├── negocio_panel.php    panel de análisis de un negocio (clic en "Estado por negocio")
 ├── panel_facturas.php   listado de facturas + filtros (la página principal de consulta)
 ├── factura.php          detalle de una factura (cabecera + productos + botón Ver PDF)
 ├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio

@@ -216,8 +216,8 @@ if (puede($usuario, 'herramientas')) {
         <h3 class="dash-titulo">Estado por negocio</h3>
         <div class="negocios-resumen">
             <?php foreach ($negocios as $n): $nid = (int)$n['id']; ?>
-            <div class="nr-card">
-                <h3><?= icono('negocios') ?> <?= h($n['nombre']) ?></h3>
+            <a class="nr-card" href="negocio_panel.php?id=<?= $nid ?>">
+                <h3><?= icono('negocios') ?> <?= h($n['nombre']) ?> <span class="nr-flecha">→</span></h3>
                 <div class="nr-metricas">
                     <?php if ($verIngresos): ?>
                     <div>
@@ -244,7 +244,7 @@ if (puede($usuario, 'herramientas')) {
                     </div>
                     <?php endif; ?>
                 </div>
-            </div>
+            </a>
             <?php endforeach; ?>
         </div>
         <?php endif; ?>

@@ -604,9 +604,14 @@ tr:hover td { background: #eef5ff; }
 .negocios-resumen { display: grid; gap: 14px; margin-bottom: 20px;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
 .nr-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
-  padding: 16px 18px; }
+  padding: 16px 18px; display: block; text-decoration: none; color: var(--texto);
+  transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; }
+.nr-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.10); transform: translateY(-2px);
+  border-color: var(--azul); }
 .nr-card h3 { margin: 0 0 14px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .nr-card h3 .ic { width: 18px; height: 18px; color: var(--azul); flex-shrink: 0; }
+.nr-flecha { margin-left: auto; color: var(--texto-tenue); font-size: 16px; }
+.nr-card:hover .nr-flecha { color: var(--azul); }
 .nr-metricas { display: flex; flex-wrap: wrap; gap: 12px 14px; }
 .nr-metricas > div { flex: 1 1 0; min-width: 88px; }
 /* En móvil: 2 columnas (Ventas/Compras arriba, Gastos/Balance abajo) */
@@ -633,6 +638,45 @@ tr:hover td { background: #eef5ff; }
   font: inherit; color: var(--texto); text-decoration: none; }
 .menu-pop .menu-item:hover { background: #f0f1f4; }
 .menu-pop form { margin: 0; }
+/* ===== Panel de análisis por negocio (negocio_panel.php) ===== */
+/* Período: chips rápidos + desplegable de fechas */
+.np-periodo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.np-chip { font-size: 13px; padding: 7px 14px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--borde); color: var(--texto-sec); text-decoration: none;
+  list-style: none; display: inline-block; }
+.np-chip::-webkit-details-marker { display: none; }
+.np-chip.activo { background: var(--azul); border-color: var(--azul); color: #fff; }
+.np-fechas { position: relative; }
+.np-fechas-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;
+  margin-top: 10px; padding: 14px; background: #fff; border: 1px solid var(--borde);
+  border-radius: 10px; }
+.np-fechas-form .campo { margin: 0; }
+/* Hero: resultado del período */
+.np-hero { background: #fff; border: 1px solid var(--borde); border-radius: 12px;
+  padding: 26px 28px; margin-bottom: 20px; display: flex; align-items: center;
+  justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.np-hero-lbl { font-size: 13px; color: var(--texto-sec); margin-bottom: 10px; }
+.np-hero-val { font-size: 40px; font-weight: 800; line-height: 1; }
+.np-hero-sub { font-size: 12.5px; color: var(--texto-tenue); margin-top: 8px; }
+.np-hero-side { display: flex; gap: 32px; flex-wrap: wrap; }
+.np-hero-side .hs-lbl { display: block; font-size: 12px; color: var(--texto-sec); margin-bottom: 3px; }
+.np-hero-side .hs-val { display: block; font-size: 19px; font-weight: 700; }
+/* KPIs con ícono y filo de color */
+.np-kpis { display: grid; gap: 14px; margin-bottom: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.np-kpi { background: #fff; border: 1px solid var(--borde); border-left: 4px solid var(--azul);
+  border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.np-kpi-lbl { font-size: 12.5px; color: var(--texto-sec); display: flex; align-items: center; gap: 7px; }
+.np-kpi-lbl .ic { width: 16px; height: 16px; flex-shrink: 0; }
+.np-kpi-val { font-size: 23px; font-weight: 800; line-height: 1.1; }
+.np-kpi.k-azul    { border-left-color: var(--azul); }
+.np-kpi.k-naranjo { border-left-color: #e67e22; }
+.np-kpi.k-rojo    { border-left-color: var(--rojo); }
+.np-kpi.k-verde   { border-left-color: var(--verde-ok); }
+.np-kpi.k-morado  { border-left-color: #8e44ad; }
+.np-kpi.k-gris    { border-left-color: var(--borde); }
+/* Íconos en los títulos de panel */
+.panel-titulo .ic { width: 17px; height: 17px; color: var(--azul); vertical-align: -3px; margin-right: 4px; }
 /* Frutas y Verduras: tarjetas de precio (móvil-primero) */
 .precios-grid { display: grid; gap: 12px; margin-bottom: 20px;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
@@ -863,10 +907,10 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
 .stat-card.t-verde   { border-top: 3px solid var(--verde-ok); }
 .stat-card.t-morado  { border-top: 3px solid #8e44ad; }
 .stat-card.t-naranjo { border-top: 3px solid #e67e22; }
-.stat-valor.valor-azul   { color: var(--azul); }      /* valores coloreados (Home / Ingresos) */
-.stat-valor.valor-verde  { color: var(--verde-ok); }
-.stat-valor.valor-naranjo{ color: #e67e22; }
-.stat-valor.valor-rojo   { color: var(--rojo); }
+.valor-azul   { color: var(--azul); }      /* valores coloreados (Home / Ingresos / paneles) */
+.valor-verde  { color: var(--verde-ok); }
+.valor-naranjo{ color: #e67e22; }
+.valor-rojo   { color: var(--rojo); }
 .stat-card.stat-centro { align-items: center; text-align: center; }
 /* Métrica destacada (la más importante del Home: Ventas del mes) */
 .stat-card.stat-destacado .stat-valor { font-size: 34px; }
@@ -888,9 +932,12 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
 /* Desglose por categoría: nombre + barra proporcional + monto */
 .cat-barras { display: flex; flex-direction: column; gap: 10px; }
 .cat-fila { display: grid; grid-template-columns: 140px 1fr auto; align-items: center; gap: 12px; }
-.cat-nombre { font-size: 13.5px; color: var(--texto-sec); }
+.cat-nombre { font-size: 13.5px; color: var(--texto-sec);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cat-barra { background: #f0f1f4; border-radius: 6px; height: 14px; overflow: hidden; }
 .cat-relleno { display: block; height: 100%; background: var(--rojo); border-radius: 6px; }
+.cat-relleno.cat-azul    { background: var(--azul); }
+.cat-relleno.cat-naranjo { background: #e67e22; }
 .cat-monto { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Etiqueta "fijo" junto a un gasto generado desde una plantilla */
 .mini-tag { display: inline-block; font-size: 10.5px; font-weight: 600; vertical-align: middle;
