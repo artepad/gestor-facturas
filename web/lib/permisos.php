@@ -9,9 +9,9 @@
  */
 
 // Matriz rol -> módulos a los que tiene acceso.
-// Módulos: 'facturas', 'fiados', 'ingresos', 'herramientas', 'negocios', 'usuarios'.
+// Módulos: 'facturas', 'fiados', 'ingresos', 'gastos', 'herramientas', 'negocios', 'usuarios'.
 const PERMISOS = [
-    'admin'    => ['facturas', 'fiados', 'ingresos', 'herramientas', 'negocios', 'usuarios'],
+    'admin'    => ['facturas', 'fiados', 'ingresos', 'gastos', 'herramientas', 'negocios', 'usuarios'],
     'vendedor' => ['facturas', 'fiados', 'herramientas'],
 ];
 

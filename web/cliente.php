@@ -138,8 +138,11 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
 <?php cabecera_dashboard($usuario, 'fiados', $nombreCompleto); ?>
 
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2><?= h($nombreCompleto) ?></h2>
+        <div class="cab-modulo modulo-morado">
+            <div class="cab-modulo-tit">
+                <span class="modulo-badge"><?= icono('fiados') ?></span>
+                <h2><?= h($nombreCompleto) ?></h2>
+            </div>
             <a class="btn gris" href="fiados.php">Volver</a>
         </div>
 

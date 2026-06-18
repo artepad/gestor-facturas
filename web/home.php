@@ -7,6 +7,7 @@
 
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
+require __DIR__ . '/lib/gastos.php';
 
 $usuario = exigir_login();
 $pdo = obtener_pdo();
@@ -14,6 +15,7 @@ $pdo = obtener_pdo();
 $verFacturas = puede($usuario, 'facturas');
 $verFiados   = puede($usuario, 'fiados');
 $verIngresos = puede($usuario, 'ingresos');
+$verGastos   = puede($usuario, 'gastos');
 $verNegocios = puede($usuario, 'negocios');
 $verUsuarios = puede($usuario, 'usuarios');
 
@@ -33,7 +35,7 @@ $mesNombre = $meses[(int)date('n')] . ' ' . date('Y');
 $ph = $ids ? implode(',', array_fill(0, count($ids), '?')) : '';
 
 // --- Métricas por negocio (este mes) ---
-$ventasNeg = []; $comprasNeg = []; $deudaNeg = [];
+$ventasNeg = []; $comprasNeg = []; $deudaNeg = []; $gastosNeg = [];
 if ($ids && $verIngresos) {
     $st = $pdo->prepare("SELECT negocio_id, COALESCE(SUM(ventas_totales),0) v
         FROM cortes WHERE negocio_id IN ($ph) AND DATE(cerrado_en) BETWEEN ? AND ?
@@ -57,12 +59,21 @@ if ($ids && $verFiados) {
     $st->execute($ids);
     foreach ($st as $r) $deudaNeg[(int)$r['negocio_id']] = (float)$r['d'];
 }
+$nGastosMes = 0;
+if ($ids && $verGastos) {
+    $gastosNeg = gastos_por_negocio($pdo, $ids, $inicioMes, $hoy);
+    $st = $pdo->prepare("SELECT COUNT(*) FROM gastos
+        WHERE negocio_id IN ($ph) AND fecha BETWEEN ? AND ?");
+    $st->execute([...$ids, $inicioMes, $hoy]);
+    $nGastosMes = (int)$st->fetchColumn();
+}
 
 // Totales (KPIs) derivados de los mapas por negocio
 $ventasMes    = array_sum($ventasNeg);
 $comprasMes   = array_sum(array_column($comprasNeg, 'm'));
 $nFacturasMes = array_sum(array_column($comprasNeg, 'n'));
 $deudaTotal   = array_sum($deudaNeg);
+$gastosMes    = array_sum($gastosNeg);
 
 // Ventas del mes anterior (para la comparativa de la tarjeta destacada)
 $ventasMesAnt = 0;
@@ -84,49 +95,90 @@ if ($ids && $verIngresos) {
     $porDia = $st->fetchAll();
 }
 
-// --- Requiere atención ---
-$facturasRevisar = 0; $correosError = 0; $nClientesDeuda = 0;
+// --- Requiere atención (desglosado por negocio) ---
+$nombreNeg = [];
+foreach ($negocios as $n) $nombreNeg[(int)$n['id']] = $n['nombre'];
+$multiNeg = $nNegocios > 1;
+
+// Facturas por revisar, por negocio
+$facturasRevisarNeg = [];
 if ($ids && $verFacturas) {
-    $st = $pdo->prepare("SELECT COUNT(*) FROM facturas
+    $st = $pdo->prepare("SELECT negocio_id, COUNT(*) n FROM facturas
         WHERE negocio_id IN ($ph) AND eliminada_en IS NULL
-          AND confianza IS NOT NULL AND confianza < 0.7");
+          AND confianza IS NOT NULL AND confianza < 0.7
+        GROUP BY negocio_id");
     $st->execute($ids);
-    $facturasRevisar = (int)$st->fetchColumn();
+    foreach ($st as $r) $facturasRevisarNeg[(int)$r['negocio_id']] = (int)$r['n'];
 }
+// Cortes sin procesar (suelen llegar sin negocio asignado: se deja agregado)
+$correosError = 0;
 if ($ids && $verIngresos) {
     $st = $pdo->prepare("SELECT COUNT(*) FROM correos_corte
         WHERE estado = 'error' AND (negocio_id IS NULL OR negocio_id IN ($ph))");
     $st->execute($ids);
     $correosError = (int)$st->fetchColumn();
 }
+// Clientes con deuda + monto por cobrar, por negocio
+$fiadosNeg = [];
 if ($ids && $verFiados) {
-    $st = $pdo->prepare("SELECT COUNT(*) FROM clientes c
-        WHERE c.negocio_id IN ($ph) AND c.activo = 1 AND
-            ((SELECT COALESCE(SUM(f.monto),0) FROM fiados f WHERE f.cliente_id = c.id)
-           - (SELECT COALESCE(SUM(a.monto),0) FROM abonos a WHERE a.cliente_id = c.id)) > 0");
+    $st = $pdo->prepare("SELECT t.negocio_id,
+            COUNT(*) n, COALESCE(SUM(t.saldo),0) monto
+        FROM (
+            SELECT c.id, c.negocio_id,
+                (SELECT COALESCE(SUM(f.monto),0) FROM fiados f WHERE f.cliente_id = c.id)
+              - (SELECT COALESCE(SUM(a.monto),0) FROM abonos a WHERE a.cliente_id = c.id) AS saldo
+            FROM clientes c WHERE c.negocio_id IN ($ph) AND c.activo = 1
+        ) t
+        WHERE t.saldo > 0
+        GROUP BY t.negocio_id");
     $st->execute($ids);
-    $nClientesDeuda = (int)$st->fetchColumn();
+    foreach ($st as $r) $fiadosNeg[(int)$r['negocio_id']] = ['n' => (int)$r['n'], 'monto' => (float)$r['monto']];
 }
-$alertas = [];
-if ($facturasRevisar > 0) $alertas[] = ['facturas', "$facturasRevisar factura(s) por revisar", 'panel_facturas.php'];
-if ($correosError > 0)    $alertas[] = ['ingresos', "$correosError corte(s) sin procesar", 'ingresos.php'];
-if ($nClientesDeuda > 0)  $alertas[] = ['fiados', "$nClientesDeuda cliente(s) con deuda", 'fiados.php'];
 
-// Número de ventas del día (suma de las transacciones de los cortes de hoy)
-$nVentasHoy = 0;
-if ($ids && $verIngresos) {
-    $st = $pdo->prepare("SELECT COALESCE(SUM(numero_ventas),0) FROM cortes
-        WHERE negocio_id IN ($ph) AND DATE(cerrado_en) = ?");
-    $st->execute([...$ids, $hoy]);
-    $nVentasHoy = (int)$st->fetchColumn();
+$alertas = [];
+foreach ($facturasRevisarNeg as $nid => $cnt) {
+    if ($cnt <= 0) continue;
+    $alertas[] = ['modulo' => 'facturas', 'color' => 'modulo-naranjo',
+        'titulo' => "$cnt factura(s) por revisar",
+        'desc'   => ($multiNeg ? $nombreNeg[$nid] . ' · ' : '') . 'Baja confianza; revísalas para confirmarlas.',
+        'link'   => 'panel_facturas.php'];
+}
+if ($correosError > 0) $alertas[] = [
+    'modulo' => 'ingresos', 'color' => 'modulo-azul',
+    'titulo' => "$correosError corte(s) sin procesar",
+    'desc'   => 'Llegaron por correo pero no se pudieron leer.',
+    'link'   => 'ingresos.php'];
+foreach ($fiadosNeg as $nid => $d) {
+    if ($d['n'] <= 0) continue;
+    $alertas[] = ['modulo' => 'fiados', 'color' => 'modulo-morado',
+        'titulo' => $d['n'] . ' cliente(s) con deuda',
+        'desc'   => ($multiNeg ? $nombreNeg[$nid] . ' · ' : '') . 'Por cobrar: ' . (clp($d['monto']) ?: '$0'),
+        'link'   => 'fiados.php'];
 }
 
 // --- KPIs (cada uno con el color de su valor) ---
 $kpis = [];
-if ($verIngresos) $kpis[] = ['Ventas del mes', clp($ventasMes) ?: '$0', 'color' => 'valor-verde', 'comp' => $varVentas];
-if ($verFacturas) $kpis[] = ['Compras del mes', clp($comprasMes) ?: '$0', 'color' => 'valor-naranjo', 'sub' => $nFacturasMes . ' factura(s)'];
-if ($verFiados)   $kpis[] = ['Por cobrar', clp($deudaTotal) ?: '$0', 'color' => 'valor-rojo', 'sub' => $nClientesDeuda . ' cliente(s)'];
-if ($verIngresos) $kpis[] = ['Número de ventas del día', number_format($nVentasHoy, 0, ',', '.'), 'sub' => 'ventas de hoy'];
+if ($verIngresos) $kpis[] = ['Ventas del mes', clp($ventasMes) ?: '$0', 'color' => 'valor-azul', 'borde' => 't-azul', 'destacado' => true, 'comp' => $varVentas, 'link' => 'ingresos.php'];
+if ($verGastos)   $kpis[] = ['Gastos del mes', clp($gastosMes) ?: '$0', 'color' => 'valor-rojo', 'borde' => 't-rojo', 'sub' => $nGastosMes . ' gasto(s)', 'link' => 'gastos.php'];
+if ($verFacturas) $kpis[] = ['Compras del mes', clp($comprasMes) ?: '$0', 'color' => 'valor-naranjo', 'borde' => 't-naranjo', 'sub' => $nFacturasMes . ' factura(s)', 'link' => 'panel_facturas.php'];
+if ($verIngresos && $verGastos) {
+    $balanceMes = $ventasMes - $comprasMes - $gastosMes;
+    $kpis[] = ['Balance del mes', clp($balanceMes) ?: '$0',
+               'color' => $balanceMes >= 0 ? 'valor-verde' : 'valor-rojo',
+               'borde' => $balanceMes >= 0 ? 't-verde' : 't-rojo',
+               'sub'   => 'ventas − compras − gastos'];
+}
+
+// --- Accesos directos a Herramientas (los 4 más usados, sin Base de Datos) ---
+$herramientas = [];
+if (puede($usuario, 'herramientas')) {
+    $herramientas = [
+        ['codigo-barras', 'Consultar Catálogo', 'herramienta_catalogo.php'],
+        ['calculadora',   'Contador de Caja',   'herramienta_caja.php'],
+        ['etiqueta',      'Gestor de Etiquetas', 'herramienta_etiquetas.php'],
+        ['oferta',        'Etiquetas de Ofertas', 'herramienta_ofertas.php'],
+    ];
+}
 ?>
 <?php cabecera_dashboard($usuario, 'home', 'Inicio'); ?>
     <div class="contenido">
@@ -137,8 +189,14 @@ if ($verIngresos) $kpis[] = ['Número de ventas del día', number_format($nVenta
 
         <?php if ($kpis): ?>
         <div class="ingresos-stats">
-            <?php foreach ($kpis as $k): ?>
-            <div class="stat-card">
+            <?php foreach ($kpis as $k):
+                $tag = !empty($k['link']) ? 'a' : 'div';
+                $clases = 'stat-card' . ($k['borde'] ?? '' ? ' ' . $k['borde'] : '')
+                        . (!empty($k['destacado']) ? ' stat-destacado' : '')
+                        . (!empty($k['link']) ? ' stat-link' : '');
+                $href = !empty($k['link']) ? ' href="' . h($k['link']) . '"' : '';
+            ?>
+            <<?= $tag . $href ?> class="<?= $clases ?>">
                 <span class="stat-label"><?= h($k[0]) ?></span>
                 <span class="stat-valor <?= h($k['color'] ?? '') ?>"><?= h($k[1]) ?></span>
                 <?php if (array_key_exists('comp', $k) && $k['comp'] !== null): ?>
@@ -149,7 +207,7 @@ if ($verIngresos) $kpis[] = ['Número de ventas del día', number_format($nVenta
                 <?php elseif (!empty($k['sub'])): ?>
                     <span class="stat-comp texto-tenue"><?= h($k['sub']) ?></span>
                 <?php endif; ?>
-            </div>
+            </<?= $tag ?>>
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
@@ -167,20 +225,38 @@ if ($verIngresos) $kpis[] = ['Número de ventas del día', number_format($nVenta
                         <span class="nr-m-valor"><?= clp($ventasNeg[$nid] ?? 0) ?: '$0' ?></span>
                     </div>
                     <?php endif; ?>
-                    <?php if ($verFiados): ?>
-                    <div>
-                        <span class="nr-m-label">Por cobrar</span>
-                        <span class="nr-m-valor <?= ($deudaNeg[$nid] ?? 0) > 0 ? 'saldo-deuda' : '' ?>"><?= clp($deudaNeg[$nid] ?? 0) ?: '$0' ?></span>
-                    </div>
-                    <?php endif; ?>
                     <?php if ($verFacturas): ?>
                     <div>
                         <span class="nr-m-label">Compras</span>
                         <span class="nr-m-valor"><?= clp($comprasNeg[$nid]['m'] ?? 0) ?: '$0' ?></span>
                     </div>
                     <?php endif; ?>
+                    <?php if ($verGastos): ?>
+                    <div>
+                        <span class="nr-m-label">Gastos</span>
+                        <span class="nr-m-valor valor-rojo"><?= clp($gastosNeg[$nid] ?? 0) ?: '$0' ?></span>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($verIngresos && $verGastos): $balNeg = ($ventasNeg[$nid] ?? 0) - ($comprasNeg[$nid]['m'] ?? 0) - ($gastosNeg[$nid] ?? 0); ?>
+                    <div>
+                        <span class="nr-m-label">Balance</span>
+                        <span class="nr-m-valor <?= $balNeg >= 0 ? 'valor-verde' : 'valor-rojo' ?>"><?= clp($balNeg) ?: '$0' ?></span>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($herramientas): ?>
+        <h3 class="dash-titulo">Herramientas</h3>
+        <div class="home-tools">
+            <?php foreach ($herramientas as $t): ?>
+            <a class="home-tool" href="<?= h($t[2]) ?>">
+                <span class="home-tool-ic"><?= icono($t[0]) ?></span>
+                <span class="home-tool-txt"><?= h($t[1]) ?></span>
+            </a>
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
@@ -219,9 +295,12 @@ if ($verIngresos) $kpis[] = ['Número de ventas del día', number_format($nVenta
                 <?php if (!$alertas): ?>
                     <div class="atencion-ok"><?= icono('reloj') ?> Todo al día, sin pendientes.</div>
                 <?php else: foreach ($alertas as $a): ?>
-                    <a class="atencion-item" href="<?= h($a[2]) ?>">
-                        <span class="atencion-ic"><?= icono($a[0]) ?></span>
-                        <span class="atencion-txt"><?= h($a[1]) ?></span>
+                    <a class="atencion-item <?= h($a['color']) ?>" href="<?= h($a['link']) ?>">
+                        <span class="atencion-ic"><?= icono($a['modulo']) ?></span>
+                        <span class="atencion-txt">
+                            <span class="atencion-tit"><?= h($a['titulo']) ?></span>
+                            <span class="atencion-desc"><?= h($a['desc']) ?></span>
+                        </span>
                         <span class="atencion-flecha">→</span>
                     </a>
                 <?php endforeach; endif; ?>

@@ -245,3 +245,55 @@ CREATE TABLE IF NOT EXISTS producto_cargas (
   FOREIGN KEY (cargado_por) REFERENCES usuarios(id)  ON DELETE SET NULL,
   INDEX idx_carga_negocio (negocio_id, cargado_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ===== Modulo Gastos (gastos operacionales del negocio: agua, luz, sueldos...) =====
+-- Web-nativo (la web es la fuente de verdad). Solo lo ve el administrador.
+
+-- Categorias editables de gasto (compartidas entre negocios; el dueno es uno).
+CREATE TABLE IF NOT EXISTS categorias_gasto (
+  id        INT AUTO_INCREMENT PRIMARY KEY,
+  nombre    VARCHAR(80) NOT NULL,
+  activo    TINYINT(1)  NOT NULL DEFAULT 1,           -- desactivar sin borrar
+  orden     INT         NOT NULL DEFAULT 0,           -- orden de aparicion
+  creado_en TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_categoria_gasto (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Plantillas de gasto fijo mensual (sueldos, arriendo...). Se "generan" como
+-- gastos reales una vez al mes con un clic (ver registrar_gastos_fijos).
+CREATE TABLE IF NOT EXISTS gastos_fijos (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id     INT NOT NULL,
+  categoria_id   INT NOT NULL,
+  descripcion    VARCHAR(255) NULL,
+  monto_estimado DECIMAL(14,2) NOT NULL,
+  dia_mes        TINYINT NULL,                        -- dia sugerido de pago (1-31)
+  activo         TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id)   REFERENCES negocios(id)        ON DELETE CASCADE,
+  FOREIGN KEY (categoria_id) REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
+  INDEX idx_gfijo_negocio (negocio_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Cada gasto real registrado.
+CREATE TABLE IF NOT EXISTS gastos (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id    INT NOT NULL,
+  categoria_id  INT NOT NULL,
+  fecha         DATE NOT NULL,
+  monto         DECIMAL(14,2) NOT NULL,
+  descripcion   VARCHAR(255) NULL,
+  gasto_fijo_id INT NULL,                             -- nacio de una plantilla fija
+  creado_por    INT NULL,
+  creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id)    REFERENCES negocios(id)         ON DELETE CASCADE,
+  FOREIGN KEY (categoria_id)  REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
+  FOREIGN KEY (gasto_fijo_id) REFERENCES gastos_fijos(id)     ON DELETE SET NULL,
+  FOREIGN KEY (creado_por)    REFERENCES usuarios(id)         ON DELETE SET NULL,
+  INDEX idx_gasto_negocio_fecha (negocio_id, fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Categorias base (idempotente: no duplica si ya existen).
+INSERT IGNORE INTO categorias_gasto (nombre, orden) VALUES
+  ('Agua', 10), ('Luz', 20), ('Gas', 30), ('Sueldos', 40),
+  ('Arriendo', 50), ('Internet/Teléfono', 60), ('Mantención', 70), ('Otros', 999);

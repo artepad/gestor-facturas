@@ -62,8 +62,11 @@ $viendo = $viendo ?? 'Todos los negocios';
 <?php cabecera_dashboard($usuario, 'fiados', 'Fiados'); ?>
 
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2>Fiados</h2>
+        <div class="cab-modulo modulo-morado">
+            <div class="cab-modulo-tit">
+                <span class="modulo-badge"><?= icono('fiados') ?></span>
+                <h2>Fiados</h2>
+            </div>
             <a class="btn" href="cliente_form.php">+ Nuevo cliente</a>
         </div>
 

@@ -54,6 +54,7 @@ web/
 │   ├── ui.php           layout compartido (sidebar, footer) + helpers de formato + íconos SVG
 │   ├── eleventa.php     parser del correo de corte de Eleventa + registrar_corte()
 │   ├── productos.php    carga del catálogo Excel de Eleventa + estado + búsqueda de productos
+│   ├── gastos.php       helpers del módulo Gastos (categorías, totales, generar fijos del mes)
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
@@ -72,6 +73,11 @@ web/
 ├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original)
 ├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron)
 ├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o ?clave=setup_key)
+│
+├── gastos.php           dashboard del módulo Gastos (resumen del período + desglose + tabla)
+├── gasto_form.php       crear/editar/eliminar un gasto
+├── categorias_gasto.php CRUD de categorías de gasto (editables)
+├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes)
 │
 ├── herramientas.php           tablero del módulo Herramientas (tarjetas)
 ├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso)
@@ -171,6 +177,27 @@ creador de etiquetas de oferta y la Base de Datos de Productos. Las páginas
 `*_imprimir.php` son "desnudas" (sin layout) para imprimir limpio vía
 `window.print()`.
 
+**Módulo Gastos** (web-nativo; gastos operacionales del negocio: agua, luz, gas,
+sueldos, arriendo, etc.). **Solo admin** (información financiera del dueño, igual
+que Ingresos). Acotado por `negocios_visibles()`. Helpers en `lib/gastos.php`.
+- **`categorias_gasto`** — catálogo editable de tipos de gasto (`nombre` UNIQUE,
+  `activo`, `orden`). **Compartido entre negocios** (el dueño es uno). Se siembra con
+  categorías base (Agua, Luz, Gas, Sueldos, Arriendo, Internet/Teléfono, Mantención,
+  Otros) vía `INSERT IGNORE`. CRUD en `categorias_gasto.php`; una categoría con
+  gastos/plantillas asociadas no se borra (se desactiva).
+- **`gastos`** — cada gasto real (`negocio_id`, `categoria_id` FK RESTRICT, `fecha`,
+  `monto`, `descripcion`, `gasto_fijo_id` opcional → marca que nació de una plantilla,
+  `creado_por`). CRUD en `gasto_form.php`.
+- **`gastos_fijos`** — plantillas de gasto mensual recurrente (`negocio_id`,
+  `categoria_id`, `descripcion`, `monto_estimado`, `dia_mes`, `activo`). CRUD en
+  `gastos_fijos.php`. **Recurrencia sin cron**: el botón "Generar gastos fijos del
+  mes" en `gastos.php` llama `registrar_gastos_fijos()`, que inserta un `gasto` por
+  plantilla activa que aún no tenga uno este mes (idempotente: no duplica).
+
+El **Home** muestra "Gastos del mes" (reemplazó a "Por cobrar") y suma los gastos en
+la grilla "Estado por negocio". El dashboard de Gastos compara ventas (de `cortes`)
+vs. gastos del período (balance).
+
 **Base de Datos de Productos** (catálogo por negocio que alimenta el gestor de
 etiquetas):
 - **`productos`** — catálogo de cada negocio (`negocio_id`, `codigo` único por
@@ -210,11 +237,11 @@ con la primera fila precargada.
 ## Roles y permisos (en `lib/permisos.php` + `lib/auth.php`)
 
 - **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
-  los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `negocios`,
-  `usuarios`). Roles actuales: **`admin`** (todos los módulos) y **`vendedor`**
-  (`facturas`, `fiados`). `usuarios.rol` es `VARCHAR(20)` (agregar roles no
-  requiere `ALTER`). El módulo `ingresos` es solo admin (diferencias de caja y
-  rendimiento por vendedor son información del dueño).
+  los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `gastos`,
+  `herramientas`, `negocios`, `usuarios`). Roles actuales: **`admin`** (todos los
+  módulos) y **`vendedor`** (`facturas`, `fiados`, `herramientas`). `usuarios.rol` es
+  `VARCHAR(20)` (agregar roles no requiere `ALTER`). Los módulos `ingresos` y `gastos`
+  son solo admin (información financiera del dueño).
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
   módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
   en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.

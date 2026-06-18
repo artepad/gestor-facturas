@@ -29,6 +29,8 @@ function icono(string $nombre, string $extra = ''): string
         'lapiz'    => '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
         'documento'=> '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
         'ingresos' => '<circle cx="12" cy="12" r="9"/><path d="M12 6.5v11"/><path d="M14.6 9c-.5-.9-1.5-1.3-2.6-1.3-1.4 0-2.6.8-2.6 2 0 1.2 1.1 1.7 2.6 2.1 1.5.4 2.6.9 2.6 2.1 0 1.2-1.2 2-2.6 2-1.1 0-2.1-.4-2.6-1.3"/>',
+        'gastos'   => '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+        'categorias'=> '<path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="1.6" fill="currentColor" stroke="none"/>',
         'herramientas' => '<path d="M14.5 5.5a3.6 3.6 0 0 0-4.8 4.8l-4.9 4.9a1.6 1.6 0 0 0 2.2 2.2l4.9-4.9a3.6 3.6 0 0 0 4.8-4.8l-2.4 2.4-2.2-2.2 2.4-2.4z"/>',
         'calculadora' => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h4"/>',
         'etiqueta'  => '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-6.2-6.2a2 2 0 0 1-.6-1.4V5a2 2 0 0 1 2-2h7.2a2 2 0 0 1 1.4.6l6.2 6.2a2 2 0 0 1 0 2.8z"/><circle cx="8.5" cy="8.5" r="1.5"/>',
@@ -113,6 +115,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
         <nav class="nav">
           <?= $item('home', 'Home', 'home.php') ?>
           <?php if (puede($usuario, 'ingresos')): ?><?= $item('ingresos', 'Ingresos', 'ingresos.php') ?><?php endif; ?>
+          <?php if (puede($usuario, 'gastos')): ?><?= $item('gastos', 'Gastos', 'gastos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'fiados')): ?><?= $item('fiados', 'Fiados', 'fiados.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'herramientas')): ?><?= $item('herramientas', 'Herramientas', 'herramientas.php') ?><?php endif; ?>

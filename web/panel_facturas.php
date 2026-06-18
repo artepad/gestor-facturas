@@ -81,8 +81,11 @@ if ($fNegocio && isset($nombrePorId[$fNegocio])) {
 <?php cabecera_dashboard($usuario, 'facturas', 'Facturas'); ?>
 
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2>Facturas</h2>
+        <div class="cab-modulo modulo-naranjo">
+            <div class="cab-modulo-tit">
+                <span class="modulo-badge"><?= icono('facturas') ?></span>
+                <h2>Facturas</h2>
+            </div>
             <span class="badge-negocio">
                 <?= icono('negocios') ?>
                 Viendo: <strong><?= htmlspecialchars($viendo) ?></strong>

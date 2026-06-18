@@ -138,8 +138,11 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
 ?>
 <?php cabecera_dashboard($usuario, 'ingresos', 'Ingresos'); ?>
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2>Ingresos</h2>
+        <div class="cab-modulo modulo-azul">
+            <div class="cab-modulo-tit">
+                <span class="modulo-badge"><?= icono('ingresos') ?></span>
+                <h2>Ingresos</h2>
+            </div>
             <a class="btn" href="corte_pegar.php">+ Registrar corte</a>
         </div>
 
@@ -226,7 +229,7 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
 
         <!-- Lo más importante: resumen del período -->
         <div class="ingresos-stats">
-            <div class="stat-card t-azul">
+            <div class="stat-card">
                 <span class="stat-label">Ventas del período</span>
                 <span class="stat-valor valor-azul"><?= clp($resumen['ventas']) ?: '$0' ?></span>
                 <?php if ($variacion !== null): ?>
@@ -236,19 +239,19 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
                 </span>
                 <?php endif; ?>
             </div>
-            <div class="stat-card t-verde">
+            <div class="stat-card">
                 <span class="stat-label">Efectivo</span>
                 <span class="stat-valor"><?= clp($resumen['efectivo']) ?: '$0' ?></span>
             </div>
-            <div class="stat-card t-morado">
+            <div class="stat-card">
                 <span class="stat-label">Tarjeta + transferencia</span>
                 <span class="stat-valor"><?= clp($resumen['tarjeta'] + $resumen['transferencia']) ?: '$0' ?></span>
             </div>
-            <div class="stat-card t-rojo">
+            <div class="stat-card">
                 <span class="stat-label">Salidas de caja</span>
                 <span class="stat-valor"><?= clp($resumen['salidas']) ?: '$0' ?></span>
             </div>
-            <div class="stat-card t-naranjo stat-centro">
+            <div class="stat-card stat-centro">
                 <span class="stat-label">Número de ventas</span>
                 <span class="stat-valor"><?= number_format((int)$resumen['nventas'], 0, ',', '.') ?></span>
             </div>

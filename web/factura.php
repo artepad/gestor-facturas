@@ -38,8 +38,11 @@ $titulo = 'Factura ' . ($f['numero_factura'] ?: $id);
 <?php cabecera_dashboard($usuario, 'facturas', $titulo); ?>
 
     <div class="contenido">
-        <div class="cab-acciones">
-            <h2>Factura <?= h($f['numero_factura'] ?: '—') ?></h2>
+        <div class="cab-modulo modulo-naranjo">
+            <div class="cab-modulo-tit">
+                <span class="modulo-badge"><?= icono('facturas') ?></span>
+                <h2>Factura <?= h($f['numero_factura'] ?: '—') ?></h2>
+            </div>
             <div class="filtros-botones">
                 <?php if ($f['ruta_pdf']): ?>
                     <a class="btn" href="ver_pdf.php?id=<?= (int)$f['id'] ?>" target="_blank">Ver PDF</a>

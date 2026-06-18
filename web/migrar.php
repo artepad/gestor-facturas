@@ -213,4 +213,57 @@ foreach ($tablasProductos as $nombre => $ddl) {
     echo "  ~ tabla $nombre lista\n";
 }
 
+echo "\n[Modulo Gastos]\n";
+// Crea las tablas del modulo Gastos si faltan (idempotente). Mismas
+// definiciones que lib/esquema.sql. Orden importa por las FKs.
+$tablasGastos = [
+    'categorias_gasto' => "CREATE TABLE IF NOT EXISTS categorias_gasto (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(80) NOT NULL,
+        activo TINYINT(1) NOT NULL DEFAULT 1,
+        orden INT NOT NULL DEFAULT 0,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_categoria_gasto (nombre)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'gastos_fijos' => "CREATE TABLE IF NOT EXISTS gastos_fijos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        categoria_id INT NOT NULL,
+        descripcion VARCHAR(255) NULL,
+        monto_estimado DECIMAL(14,2) NOT NULL,
+        dia_mes TINYINT NULL,
+        activo TINYINT(1) NOT NULL DEFAULT 1,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (categoria_id) REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
+        INDEX idx_gfijo_negocio (negocio_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'gastos' => "CREATE TABLE IF NOT EXISTS gastos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        categoria_id INT NOT NULL,
+        fecha DATE NOT NULL,
+        monto DECIMAL(14,2) NOT NULL,
+        descripcion VARCHAR(255) NULL,
+        gasto_fijo_id INT NULL,
+        creado_por INT NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (categoria_id) REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
+        FOREIGN KEY (gasto_fijo_id) REFERENCES gastos_fijos(id) ON DELETE SET NULL,
+        FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+        INDEX idx_gasto_negocio_fecha (negocio_id, fecha)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+];
+foreach ($tablasGastos as $nombre => $ddl) {
+    $pdo->exec($ddl);
+    echo "  ~ tabla $nombre lista\n";
+}
+$semilla = $pdo->exec(
+    "INSERT IGNORE INTO categorias_gasto (nombre, orden) VALUES
+       ('Agua', 10), ('Luz', 20), ('Gas', 30), ('Sueldos', 40),
+       ('Arriendo', 50), ('Internet/Teléfono', 60), ('Mantención', 70), ('Otros', 999)"
+);
+echo "  ~ categorias base sembradas (nuevas: $semilla)\n";
+
 echo "\nListo. Migraciones aplicadas.\n";

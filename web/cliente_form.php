@@ -74,8 +74,11 @@ $titulo = $id ? 'Editar cliente' : 'Nuevo cliente';
 
     <div class="contenido">
         <div class="form-pagina form-pagina-ancha">
-            <div class="cab-acciones">
-                <h2><?= $titulo ?></h2>
+            <div class="cab-modulo modulo-morado">
+                <div class="cab-modulo-tit">
+                    <span class="modulo-badge"><?= icono('fiados') ?></span>
+                    <h2><?= $titulo ?></h2>
+                </div>
                 <a class="btn gris" href="<?= $id ? 'cliente.php?id=' . $id : 'fiados.php' ?>">Volver</a>
             </div>
             <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
