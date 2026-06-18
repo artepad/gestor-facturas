@@ -98,13 +98,18 @@ $maxCat = $porCategoria ? max(array_map(fn($c) => (float)$c['total'], $porCatego
             </div>
             <div class="acciones-rapidas">
                 <a class="btn" href="gasto_form.php">+ Registrar gasto</a>
-                <form method="post" class="inline-form"
-                      onsubmit="return confirm('¿Generar los gastos fijos de este mes? No se duplican los ya creados.')">
-                    <input type="hidden" name="accion" value="generar_fijos">
-                    <button class="btn gris" type="submit">Generar gastos fijos del mes</button>
-                </form>
-                <a class="btn gris" href="gastos_fijos.php">Gastos fijos</a>
-                <a class="btn gris" href="categorias_gasto.php">Categorías</a>
+                <details class="menu-acciones">
+                    <summary class="btn gris">Más ▾</summary>
+                    <div class="menu-pop">
+                        <form method="post"
+                              onsubmit="return confirm('¿Generar los gastos fijos de este mes? No se duplican los ya creados.')">
+                            <input type="hidden" name="accion" value="generar_fijos">
+                            <button class="menu-item" type="submit">Generar gastos fijos del mes</button>
+                        </form>
+                        <a class="menu-item" href="gastos_fijos.php">Gastos fijos</a>
+                        <a class="menu-item" href="categorias_gasto.php">Categorías</a>
+                    </div>
+                </details>
             </div>
         </div>
 

@@ -297,3 +297,21 @@ CREATE TABLE IF NOT EXISTS gastos (
 INSERT IGNORE INTO categorias_gasto (nombre, orden) VALUES
   ('Agua', 10), ('Luz', 20), ('Gas', 30), ('Sueldos', 40),
   ('Arriendo', 50), ('Internet/Teléfono', 60), ('Mantención', 70), ('Otros', 999);
+
+-- ===== Modulo Frutas y Verduras (lista de precios compartida) =====
+-- Web-nativo. Una sola lista para ambos negocios (sin negocio_id): la compra de
+-- frutas/verduras la hace una persona para todos. Editan admin y vendedores;
+-- todos consultan. actualizado_en se refresca solo al editar (fecha vigente).
+CREATE TABLE IF NOT EXISTS precios_fv (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  nombre          VARCHAR(120) NOT NULL,
+  precio          DECIMAL(14,2) NOT NULL,
+  unidad          VARCHAR(20) NOT NULL DEFAULT 'kilo',   -- kilo, unidad, bandeja...
+  observacion     VARCHAR(255) NULL,
+  activo          TINYINT(1) NOT NULL DEFAULT 1,
+  actualizado_por INT NULL,
+  actualizado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  creado_en       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+  INDEX idx_precio_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -79,6 +79,9 @@ web/
 ├── categorias_gasto.php CRUD de categorías de gasto (editables)
 ├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes)
 │
+├── precios.php          Frutas y Verduras: lista de precios compartida (consulta + buscador)
+├── precio_form.php      crear/editar/eliminar un producto de la lista de precios
+│
 ├── herramientas.php           tablero del módulo Herramientas (tarjetas)
 ├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso)
 ├── herramienta_etiquetas.php  gestor de etiquetas de precio (+ buscador desde el catálogo)
@@ -198,6 +201,19 @@ El **Home** muestra "Gastos del mes" (reemplazó a "Por cobrar") y suma los gast
 la grilla "Estado por negocio". El dashboard de Gastos compara ventas (de `cortes`)
 vs. gastos del período (balance).
 
+**Módulo Frutas y Verduras** (web-nativo; lista de precios **compartida** entre
+todos los negocios — la compra la hace una sola persona para ambos). **Editan admin
+y vendedores** (`'precios'` en `PERMISOS` para los dos roles); todas las vendedoras
+consultan. Pensado para el celular: `precios.php` muestra tarjetas grandes (nombre,
+precio + unidad, fecha de actualización, observación) con buscador por nombre;
+`precio_form.php` crea/edita/elimina (nombre, precio en texto chileno con
+`parsear_monto`, `unidad` de un set fijo, observación, `activo`).
+- **`precios_fv`** — `nombre`, `precio DECIMAL(14,2)`, `unidad` (kilo/unidad/
+  bandeja…), `observacion`, `activo`, `actualizado_por` (FK→usuarios),
+  `actualizado_en TIMESTAMP ... ON UPDATE CURRENT_TIMESTAMP` (fecha vigente
+  automática). **Sin `negocio_id`**: es una sola lista para todos (como
+  `categorias_gasto`). Identidad visual: verde (`modulo-verde`).
+
 **Base de Datos de Productos** (catálogo por negocio que alimenta el gestor de
 etiquetas):
 - **`productos`** — catálogo de cada negocio (`negocio_id`, `codigo` único por
@@ -238,10 +254,11 @@ con la primera fila precargada.
 
 - **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
   los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `gastos`,
-  `herramientas`, `negocios`, `usuarios`). Roles actuales: **`admin`** (todos los
-  módulos) y **`vendedor`** (`facturas`, `fiados`, `herramientas`). `usuarios.rol` es
-  `VARCHAR(20)` (agregar roles no requiere `ALTER`). Los módulos `ingresos` y `gastos`
-  son solo admin (información financiera del dueño).
+  `precios`, `herramientas`, `negocios`, `usuarios`). Roles actuales: **`admin`**
+  (todos los módulos) y **`vendedor`** (`facturas`, `fiados`, `precios`,
+  `herramientas`). `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere
+  `ALTER`). Los módulos `ingresos` y `gastos` son solo admin (información financiera
+  del dueño); `precios` (Frutas y Verduras) lo usan admin y vendedores.
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
   módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
   en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.

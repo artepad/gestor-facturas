@@ -9,10 +9,10 @@
  */
 
 // Matriz rol -> módulos a los que tiene acceso.
-// Módulos: 'facturas', 'fiados', 'ingresos', 'gastos', 'herramientas', 'negocios', 'usuarios'.
+// Módulos: 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'.
 const PERMISOS = [
-    'admin'    => ['facturas', 'fiados', 'ingresos', 'gastos', 'herramientas', 'negocios', 'usuarios'],
-    'vendedor' => ['facturas', 'fiados', 'herramientas'],
+    'admin'    => ['facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'],
+    'vendedor' => ['facturas', 'fiados', 'precios', 'herramientas'],
 ];
 
 // Etiquetas legibles de los roles (orden = orden en los formularios).

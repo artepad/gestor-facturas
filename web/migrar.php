@@ -266,4 +266,21 @@ $semilla = $pdo->exec(
 );
 echo "  ~ categorias base sembradas (nuevas: $semilla)\n";
 
+echo "\n[Modulo Frutas y Verduras]\n";
+// Lista de precios compartida (sin negocio_id). Idempotente.
+$pdo->exec("CREATE TABLE IF NOT EXISTS precios_fv (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(120) NOT NULL,
+    precio DECIMAL(14,2) NOT NULL,
+    unidad VARCHAR(20) NOT NULL DEFAULT 'kilo',
+    observacion VARCHAR(255) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    actualizado_por INT NULL,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+    INDEX idx_precio_nombre (nombre)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla precios_fv lista\n";
+
 echo "\nListo. Migraciones aplicadas.\n";
