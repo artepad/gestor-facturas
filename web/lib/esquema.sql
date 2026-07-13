@@ -127,6 +127,26 @@ CREATE TABLE IF NOT EXISTS abonos (
   INDEX idx_abono_cliente (cliente_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ===== Auditoria (rastro de acciones sensibles de los modulos) =====
+-- Guarda snapshot del usuario (nombre + rol) para que el registro siga siendo
+-- legible aunque el usuario se elimine. cliente_id es un entero suelto (sin FK):
+-- si el cliente se borra, la fila de auditoria se conserva con su descripcion.
+CREATE TABLE IF NOT EXISTS auditoria (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id     INT NULL,
+  usuario_nombre VARCHAR(120) NULL,
+  rol            VARCHAR(20) NULL,
+  modulo         VARCHAR(30) NOT NULL,
+  accion         VARCHAR(40) NOT NULL,
+  cliente_id     INT NULL,
+  descripcion    VARCHAR(255) NULL,
+  detalle        TEXT NULL,
+  creado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  INDEX idx_aud_modulo (modulo, creado_en),
+  INDEX idx_aud_cliente (cliente_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ===== Modulo Ingresos (cortes de caja que envia Eleventa por correo) =====
 
 -- Correo crudo recibido (auditoria + permite reprocesar si cambia el parser).

@@ -608,6 +608,26 @@ tr:hover td { background: #eef5ff; }
 .stat-valor { font-size: 30px; font-weight: 700; }
 .acciones-rapidas { display: flex; gap: 10px; flex-wrap: wrap; }
 .bloque-sep { margin-top: 20px; }
+/* ===== Estado de cuenta (PDF) en la ficha del cliente ===== */
+.ec-intro { font-size: 12.5px; color: var(--texto-sec); margin: 0 0 14px; }
+.ec-opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.ec-opcion { display: flex; flex-direction: column; gap: 2px; text-decoration: none;
+  background: #fff; border: 1.5px solid var(--borde); border-radius: 12px;
+  padding: 12px 14px; color: var(--texto); transition: border-color .15s, box-shadow .15s, transform .15s; }
+.ec-opcion:hover { border-color: #8e44ad; box-shadow: 0 3px 10px rgba(142,68,173,.14); transform: translateY(-1px); }
+.ec-opcion .ec-tit { font-weight: 700; font-size: 14px; }
+.ec-opcion .ec-sub { font-size: 11.5px; color: var(--texto-sec); }
+.ec-opcion.ec-destacada { border-color: #8e44ad; background: rgba(142,68,173,.06); }
+.ec-opcion.ec-destacada .ec-tit { color: #8e44ad; }
+/* Rango personalizado, colapsable */
+.ec-rango { margin-top: 12px; }
+.ec-rango > summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; color: #8e44ad; list-style: none; padding: 4px 0; }
+.ec-rango > summary::-webkit-details-marker { display: none; }
+.ec-rango > summary::before { content: '+'; font-weight: 700; }
+.ec-rango[open] > summary::before { content: '−'; }
+.form-rango { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 10px; }
+.form-rango .campo { margin-bottom: 0; }
 
 /* ===== Tablero de inicio (home) ===== */
 .saludo-cab { margin-bottom: 20px; }
@@ -874,6 +894,10 @@ details.bloque[open] > summary { border-bottom: 1px solid var(--borde); }
    (evita que los montos queden empujados muy a la derecha). */
 .tabla-mov th, .tabla-mov td { white-space: nowrap; }
 .tabla-mov .col-detalle { white-space: normal; width: 99%; }
+/* Fecha compacta: día-mes arriba, año pequeño debajo */
+.tabla-mov .fecha-col { line-height: 1.15; }
+.fc-dm { display: block; font-weight: 600; }
+.fc-anio { display: block; font-size: 11px; color: var(--texto-sec); }
 
 /* ===== Módulo Ingresos (cortes de Eleventa) ===== */
 /* Comparativa del período en las tarjetas resumen */

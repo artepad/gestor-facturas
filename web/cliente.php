@@ -7,9 +7,14 @@
 
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
+require __DIR__ . '/lib/auditoria.php';
 
 $usuario = exigir_permiso('fiados');
 $pdo = obtener_pdo();
+
+// Solo el administrador puede editar/eliminar movimientos o eliminar clientes.
+// El vendedor únicamente registra; si se equivoca, pide al admin que corrija.
+$esAdmin = ($usuario['rol'] ?? '') === 'admin';
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $st = $pdo->prepare(
@@ -30,6 +35,15 @@ $accionError = '';   // qué formulario falló (para dejarlo abierto)
 // --- Acciones POST ---
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $accion = $_POST['accion'] ?? '';
+    $nombreCliente = trim($cliente['nombre'] . ' ' . $cliente['apellido']);
+
+    // Editar/eliminar son solo para admin: un vendedor no puede llegar aquí por
+    // la UI, pero igual se bloquea en el backend (defensa en profundidad).
+    $accionesAdmin = ['editar_fiado', 'editar_abono', 'eliminar_fiado', 'eliminar_abono', 'eliminar_cliente'];
+    if (in_array($accion, $accionesAdmin, true) && !$esAdmin) {
+        header('Location: cliente.php?id=' . $id);
+        exit;
+    }
 
     if (in_array($accion, ['nuevo_fiado', 'nuevo_abono', 'editar_fiado', 'editar_abono'], true)) {
         $accionError = $accion;
@@ -47,34 +61,60 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 case 'nuevo_fiado':
                     $pdo->prepare("INSERT INTO fiados (cliente_id, fecha, monto, descripcion) VALUES (?,?,?,?)")
                         ->execute([$id, $fecha, $monto, $texto]);
+                    registrar_auditoria($pdo, $usuario, 'fiados', 'crear_fiado', $id,
+                        "Registró fiado de " . clp($monto) . " a $nombreCliente" . ($texto ? " ($texto)" : ''));
                     break;
                 case 'nuevo_abono':
                     $pdo->prepare("INSERT INTO abonos (cliente_id, fecha, monto, nota) VALUES (?,?,?,?)")
                         ->execute([$id, $fecha, $monto, $texto]);
+                    registrar_auditoria($pdo, $usuario, 'fiados', 'crear_abono', $id,
+                        "Registró abono de " . clp($monto) . " de $nombreCliente" . ($texto ? " ($texto)" : ''));
                     break;
                 case 'editar_fiado':  // solo actualiza si el fiado es de este cliente
+                    $ant = $pdo->prepare("SELECT fecha, monto, descripcion FROM fiados WHERE id=? AND cliente_id=?");
+                    $ant->execute([$refId, $id]); $ant = $ant->fetch();
                     $pdo->prepare("UPDATE fiados SET fecha=?, monto=?, descripcion=? WHERE id=? AND cliente_id=?")
                         ->execute([$fecha, $monto, $texto, $refId, $id]);
+                    if ($ant) registrar_auditoria($pdo, $usuario, 'fiados', 'editar_fiado', $id,
+                        "Editó fiado de $nombreCliente (" . clp((float)$ant['monto']) . " → " . clp($monto) . ")",
+                        json_encode(['antes' => $ant, 'despues' => ['fecha' => $fecha, 'monto' => $monto, 'descripcion' => $texto]], JSON_UNESCAPED_UNICODE));
                     break;
                 case 'editar_abono':
+                    $ant = $pdo->prepare("SELECT fecha, monto, nota FROM abonos WHERE id=? AND cliente_id=?");
+                    $ant->execute([$refId, $id]); $ant = $ant->fetch();
                     $pdo->prepare("UPDATE abonos SET fecha=?, monto=?, nota=? WHERE id=? AND cliente_id=?")
                         ->execute([$fecha, $monto, $texto, $refId, $id]);
+                    if ($ant) registrar_auditoria($pdo, $usuario, 'fiados', 'editar_abono', $id,
+                        "Editó abono de $nombreCliente (" . clp((float)$ant['monto']) . " → " . clp($monto) . ")",
+                        json_encode(['antes' => $ant, 'despues' => ['fecha' => $fecha, 'monto' => $monto, 'nota' => $texto]], JSON_UNESCAPED_UNICODE));
                     break;
             }
             header('Location: cliente.php?id=' . $id);
             exit;
         }
     } elseif ($accion === 'eliminar_fiado') {
-        $pdo->prepare("DELETE FROM fiados WHERE id=? AND cliente_id=?")
-            ->execute([(int)($_POST['ref_id'] ?? 0), $id]);
+        $refId = (int)($_POST['ref_id'] ?? 0);
+        $reg = $pdo->prepare("SELECT fecha, monto, descripcion FROM fiados WHERE id=? AND cliente_id=?");
+        $reg->execute([$refId, $id]); $reg = $reg->fetch();
+        $pdo->prepare("DELETE FROM fiados WHERE id=? AND cliente_id=?")->execute([$refId, $id]);
+        if ($reg) registrar_auditoria($pdo, $usuario, 'fiados', 'eliminar_fiado', $id,
+            "Eliminó fiado de " . clp((float)$reg['monto']) . " de $nombreCliente (" . fecha_dmy($reg['fecha']) . ")",
+            json_encode($reg, JSON_UNESCAPED_UNICODE));
         header('Location: cliente.php?id=' . $id);
         exit;
     } elseif ($accion === 'eliminar_abono') {
-        $pdo->prepare("DELETE FROM abonos WHERE id=? AND cliente_id=?")
-            ->execute([(int)($_POST['ref_id'] ?? 0), $id]);
+        $refId = (int)($_POST['ref_id'] ?? 0);
+        $reg = $pdo->prepare("SELECT fecha, monto, nota FROM abonos WHERE id=? AND cliente_id=?");
+        $reg->execute([$refId, $id]); $reg = $reg->fetch();
+        $pdo->prepare("DELETE FROM abonos WHERE id=? AND cliente_id=?")->execute([$refId, $id]);
+        if ($reg) registrar_auditoria($pdo, $usuario, 'fiados', 'eliminar_abono', $id,
+            "Eliminó abono de " . clp((float)$reg['monto']) . " de $nombreCliente (" . fecha_dmy($reg['fecha']) . ")",
+            json_encode($reg, JSON_UNESCAPED_UNICODE));
         header('Location: cliente.php?id=' . $id);
         exit;
     } elseif ($accion === 'eliminar_cliente') {
+        registrar_auditoria($pdo, $usuario, 'fiados', 'eliminar_cliente', $id,
+            "Eliminó al cliente $nombreCliente y todo su historial de fiados/abonos");
         $pdo->prepare("DELETE FROM clientes WHERE id=?")->execute([$id]);  // cascade borra historial
         header('Location: fiados.php');
         exit;
@@ -109,6 +149,10 @@ $nombreCompleto = trim($cliente['nombre'] . ' ' . $cliente['apellido']);
 $hoy = date('Y-m-d');
 $claseSaldo = $saldo > 0 ? 'saldo-deuda' : 'saldo-ok';
 
+// Rangos precalculados para el estado de cuenta (PDF)
+$inicioSemana = date('Y-m-d', strtotime('-6 days'));  // últimos 7 días (hoy incluido)
+$inicioMes    = date('Y-m-01');
+
 // ¿Estamos editando un movimiento? (por enlace GET, o por un POST que falló)
 $editFiado = null;
 $editAbono = null;
@@ -123,13 +167,13 @@ $cargarEdit = function (string $tabla, int $mid, string $campoTexto) use ($pdo, 
 if ($accionError === 'editar_fiado' && $error !== '') {
     $editFiado = ['id' => (int)($_POST['ref_id'] ?? 0), 'fecha' => $_POST['fecha'] ?? $hoy,
                   'monto' => $_POST['monto'] ?? '', 'texto' => $_POST['texto'] ?? ''];
-} elseif (isset($_GET['editar_fiado'])) {
+} elseif ($esAdmin && isset($_GET['editar_fiado'])) {
     $editFiado = $cargarEdit('fiados', (int)$_GET['editar_fiado'], 'descripcion');
 }
 if ($accionError === 'editar_abono' && $error !== '') {
     $editAbono = ['id' => (int)($_POST['ref_id'] ?? 0), 'fecha' => $_POST['fecha'] ?? $hoy,
                   'monto' => $_POST['monto'] ?? '', 'texto' => $_POST['texto'] ?? ''];
-} elseif (isset($_GET['editar_abono'])) {
+} elseif ($esAdmin && isset($_GET['editar_abono'])) {
     $editAbono = $cargarEdit('abonos', (int)$_GET['editar_abono'], 'nota');
 }
 $abrirFiado = $editFiado !== null || $accionError === 'nuevo_fiado';
@@ -194,6 +238,39 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
             </div>
         </div>
 
+        <!-- Estado de cuenta (PDF): distintos períodos, se abre en pestaña aparte -->
+        <details class="bloque">
+            <summary>Estado de cuenta (PDF)</summary>
+            <div class="bloque-cuerpo">
+                <p class="ec-intro">Documento imprimible para entregar o enviar por WhatsApp o correo.</p>
+                <div class="ec-opciones">
+                    <a class="ec-opcion" target="_blank"
+                       href="estado_cuenta_imprimir.php?id=<?= (int)$id ?>&amp;desde=<?= $inicioSemana ?>&amp;hasta=<?= $hoy ?>">
+                        <span class="ec-tit">Semana</span><span class="ec-sub">Últimos 7 días</span>
+                    </a>
+                    <a class="ec-opcion" target="_blank"
+                       href="estado_cuenta_imprimir.php?id=<?= (int)$id ?>&amp;desde=<?= $inicioMes ?>&amp;hasta=<?= $hoy ?>">
+                        <span class="ec-tit">Mes actual</span><span class="ec-sub">Desde el día 1</span>
+                    </a>
+                    <a class="ec-opcion ec-destacada" target="_blank"
+                       href="estado_cuenta_imprimir.php?id=<?= (int)$id ?>">
+                        <span class="ec-tit">Historial completo</span><span class="ec-sub">Todos los movimientos</span>
+                    </a>
+                </div>
+                <details class="ec-rango">
+                    <summary>Otro rango de fechas</summary>
+                    <form method="get" action="estado_cuenta_imprimir.php" target="_blank" class="form-rango">
+                        <input type="hidden" name="id" value="<?= (int)$id ?>">
+                        <div class="campo"><label>Desde</label>
+                            <input type="date" name="desde" value="<?= $inicioMes ?>" required></div>
+                        <div class="campo"><label>Hasta</label>
+                            <input type="date" name="hasta" value="<?= $hoy ?>" required></div>
+                        <button class="btn gris" type="submit">Generar</button>
+                    </form>
+                </details>
+            </div>
+        </details>
+
         <!-- Datos de contacto (desplegable) -->
         <details class="bloque">
             <summary>Datos de contacto</summary>
@@ -206,11 +283,13 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
                 </div>
                 <div class="acciones-rapidas centrado" style="margin-top:16px">
                     <a class="btn gris" href="cliente_form.php?id=<?= (int)$id ?>">Editar cliente</a>
+                    <?php if ($esAdmin): ?>
                     <form method="post" class="inline-form"
                           onsubmit="return confirm('¿Eliminar este cliente y TODO su historial? Esta acción no se puede deshacer.')">
                         <input type="hidden" name="accion" value="eliminar_cliente">
                         <button class="btn rojo" type="submit">Eliminar cliente</button>
                     </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </details>
@@ -220,17 +299,20 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
                 <table class="tabla-mov">
                     <thead><tr>
                         <th>Fecha</th><th>Tipo</th><th class="col-detalle">Detalle</th>
-                        <th class="monto-col">Monto</th><th class="col-accion">Acción</th>
+                        <th class="monto-col">Monto</th>
+                        <?php if ($esAdmin): ?><th class="col-accion">Acción</th><?php endif; ?>
                     </tr></thead>
                     <tbody>
                     <?php if (!$movs): ?>
-                        <tr><td class="vacio" colspan="5">Sin movimientos. Registra un fiado o un abono arriba.</td></tr>
+                        <tr><td class="vacio" colspan="<?= $esAdmin ? 5 : 4 ?>">Sin movimientos. Registra un fiado o un abono arriba.</td></tr>
                     <?php else: foreach ($movs as $m): $esFiado = $m['tipo'] === 'fiado'; ?>
+                        <?php $anio = substr($m['fecha'], 0, 4); $diaMes = substr(fecha_dmy($m['fecha']), 0, 5); ?>
                         <tr>
-                            <td class="nowrap"><?= h(fecha_dmy($m['fecha'])) ?></td>
+                            <td class="fecha-col"><span class="fc-dm"><?= h($diaMes) ?></span><span class="fc-anio"><?= h($anio) ?></span></td>
                             <td><span class="mov-badge <?= $esFiado ? 'mov-fiado' : 'mov-abono' ?>"><?= $esFiado ? 'Fiado' : 'Abono' ?></span></td>
                             <td class="col-detalle"><?= h($m['texto']) ?: '—' ?></td>
                             <td class="monto-col <?= $esFiado ? 'saldo-deuda' : 'saldo-ok' ?>"><?= ($esFiado ? '+' : '−') . clp($m['monto']) ?></td>
+                            <?php if ($esAdmin): ?>
                             <td class="col-accion">
                                 <span class="acciones-fila">
                                     <a class="btn-icono" title="Editar" aria-label="Editar"
@@ -242,6 +324,7 @@ $abrirAbono = $editAbono !== null || $accionError === 'nuevo_abono';
                                     </form>
                                 </span>
                             </td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; endif; ?>
                     </tbody>

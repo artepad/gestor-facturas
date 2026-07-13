@@ -8,6 +8,7 @@
 
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
+require __DIR__ . '/lib/auditoria.php';
 
 $usuario = exigir_permiso('fiados');
 $pdo = obtener_pdo();
@@ -48,12 +49,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif ($datos['nombre'] === '') {
         $error = 'El nombre del cliente es obligatorio.';
     } else {
+        $nombreCliente = trim($datos['nombre'] . ' ' . $datos['apellido']);
         if ($id) {
             // Al editar NO se permite cambiar de negocio (evita fugas entre negocios)
             $pdo->prepare(
                 "UPDATE clientes SET nombre=?, apellido=?, telefono=?, direccion=?, correo=? WHERE id=?"
             )->execute([$datos['nombre'], $datos['apellido'], $datos['telefono'],
                         $datos['direccion'], $datos['correo'], $id]);
+            registrar_auditoria($pdo, $usuario, 'fiados', 'editar_cliente', $id,
+                "Editó los datos del cliente $nombreCliente");
         } else {
             $pdo->prepare(
                 "INSERT INTO clientes (negocio_id, nombre, apellido, telefono, direccion, correo)
@@ -61,6 +65,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             )->execute([$datos['negocio_id'], $datos['nombre'], $datos['apellido'],
                         $datos['telefono'], $datos['direccion'], $datos['correo']]);
             $id = (int)$pdo->lastInsertId();
+            registrar_auditoria($pdo, $usuario, 'fiados', 'crear_cliente', $id,
+                "Creó al cliente $nombreCliente");
         }
         header('Location: cliente.php?id=' . $id);
         exit;

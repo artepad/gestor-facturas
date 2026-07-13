@@ -144,6 +144,25 @@ fuente de verdad):
   `nota`). **Cuenta corriente**: saldo del cliente = Σ`fiados.monto` − Σ`abonos.monto`
   (calculado, no almacenado). Acceso por permiso de módulo `fiados`, acotado por
   `negocios_visibles()`.
+- **Registrar vs. corregir (regla de rol)**: en `cliente.php` el **vendedor solo
+  puede crear** fiados y abonos. **Editar/eliminar** fiados o abonos y **eliminar
+  clientes** son **solo admin** (`$esAdmin = rol === 'admin'`): se ocultan en la UI
+  y se bloquean en el backend (los enlaces GET de edición y los POST admin-only
+  redirigen si no es admin). Un vendedor que se equivoca le pide al admin que corrija.
+- **`estado_cuenta_imprimir.php`** — estado de cuenta del cliente en PDF (página
+  "desnuda" imprimible, patrón `*_imprimir.php`): una tabla cronológica de
+  movimientos con saldo acumulado + resumen (total compras / abonos / saldo). Se
+  lanza desde `cliente.php` con períodos Semana / Mes actual / Historial / rango.
+
+**Auditoría** (`lib/auditoria.php` + tabla `auditoria`): rastro simple de acciones
+sensibles. `registrar_auditoria($pdo, $usuario, $modulo, $accion, $clienteId,
+$descripcion, $detalle?)` guarda un *snapshot* del usuario (`usuario_nombre`, `rol`
+además del `usuario_id` con FK SET NULL) para que el registro siga siendo legible si
+el usuario se elimina; `cliente_id` es un entero suelto (sin FK) para que la fila
+sobreviva al borrado del cliente. Nunca rompe la operación principal (si el INSERT
+falla, va al `error_log` y sigue). Hoy lo usan `cliente.php`/`cliente_form.php` para
+todas las acciones del módulo Fiados (crear/editar/eliminar fiado, abono y cliente).
+Sin página de consulta todavía (se puede agregar una vista admin a futuro).
 
 **Módulo Ingresos** (web-nativo; los datos llegan por el correo de corte de
 Eleventa, NO por la sincronización de facturas):

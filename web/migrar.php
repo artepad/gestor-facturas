@@ -82,6 +82,25 @@ foreach ($tablasFiados as $nombre => $ddl) {
     echo "  ~ tabla $nombre lista\n";
 }
 
+echo "\n[Auditoria]\n";
+// Rastro de acciones sensibles (idempotente). Igual que lib/esquema.sql.
+$pdo->exec("CREATE TABLE IF NOT EXISTS auditoria (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NULL,
+    usuario_nombre VARCHAR(120) NULL,
+    rol VARCHAR(20) NULL,
+    modulo VARCHAR(30) NOT NULL,
+    accion VARCHAR(40) NOT NULL,
+    cliente_id INT NULL,
+    descripcion VARCHAR(255) NULL,
+    detalle TEXT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+    INDEX idx_aud_modulo (modulo, creado_en),
+    INDEX idx_aud_cliente (cliente_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla auditoria lista\n";
+
 echo "\n[Roles y permisos]\n";
 // rol como VARCHAR (permite nuevos roles sin ALTER) y migra 'sucursal' -> 'vendedor'
 $tipoRol = $pdo->query(
