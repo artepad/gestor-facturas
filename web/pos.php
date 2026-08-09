@@ -88,11 +88,11 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     <table class="pos-tabla" id="tablaCarrito">
         <thead>
             <tr>
-                <th class="c-cod">Código</th>
-                <th>Descripción</th>
-                <th class="c-num">Precio</th>
+                <th class="c-cod">Código de barras</th>
+                <th>Descripción del producto</th>
+                <th class="c-num">Precio venta</th>
                 <th class="c-num">Cant.</th>
-                <th class="c-num">Importe</th>
+                <th class="c-num c-imp">Importe</th>
                 <th class="c-x"></th>
             </tr>
         </thead>
@@ -110,29 +110,39 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
 -->
 <footer class="pos-pie">
     <div class="pos-pie-fila1">
-        <span class="pos-cuenta" id="nItems">0 productos en la venta actual.</span>
+        <span class="pos-cuenta">
+            <b class="pos-cuenta-n" id="nItemsN">0</b>
+            <span id="nItems">Productos en la venta actual.</span>
+        </span>
+        <button type="button" class="pos-cobrar" id="btnCobrar">
+            <span class="pc-tecla">F12</span> Cobrar
+        </button>
         <div class="pos-total-caja">
             <span class="pos-total-lbl">Total</span>
             <span class="pos-total" id="totalVenta">$0</span>
         </div>
-        <button type="button" class="pos-cobrar" id="btnCobrar">
-            <span class="pc-tecla">F12</span> Cobrar
-        </button>
     </div>
     <div class="pos-pie-fila2">
         <div class="pos-pie-acciones">
             <button type="button" class="pos-tecla" data-accion="pendiente"><b>F6</b> Pendiente</button>
             <button type="button" class="pos-tecla pos-tecla-rojo" data-accion="eliminar">Eliminar</button>
         </div>
-        <div class="pos-ultima">
-            <span class="pos-ultima-tit" id="uTitulo">Última venta<?= $ultima ? ' · N° ' . (int)$ultima['folio'] : '' ?>:</span>
-            <span>Total: <b id="uTotal"><?= $ultima ? clp($ultima['total']) : '$0' ?></b></span>
-            <span>Pagó con: <b id="uPago"><?= $ultima && $ultima['pago_con'] !== null ? clp($ultima['pago_con']) : '$0' ?></b></span>
-            <span>Cambio: <b id="uVuelto"><?= $ultima ? clp($ultima['vuelto']) : '$0' ?></b></span>
+        <div class="pos-ultima" id="bloqueUltima">
+            <span class="pos-ultima-tit" id="uTitulo">Última venta<?= $ultima ? ' N° ' . (int)$ultima['folio'] : '' ?></span>
+            <span class="pu-dato"><i>Total:</i><b id="uTotal"><?= $ultima ? clp($ultima['total']) : '$0' ?></b></span>
+            <span class="pu-dato"><i>Pagó con:</i><b id="uPago"><?= $ultima && $ultima['pago_con'] !== null ? clp($ultima['pago_con']) : '$0' ?></b></span>
+            <span class="pu-dato"><i>Cambio:</i><b id="uVuelto"><?= $ultima ? clp($ultima['vuelto']) : '$0' ?></b></span>
         </div>
         <button type="button" class="pos-btn-pie" id="btnVentas">Ventas del día</button>
     </div>
 </footer>
+
+<!-- Barra de estado, como la línea de ayuda inferior de Eleventa -->
+<div class="pos-estado">
+    <?= icono('reloj') ?>
+    <span id="posAyuda">Punto de Venta · Teclee o escanee el código del producto.</span>
+    <span class="pos-estado-der"><?= h($sesion['negocio_nombre']) ?> · <?= h($sesion['caja'] ?: 'Caja') ?></span>
+</div>
 
 <!-- ===================== Modales ===================== -->
 <div class="pos-modal-fondo" id="modalFondo" hidden></div>
@@ -288,7 +298,7 @@ function pintarCarrito() {
         var imp = l.cantidad * l.precio_unitario - (l.descuento || 0);
         [[l.codigo || '—', 'c-cod'], [l.nombre, ''], [clp(l.precio_unitario), 'c-num'],
          [(l.cantidad % 1 === 0 ? l.cantidad : l.cantidad.toFixed(3)), 'c-num'],
-         [clp(imp), 'c-num']].forEach(function (par) {
+         [clp(imp), 'c-num c-imp']].forEach(function (par) {
             var td = document.createElement('td');
             td.className = par[1];
             td.textContent = par[0];
@@ -306,10 +316,9 @@ function pintarCarrito() {
     $('carritoVacio').hidden = carrito.length > 0;
     $('totalVenta').textContent = clp(totalCarrito());
     var n = carrito.reduce(function (s, l) { return s + l.cantidad; }, 0);
-    $('nItems').textContent = (carrito.length === 0)
-        ? '0 productos en la venta actual.'
-        : ((n % 1 === 0 ? n : n.toFixed(3)) + ' producto(s) en la venta actual · ' +
-           carrito.length + ' línea(s).');
+    $('nItemsN').textContent = (n % 1 === 0 ? n : n.toFixed(3));
+    $('nItems').textContent = (n === 1 ? 'Producto en la venta actual.'
+                                       : 'Productos en la venta actual.');
     pintarTabs();
 }
 

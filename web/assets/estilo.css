@@ -1250,3 +1250,92 @@ th.col-num { text-align: right; }
   .pos-pie-fila2 { display: none; }   /* en el celular prima vender */
   .pos-tab .pt-nom { max-width: 110px; }
 }
+
+/* --- Afinado visual tipo Eleventa (paleta y tipografia de la web) -------
+   Columnas de color en el carrito, botonera pareja y barra de estado.
+   Va al final a proposito: ajusta reglas de los bloques anteriores.       */
+
+/* Franja de titulo con el degradado suave del original */
+.pos-titulo { background: linear-gradient(to bottom, var(--azul), #1b74d8);
+  border-bottom: 1px solid rgba(0,0,0,.12); }
+
+/* Fila del codigo: el boton no se estira, queda junto al campo */
+.pos-barra { padding: 9px 14px; }
+.pos-barra .btn { white-space: nowrap; }
+
+/* Botonera pareja: todos los atajos del mismo alto y con la tecla en pastilla */
+.pos-acciones { gap: 5px; padding: 7px 14px; background: #f4f6f8; }
+.pos-tecla { display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; border: 1px solid #c9d2da; border-radius: 6px;
+  padding: 7px 12px; min-height: 34px; font-size: 12.5px; color: var(--texto); }
+.pos-tecla b { background: #eaf1f9; color: var(--azul); border-radius: 4px;
+  padding: 2px 6px; font-size: 11.5px; margin: 0; letter-spacing: .3px; }
+.pos-tecla:hover { background: #eaf1f9; border-color: var(--azul); }
+.pos-tecla-rojo b { background: #fdecea; color: var(--rojo); }
+.pos-tecla-rojo:hover { background: #fdecea; border-color: var(--rojo); }
+
+/* Pestanas de tickets sobre una franja gris, como en el original */
+.pos-tabs { background: #dfe4e9; padding: 6px 14px 0; border-bottom: 0; }
+.pos-tab { background: #eef1f4; border-color: #c9d2da; }
+.pos-tab.activa { box-shadow: inset 0 3px 0 var(--azul); }
+
+/* --- Carrito: columnas con fondo de color --- */
+.pos-tabla { table-layout: fixed; }
+.pos-tabla thead th { background: #2c3e50; }
+/* Codigo de barras -> azul claro | Importe -> verde claro */
+.pos-tabla .c-cod { width: 168px; background: #eaf3fb; }
+.pos-tabla .c-imp { width: 132px; background: #eafaf1; font-weight: 700; }
+.pos-tabla thead .c-cod { background: #34495e; }
+.pos-tabla thead .c-imp { background: #2f6b52; }
+.pos-tabla .c-num { width: 108px; }
+/* La celda de importe lleva las dos clases: gana la mas especifica para que
+   su ancho calce con la banda verde de fondo (ver .pos-main). */
+.pos-tabla .c-num.c-imp { width: 132px; }
+.pos-tabla td:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* La fila seleccionada manda sobre el color de la columna */
+.pos-tabla tbody tr.sel td { background: #2c6fb5; color: #fff; }
+.pos-tabla tbody tr.sel .pos-x { color: #ffd9d4; }
+.pos-tabla tbody tr:hover td { background: #eef5fb; }
+.pos-tabla tbody tr.sel:hover td { background: #2c6fb5; }
+
+/* Las bandas de color siguen bajando aunque el carrito este vacio, como en
+   el original. Se pintan de fondo en el area del carrito: 14px de padding
+   izquierdo + 168px de la columna de codigo; por la derecha, 14px + 40px de
+   la columna de la x + 132px del importe. */
+.pos-main {
+  background:
+    linear-gradient(#eaf3fb, #eaf3fb) 14px 0 / 168px 100% no-repeat,
+    linear-gradient(#eafaf1, #eafaf1) right 54px top / 132px 100% no-repeat,
+    #fff;
+}
+
+/* --- Pie --- */
+.pos-pie-fila1 { background: #fff; gap: 18px; }
+.pos-cuenta { display: inline-flex; align-items: baseline; gap: 9px; flex: 1; }
+.pos-cuenta-n { font-size: 24px; font-weight: 800; color: var(--azul); }
+.pos-total-caja { background: #eaf3fb; border: 1px solid #cfe0f0; border-radius: 9px;
+  padding: 8px 20px; min-width: 190px; }
+.pos-total { color: var(--azul); }
+.pos-cobrar { border-radius: 8px; }
+
+/* Ultima venta con etiqueta arriba y valor abajo, como el original */
+.pos-ultima { gap: 18px; }
+.pu-dato { display: inline-flex; flex-direction: column; line-height: 1.25; }
+.pu-dato i { font-style: normal; font-size: 11.5px; color: var(--azul); font-weight: 600; }
+.pu-dato b { font-size: 13.5px; }
+
+/* --- Barra de estado inferior --- */
+.pos-estado { display: flex; align-items: center; gap: 8px;
+  background: #fdfbe8; border-top: 1px solid #e6e2c4; color: #6b6547;
+  padding: 5px 14px; font-size: 12px; }
+.pos-estado .ic { width: 14px; height: 14px; }
+.pos-estado-der { margin-left: auto; color: #9a927a; }
+
+@media (max-width: 700px) {
+  .pos-tabla { table-layout: auto; }
+  .pos-tabla .c-cod, .pos-tabla .c-imp, .pos-tabla .c-num { width: auto; }
+  .pos-main { background: #fff; }   /* sin anchos fijos, las bandas no calzan */
+  .pos-estado-der { display: none; }
+  .pos-cuenta-n { font-size: 20px; }
+  .pos-total-caja { min-width: 0; padding: 6px 12px; }
+}
