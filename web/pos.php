@@ -55,33 +55,33 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
             · <?= h($sesion['caja'] ?: 'Caja') ?></span>
     </div>
     <div class="pos-top-der">
-        <span class="pos-cajero"><?= h($usuario['nombre'] ?? '') ?></span>
-        <button type="button" class="pos-btn-top" id="btnEspera">
-            En espera <span class="pos-chip" id="chipEspera"><?= count($espera) ?></span>
-        </button>
-        <button type="button" class="pos-btn-top" id="btnVentas">Ventas del día</button>
-        <a class="pos-btn-top" href="caja.php">Caja</a>
-        <a class="pos-btn-top" href="home.php">Salir</a>
+        <span class="pos-cajero">Le atiende: <b><?= h($usuario['nombre'] ?? '') ?></b></span>
+        <a class="pos-btn-top" href="caja.php"><?= icono('caja') ?> Caja</a>
+        <a class="pos-btn-top" href="home.php"><?= icono('salir') ?> Salir</a>
     </div>
 </header>
 
+<!-- Franja de título del ticket en curso (equivalente a "VENTA - Ticket 1") -->
+<div class="pos-titulo" id="posTitulo">VENTA · Ticket 1</div>
+
 <!-- ===================== Entrada de código + acciones ===================== -->
 <div class="pos-barra">
-    <label class="pos-cod-lbl" for="codigo"><?= icono('codigo-barras') ?> Código del producto</label>
+    <label class="pos-cod-lbl" for="codigo"><?= icono('codigo-barras') ?> Código del producto:</label>
     <input type="text" id="codigo" class="pos-cod" autocomplete="off" autofocus
            placeholder="Escanea o escribe el código y presiona Enter">
-    <button type="button" class="btn" id="btnAgregar">Agregar (Enter)</button>
+    <button type="button" class="btn" id="btnAgregar">Enter · Agregar producto</button>
 </div>
 
 <div class="pos-acciones">
     <button type="button" class="pos-tecla" data-accion="comun"><b>Ctrl+P</b> Producto común</button>
     <button type="button" class="pos-tecla" data-accion="buscar"><b>F10</b> Buscar</button>
-    <button type="button" class="pos-tecla" data-accion="entrada"><b>F7</b> Entrada</button>
-    <button type="button" class="pos-tecla" data-accion="salida"><b>F8</b> Salida</button>
-    <button type="button" class="pos-tecla" data-accion="borrar"><b>Supr</b> Borrar línea</button>
-    <button type="button" class="pos-tecla" data-accion="pendiente"><b>F6</b> Pendiente</button>
-    <button type="button" class="pos-tecla pos-tecla-rojo" data-accion="eliminar">Eliminar venta</button>
+    <button type="button" class="pos-tecla" data-accion="entrada"><b>F7</b> Entradas</button>
+    <button type="button" class="pos-tecla" data-accion="salida"><b>F8</b> Salidas</button>
+    <button type="button" class="pos-tecla" data-accion="borrar"><b>Supr</b> Borrar art.</button>
 </div>
+
+<!-- Pestañas de tickets: el activo + los que quedaron en espera -->
+<div class="pos-tabs" id="posTabs"></div>
 
 <!-- ===================== Carrito ===================== -->
 <main class="pos-main">
@@ -104,24 +104,34 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     </p>
 </main>
 
-<!-- ===================== Pie: última venta + total + cobrar ===================== -->
+<!-- ===================== Pie (distribución tipo Eleventa) =====================
+     Fila 1: cuántos productos lleva la venta · total grande · Cobrar
+     Fila 2: acciones de la venta · última venta · ventas del día
+-->
 <footer class="pos-pie">
-    <div class="pos-ultima">
-        <span class="pos-ultima-tit">Última venta<?= $ultima ? ' · N° ' . (int)$ultima['folio'] : '' ?></span>
-        <div class="pos-ultima-datos">
+    <div class="pos-pie-fila1">
+        <span class="pos-cuenta" id="nItems">0 productos en la venta actual.</span>
+        <div class="pos-total-caja">
+            <span class="pos-total-lbl">Total</span>
+            <span class="pos-total" id="totalVenta">$0</span>
+        </div>
+        <button type="button" class="pos-cobrar" id="btnCobrar">
+            <span class="pc-tecla">F12</span> Cobrar
+        </button>
+    </div>
+    <div class="pos-pie-fila2">
+        <div class="pos-pie-acciones">
+            <button type="button" class="pos-tecla" data-accion="pendiente"><b>F6</b> Pendiente</button>
+            <button type="button" class="pos-tecla pos-tecla-rojo" data-accion="eliminar">Eliminar</button>
+        </div>
+        <div class="pos-ultima">
+            <span class="pos-ultima-tit" id="uTitulo">Última venta<?= $ultima ? ' · N° ' . (int)$ultima['folio'] : '' ?>:</span>
             <span>Total: <b id="uTotal"><?= $ultima ? clp($ultima['total']) : '$0' ?></b></span>
             <span>Pagó con: <b id="uPago"><?= $ultima && $ultima['pago_con'] !== null ? clp($ultima['pago_con']) : '$0' ?></b></span>
             <span>Cambio: <b id="uVuelto"><?= $ultima ? clp($ultima['vuelto']) : '$0' ?></b></span>
         </div>
+        <button type="button" class="pos-btn-pie" id="btnVentas">Ventas del día</button>
     </div>
-    <div class="pos-cuenta">
-        <span id="nItems">0 productos en la venta actual.</span>
-    </div>
-    <div class="pos-total-caja">
-        <span class="pos-total-lbl">Total</span>
-        <span class="pos-total" id="totalVenta">$0</span>
-    </div>
-    <button type="button" class="pos-cobrar" id="btnCobrar">Cobrar <span>F12</span></button>
 </footer>
 
 <!-- ===================== Modales ===================== -->
@@ -176,15 +186,6 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     </div>
 </section>
 
-<!-- Tickets en espera -->
-<section class="pos-modal pos-modal-ancho" id="modalEspera" hidden aria-label="Ventas en espera">
-    <h2>Ventas en espera</h2>
-    <div class="espera-lista" id="esperaLista"></div>
-    <div class="pos-modal-btns">
-        <button type="button" class="btn gris" data-cerrar>Cerrar (Esc)</button>
-    </div>
-</section>
-
 <!-- Dejar pendiente -->
 <section class="pos-modal" id="modalPendiente" hidden aria-label="Dejar en espera">
     <h2>Dejar esta venta en espera</h2>
@@ -231,6 +232,7 @@ var carrito = [];          // líneas de la venta actual
 var sel = -1;              // índice de la línea seleccionada (para Supr)
 var medio = 'efectivo';
 var cobrando = false;      // evita cobrar dos veces con doble clic/tecla
+var ticketNum = 1;         // número del ticket en curso (solo visual, como Eleventa)
 var espera = <?= json_encode($espera, JSON_UNESCAPED_UNICODE) ?>;
 var ventas = <?= json_encode(array_map(fn($v) => [
         'folio' => (int)$v['folio'], 'total' => (float)$v['total'],
@@ -306,7 +308,63 @@ function pintarCarrito() {
     var n = carrito.reduce(function (s, l) { return s + l.cantidad; }, 0);
     $('nItems').textContent = (carrito.length === 0)
         ? '0 productos en la venta actual.'
-        : (carrito.length + ' línea(s) · ' + (n % 1 === 0 ? n : n.toFixed(3)) + ' producto(s) en la venta actual.');
+        : ((n % 1 === 0 ? n : n.toFixed(3)) + ' producto(s) en la venta actual · ' +
+           carrito.length + ' línea(s).');
+    pintarTabs();
+}
+
+// ---------- Pestañas de tickets (el activo + los que están en espera) ----------
+function pintarTabs() {
+    var c = $('posTabs');
+    c.innerHTML = '';
+
+    // Pestaña del ticket en curso.
+    var act = document.createElement('div');
+    act.className = 'pos-tab activa';
+    act.innerHTML = '<span class="pt-nom"></span><span class="pt-tot"></span>';
+    act.querySelector('.pt-nom').textContent = 'Ticket ' + ticketNum;
+    act.querySelector('.pt-tot').textContent = carrito.length ? clp(totalCarrito()) : 'vacío';
+    c.appendChild(act);
+
+    // Una pestaña por cada venta en espera: click = retomar, × = descartar.
+    espera.forEach(function (t) {
+        var tab = document.createElement('div');
+        tab.className = 'pos-tab';
+        tab.title = 'Clic para retomar esta venta';
+        tab.innerHTML = '<span class="pt-nom"></span><span class="pt-tot"></span>' +
+                        '<button type="button" class="pt-x" title="Descartar">×</button>';
+        tab.querySelector('.pt-nom').textContent = t.etiqueta || ('Ticket ' + t.numero);
+        tab.querySelector('.pt-tot').textContent = clp(t.total_estimado);
+        tab.addEventListener('click', function () { retomar(t); });
+        tab.querySelector('.pt-x').addEventListener('click', function (e) {
+            e.stopPropagation();
+            descartar(t);
+        });
+        c.appendChild(tab);
+    });
+
+    $('posTitulo').textContent = 'VENTA · Ticket ' + ticketNum +
+        (espera.length ? '   ·   ' + espera.length + ' en espera' : '');
+}
+
+function retomar(t) {
+    if (carrito.length && !confirm('Hay una venta en curso. ¿Reemplazarla por este ticket?')) return;
+    api('espera_tomar', { id: t.id }).then(function (j) {
+        carrito = j.ticket.items || [];
+        sel = carrito.length - 1;
+        espera = j.espera;
+        pintarCarrito();
+        toast('Ticket retomado.');
+    }).catch(function (e) { toast(e.message, true); });
+}
+
+function descartar(t) {
+    if (!confirm('¿Descartar "' + (t.etiqueta || ('Ticket ' + t.numero)) + '"? Se perderá lo que tenía.')) return;
+    api('espera_descartar', { id: t.id }).then(function (j) {
+        espera = j.espera;
+        pintarCarrito();
+        toast('Ticket descartado.');
+    }).catch(function (e) { toast(e.message, true); });
 }
 
 function agregarLinea(p) {
@@ -484,9 +542,10 @@ function cobrar() {
             $('uTotal').textContent = clp(v.total);
             $('uPago').textContent = clp(v.pago_con || 0);
             $('uVuelto').textContent = clp(v.vuelto || 0);
-            document.querySelector('.pos-ultima-tit').textContent = 'Última venta · N° ' + v.folio;
+            $('uTitulo').textContent = 'Última venta · N° ' + v.folio + ':';
             ventas.unshift({ folio: v.folio, total: v.total, hora: new Date().toTimeString().slice(0, 5),
                              n: carrito.length, medios: medio });
+            ticketNum++;                 // el siguiente cliente parte con un ticket nuevo
             vaciar();
             cerrarModal();
             toast('Venta N° ' + v.folio + ' cobrada' +
@@ -564,46 +623,7 @@ $('buscarQ').addEventListener('keydown', function (e) {
     }
 });
 
-// ---------- Tickets en espera ----------
-function chip() { $('chipEspera').textContent = espera.length; }
-
-function pintarEspera() {
-    var c = $('esperaLista');
-    c.innerHTML = '';
-    if (!espera.length) { c.innerHTML = '<p class="pos-vacio">No hay ventas en espera.</p>'; return; }
-    espera.forEach(function (t) {
-        var fila = document.createElement('div');
-        fila.className = 'espera-fila';
-        var info = document.createElement('div');
-        info.className = 'espera-info';
-        info.innerHTML = '<b></b><span></span>';
-        info.querySelector('b').textContent = t.etiqueta || ('Ticket ' + t.numero);
-        info.querySelector('span').textContent = clp(t.total_estimado);
-        var bt = document.createElement('button');
-        bt.type = 'button'; bt.className = 'btn'; bt.textContent = 'Retomar';
-        bt.addEventListener('click', function () {
-            if (carrito.length && !confirm('Hay una venta en curso. ¿Reemplazarla por este ticket?')) return;
-            api('espera_tomar', { id: t.id }).then(function (j) {
-                carrito = j.ticket.items || []; sel = carrito.length - 1;
-                espera = j.espera; chip(); pintarCarrito(); cerrarModal();
-                toast('Ticket retomado.');
-            }).catch(function (e) { toast(e.message, true); });
-        });
-        var bd = document.createElement('button');
-        bd.type = 'button'; bd.className = 'btn rojo'; bd.textContent = 'Descartar';
-        bd.addEventListener('click', function () {
-            if (!confirm('¿Descartar este ticket? Se perderá lo que tenía.')) return;
-            api('espera_descartar', { id: t.id }).then(function (j) {
-                espera = j.espera; chip(); pintarEspera();
-                toast('Ticket descartado.');
-            }).catch(function (e) { toast(e.message, true); });
-        });
-        fila.appendChild(info); fila.appendChild(bt); fila.appendChild(bd);
-        c.appendChild(fila);
-    });
-}
-$('btnEspera').addEventListener('click', function () { pintarEspera(); abrirModal('modalEspera'); });
-
+// ---------- Dejar la venta en espera ----------
 function abrirPendiente() {
     if (!carrito.length) { toast('No hay productos que dejar en espera.', true); return; }
     $('pendEtiqueta').value = '';
@@ -612,7 +632,9 @@ function abrirPendiente() {
 function dejarPendiente() {
     api('espera_guardar', { items: carrito, etiqueta: $('pendEtiqueta').value.trim() })
         .then(function (j) {
-            espera = j.espera; chip(); vaciar(); cerrarModal();
+            espera = j.espera;
+            ticketNum++;                 // se empieza un ticket nuevo, como en Eleventa
+            vaciar(); cerrarModal();
             toast('Venta en espera guardada.');
         }).catch(function (e) { toast(e.message, true); });
 }
@@ -738,8 +760,7 @@ window.addEventListener('beforeunload', function (e) {
     if (carrito.length || espera.length) { e.preventDefault(); e.returnValue = ''; }
 });
 
-pintarCarrito();
-chip();
+pintarCarrito();   // pinta también las pestañas y el título del ticket
 })();
 </script>
 </body>
