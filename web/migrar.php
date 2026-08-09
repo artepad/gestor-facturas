@@ -302,4 +302,171 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS precios_fv (
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 echo "  ~ tabla precios_fv lista\n";
 
+echo "\n[Modulo Ventas / POS]\n";
+// Etapa 1 del POS (ver web/POS_DISENO.md). Solo agrega: no toca datos ni
+// tablas existentes. Las columnas de stock quedan en 0 y sin usar hasta que
+// se active el control de inventario (Etapa 4).
+agregar_columna($pdo, 'negocios',  'control_stock', "TINYINT(1) NOT NULL DEFAULT 0");
+agregar_columna($pdo, 'productos', 'stock',         "DECIMAL(14,3) NOT NULL DEFAULT 0");
+agregar_columna($pdo, 'productos', 'stock_minimo',  "DECIMAL(14,3) NULL");
+agregar_columna($pdo, 'productos', 'activo',        "TINYINT(1) NOT NULL DEFAULT 1");
+agregar_columna($pdo, 'productos', 'afecto_iva',    "TINYINT(1) NOT NULL DEFAULT 1");
+
+// Tablas del POS. El orden importa por las claves foraneas:
+// caja_sesiones -> ventas -> venta_items/venta_pagos/ventas_espera,
+// convenios -> servicio_operaciones.
+$tablasPos = [
+    'caja_sesiones' => "CREATE TABLE IF NOT EXISTS caja_sesiones (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid CHAR(36) NOT NULL UNIQUE,
+        negocio_id INT NOT NULL,
+        caja VARCHAR(80) NULL,
+        usuario_apertura INT NULL,
+        fondo_inicial DECIMAL(14,2) NOT NULL DEFAULT 0,
+        abierto_en DATETIME NOT NULL,
+        usuario_cierre INT NULL,
+        cerrado_en DATETIME NULL,
+        efectivo_contado DECIMAL(14,2) NULL,
+        efectivo_esperado DECIMAL(14,2) NULL,
+        diferencia DECIMAL(14,2) NULL,
+        estado VARCHAR(8) NOT NULL DEFAULT 'abierta',
+        corte_id INT NULL,
+        nota VARCHAR(255) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuario_apertura) REFERENCES usuarios(id) ON DELETE SET NULL,
+        FOREIGN KEY (usuario_cierre) REFERENCES usuarios(id) ON DELETE SET NULL,
+        FOREIGN KEY (corte_id) REFERENCES cortes(id) ON DELETE SET NULL,
+        INDEX idx_sesion_negocio (negocio_id, estado)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'caja_movimientos' => "CREATE TABLE IF NOT EXISTS caja_movimientos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        caja_sesion_id INT NOT NULL,
+        tipo VARCHAR(8) NOT NULL,
+        monto DECIMAL(14,2) NOT NULL,
+        motivo VARCHAR(255) NULL,
+        usuario_id INT NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+        INDEX idx_cajamov_sesion (caja_sesion_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'ventas' => "CREATE TABLE IF NOT EXISTS ventas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid CHAR(36) NOT NULL UNIQUE,
+        negocio_id INT NOT NULL,
+        caja_sesion_id INT NULL,
+        usuario_id INT NULL,
+        cliente_id INT NULL,
+        folio INT NULL,
+        fecha DATETIME NOT NULL,
+        subtotal DECIMAL(14,2) NOT NULL,
+        descuento_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+        total DECIMAL(14,2) NOT NULL,
+        costo_total DECIMAL(14,2) NULL,
+        pago_con DECIMAL(14,2) NULL,
+        vuelto DECIMAL(14,2) NULL,
+        estado VARCHAR(12) NOT NULL DEFAULT 'completada',
+        anulada_en DATETIME NULL,
+        anulada_por INT NULL,
+        motivo_anulacion VARCHAR(255) NULL,
+        origen VARCHAR(8) NOT NULL DEFAULT 'online',
+        nota VARCHAR(255) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE SET NULL,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+        FOREIGN KEY (anulada_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL,
+        UNIQUE KEY uq_venta_folio (negocio_id, folio),
+        INDEX idx_venta_negocio_fecha (negocio_id, fecha),
+        INDEX idx_venta_sesion (caja_sesion_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'venta_items' => "CREATE TABLE IF NOT EXISTS venta_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        venta_id INT NOT NULL,
+        producto_id INT NULL,
+        codigo VARCHAR(40) NULL,
+        nombre VARCHAR(255) NOT NULL,
+        departamento VARCHAR(150) NULL,
+        cantidad DECIMAL(14,3) NOT NULL,
+        precio_unitario DECIMAL(14,2) NOT NULL,
+        descuento DECIMAL(14,2) NOT NULL DEFAULT 0,
+        total DECIMAL(14,2) NOT NULL,
+        costo_unitario DECIMAL(14,2) NULL,
+        afecto_iva TINYINT(1) NOT NULL DEFAULT 1,
+        FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+        FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
+        INDEX idx_vitem_venta (venta_id),
+        INDEX idx_vitem_producto (producto_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'venta_pagos' => "CREATE TABLE IF NOT EXISTS venta_pagos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        venta_id INT NOT NULL,
+        medio VARCHAR(15) NOT NULL,
+        monto DECIMAL(14,2) NOT NULL,
+        referencia VARCHAR(120) NULL,
+        FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+        INDEX idx_vpago_venta (venta_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'ventas_espera' => "CREATE TABLE IF NOT EXISTS ventas_espera (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid CHAR(36) NOT NULL UNIQUE,
+        negocio_id INT NOT NULL,
+        caja_sesion_id INT NULL,
+        usuario_id INT NULL,
+        numero INT NULL,
+        etiqueta VARCHAR(80) NULL,
+        items TEXT NOT NULL,
+        total_estimado DECIMAL(14,2) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+        INDEX idx_espera_sesion (caja_sesion_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'convenios' => "CREATE TABLE IF NOT EXISTS convenios (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        negocio_id INT NOT NULL,
+        nombre VARCHAR(80) NOT NULL,
+        modalidad VARCHAR(10) NOT NULL DEFAULT 'prepago',
+        saldo_minimo DECIMAL(14,2) NULL,
+        saldo_ajuste DECIMAL(14,2) NOT NULL DEFAULT 0,
+        activo TINYINT(1) NOT NULL DEFAULT 1,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        UNIQUE KEY uq_convenio (negocio_id, nombre)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'servicio_operaciones' => "CREATE TABLE IF NOT EXISTS servicio_operaciones (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        uuid CHAR(36) NOT NULL UNIQUE,
+        negocio_id INT NOT NULL,
+        convenio_id INT NOT NULL,
+        caja_sesion_id INT NULL,
+        usuario_id INT NULL,
+        tipo VARCHAR(14) NOT NULL,
+        servicio VARCHAR(80) NULL,
+        monto DECIMAL(14,2) NOT NULL,
+        medio_pago VARCHAR(15) NULL,
+        comision DECIMAL(14,2) NULL,
+        origen_fondos VARCHAR(10) NULL,
+        referencia VARCHAR(120) NULL,
+        fecha DATETIME NOT NULL,
+        nota VARCHAR(255) NULL,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+        FOREIGN KEY (convenio_id) REFERENCES convenios(id) ON DELETE RESTRICT,
+        FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE SET NULL,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+        INDEX idx_servop_negocio_fecha (negocio_id, fecha),
+        INDEX idx_servop_convenio (convenio_id, fecha),
+        INDEX idx_servop_sesion (caja_sesion_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+];
+foreach ($tablasPos as $nombre => $ddl) {
+    $pdo->exec($ddl);
+    echo "  ~ tabla $nombre lista\n";
+}
+
 echo "\nListo. Migraciones aplicadas.\n";

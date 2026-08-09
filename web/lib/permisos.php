@@ -9,9 +9,14 @@
  */
 
 // Matriz rol -> módulos a los que tiene acceso.
-// Módulos: 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'.
+// Módulos: 'ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'.
+//
+// NOTA POS (Etapa 1): 'ventas' está SOLO en admin a propósito. El módulo se
+// construye y prueba sin que las vendedoras vean nada. Para habilitarlo cuando
+// esté listo, basta agregar 'ventas' a la fila 'vendedor'; para volver a
+// ocultarlo, quitarlo. Ver web/POS_DISENO.md sección 12.1.
 const PERMISOS = [
-    'admin'    => ['facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'],
+    'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'],
     'vendedor' => ['facturas', 'fiados', 'precios', 'herramientas'],
 ];
 
