@@ -1045,3 +1045,152 @@ th.col-num { text-align: right; }
 .dif.dif-ok    { color: var(--verde-ok); }
 .dif.dif-falta { color: var(--rojo); }
 .dif.dif-sobra { color: #e67e22; }
+
+/* ===================================================================
+   Pantalla de venta (pos.php). Es una pantalla de trabajo: ocupa toda
+   la ventana, sin el layout del dashboard, para que quepa el carrito y
+   se opere solo con el teclado. Ver web/POS_DISENO.md
+   =================================================================== */
+.pos-body { margin: 0; height: 100vh; display: flex; flex-direction: column;
+  overflow: hidden; background: var(--fondo); color: var(--texto); }
+
+/* --- Barra superior --- */
+.pos-top { display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; padding: 8px 14px; background: #22313f; color: #fff; flex-wrap: wrap; }
+.pos-top-izq, .pos-top-der { display: flex; align-items: center; gap: 10px; }
+.pos-marca { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
+.pos-marca .ic { width: 19px; height: 19px; }
+.pos-negocio { font-size: 13px; opacity: .8; }
+.pos-cajero { font-size: 13px; opacity: .8; }
+.pos-btn-top { background: rgba(255,255,255,.12); color: #fff; border: 0;
+  border-radius: 7px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+.pos-btn-top:hover { background: rgba(255,255,255,.22); }
+.pos-chip { background: #0d9488; border-radius: 9px; padding: 1px 7px;
+  font-size: 12px; font-weight: 700; }
+
+/* --- Campo de codigo (el lector escribe aca) --- */
+.pos-barra { display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--borde); }
+.pos-cod-lbl { display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; color: var(--texto-sec); white-space: nowrap; }
+.pos-cod-lbl .ic { width: 18px; height: 18px; }
+.pos-cod { flex: 1; font-size: 19px; padding: 10px 12px; border: 2px solid var(--azul);
+  border-radius: 8px; min-width: 0; }
+.pos-cod:focus { outline: none; box-shadow: 0 0 0 3px rgba(21,101,192,.18); }
+
+/* --- Barra de atajos --- */
+.pos-acciones { display: flex; gap: 6px; padding: 8px 14px; background: #fff;
+  border-bottom: 1px solid var(--borde); overflow-x: auto; }
+.pos-tecla { background: #f1f4f7; border: 1px solid var(--borde); border-radius: 7px;
+  padding: 7px 11px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.pos-tecla b { color: var(--azul); margin-right: 4px; }
+.pos-tecla:hover { background: #e6ebf1; }
+.pos-tecla-rojo { color: var(--rojo); }
+.pos-tecla-rojo b { color: var(--rojo); }
+
+/* --- Carrito --- */
+.pos-main { flex: 1; overflow: auto; padding: 0 14px 10px; }
+.pos-tabla { width: 100%; border-collapse: collapse; background: #fff; }
+.pos-tabla thead th { position: sticky; top: 0; z-index: 1;
+  background: #2c3e50; color: #fff; text-align: left; font-size: 13px;
+  padding: 10px; font-weight: 600; }
+.pos-tabla td { padding: 11px 10px; border-bottom: 1px solid var(--borde); font-size: 15px; }
+.pos-tabla tbody tr { cursor: pointer; }
+.pos-tabla tbody tr:hover { background: #f4f8fb; }
+.pos-tabla tbody tr.sel { background: #d9e8f7; box-shadow: inset 3px 0 0 var(--azul); }
+.pos-tabla .c-num { text-align: right; white-space: nowrap; }
+.pos-tabla .c-cod { color: var(--texto-sec); font-size: 13px; white-space: nowrap; }
+.pos-tabla .c-x { width: 40px; text-align: center; }
+.pos-x { border: 0; background: transparent; color: var(--rojo); font-size: 19px;
+  line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 5px; }
+.pos-x:hover { background: #fdecea; }
+.pos-vacio { text-align: center; color: var(--texto-sec); padding: 34px 14px; font-size: 14px; }
+
+/* --- Pie: ultima venta, total y cobrar --- */
+.pos-pie { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px; background: #fff; border-top: 1px solid var(--borde); }
+.pos-ultima { font-size: 12.5px; color: var(--texto-sec); }
+.pos-ultima-tit { display: block; font-weight: 700; color: var(--texto); }
+.pos-ultima-datos { display: flex; gap: 14px; flex-wrap: wrap; }
+.pos-ultima-datos b { color: var(--texto); }
+.pos-cuenta { flex: 1; font-size: 13px; color: var(--texto-sec); min-width: 140px; }
+.pos-total-caja { text-align: right; }
+.pos-total-lbl { display: block; font-size: 12px; color: var(--texto-sec); }
+.pos-total { font-size: 38px; font-weight: 800; line-height: 1; color: var(--azul); }
+.pos-cobrar { background: var(--verde-ok); color: #fff; border: 0; border-radius: 10px;
+  padding: 16px 26px; font-size: 19px; font-weight: 700; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 10px; }
+.pos-cobrar span { background: rgba(255,255,255,.22); border-radius: 6px;
+  padding: 2px 8px; font-size: 13px; }
+.pos-cobrar:hover { background: #1e8449; }
+
+/* --- Modales --- */
+.pos-modal-fondo { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; }
+.pos-modal { position: fixed; z-index: 51; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); background: #fff; border-radius: 12px;
+  padding: 22px; width: min(430px, 94vw); max-height: 90vh; overflow: auto;
+  box-shadow: 0 18px 50px rgba(0,0,0,.3); }
+.pos-modal-ancho { width: min(660px, 94vw); }
+.pos-modal h2 { margin: 0 0 12px; font-size: 19px; }
+.pos-modal label { display: block; font-size: 13px; color: var(--texto-sec);
+  margin: 12px 0 5px; }
+.pos-modal input[type=text] { width: 100%; font-size: 17px; padding: 10px 12px;
+  border: 1px solid var(--borde); border-radius: 8px; }
+.pos-modal-ayuda { margin: 0 0 6px; font-size: 13px; color: var(--texto-sec); }
+.pos-modal-btns { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.pos-modal-btns .grande { font-size: 17px; padding: 12px 22px; }
+.pos-modal-btns .grande span { background: rgba(255,255,255,.25);
+  border-radius: 5px; padding: 1px 7px; font-size: 12.5px; margin-left: 7px; }
+.pos-modal-err { margin-top: 12px; background: #fdecea; color: #a93226;
+  padding: 9px 12px; border-radius: 7px; font-size: 13.5px; }
+
+/* Cobrar */
+.cobrar-total { font-size: 42px; font-weight: 800; text-align: center;
+  color: var(--azul); margin: 6px 0 14px; }
+.cobrar-medios { display: flex; gap: 8px; flex-wrap: wrap; }
+.cobrar-medios .medio { flex: 1 1 110px; padding: 11px; border: 2px solid var(--borde);
+  background: #fff; border-radius: 9px; cursor: pointer; font-size: 14px; }
+.cobrar-medios .medio.activo { border-color: var(--verde-ok); background: #e8f8ef;
+  color: #1e7e44; font-weight: 700; }
+.cobrar-vuelto { margin-top: 10px; font-size: 17px; }
+.cobrar-vuelto b { font-size: 23px; color: var(--verde-ok); }
+.cobrar-vuelto b.falta { color: var(--rojo); }
+.cobrar-rapidos { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+.rapido { border: 1px solid var(--borde); background: #f1f4f7; border-radius: 7px;
+  padding: 8px 12px; cursor: pointer; font-size: 13.5px; }
+.rapido:hover { background: #e6ebf1; }
+
+/* Resultados de busqueda */
+.buscar-res { margin-top: 12px; max-height: 46vh; overflow: auto; }
+.buscar-item { display: grid; grid-template-columns: 1fr auto auto; gap: 12px;
+  align-items: center; width: 100%; text-align: left; background: #fff;
+  border: 0; border-bottom: 1px solid var(--borde); padding: 11px 8px;
+  cursor: pointer; font-size: 14.5px; }
+.buscar-item:hover { background: #f4f8fb; }
+.bi-cod { color: var(--texto-sec); font-size: 12.5px; }
+.bi-pre { font-weight: 700; white-space: nowrap; }
+
+/* Listas de tickets en espera y ventas del turno */
+.espera-lista { margin-top: 10px; max-height: 52vh; overflow: auto; }
+.espera-fila { display: flex; align-items: center; gap: 10px; padding: 11px 6px;
+  border-bottom: 1px solid var(--borde); }
+.espera-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.espera-info b { font-size: 14.5px; }
+.espera-info span { font-size: 12.5px; color: var(--texto-sec); }
+.espera-monto { font-weight: 700; white-space: nowrap; }
+
+/* Aviso flotante */
+.pos-toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+  background: #22313f; color: #fff; padding: 12px 20px; border-radius: 9px;
+  font-size: 14.5px; z-index: 60; box-shadow: 0 8px 26px rgba(0,0,0,.3);
+  max-width: 90vw; text-align: center; }
+.pos-toast.malo { background: #a93226; }
+
+@media (max-width: 700px) {
+  .pos-cod { font-size: 17px; }
+  .pos-total { font-size: 30px; }
+  .pos-cobrar { flex: 1; justify-content: center; }
+  .pos-ultima { display: none; }        /* en el celular prima el carrito */
+  .pos-tabla .c-cod { display: none; }
+}
