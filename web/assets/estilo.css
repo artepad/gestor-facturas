@@ -1032,3 +1032,16 @@ th.col-num { text-align: right; }
   /* Si aún así no entra, que se pueda deslizar en vez de cortarse */
   .tabla-wrap { overflow-x: auto; }
 }
+
+/* ===== Modulo Ventas / POS (identidad turquesa; ver web/POS_DISENO.md) ===== */
+/* Badge de entrada/salida de efectivo en la tabla de movimientos de caja.
+   Mismo patron visual que .badge-carga. */
+.badge-mov { display: inline-block; font-size: 11.5px; font-weight: 700;
+  padding: 3px 9px; border-radius: 10px; }
+.badge-mov.b-entrada { background: #e8f8ef; color: #1e7e44; }
+.badge-mov.b-salida  { background: #fdecea; color: #a93226; }
+/* Resultado del arqueo: faltante (rojo), sobrante (naranjo) o cuadrado (verde) */
+.dif { font-weight: 700; }
+.dif.dif-ok    { color: var(--verde-ok); }
+.dif.dif-falta { color: var(--rojo); }
+.dif.dif-sobra { color: #e67e22; }
