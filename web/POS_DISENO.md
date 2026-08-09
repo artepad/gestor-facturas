@@ -251,7 +251,7 @@ CREATE TABLE ventas (
   caja_sesion_id INT NULL,                          -- a qué turno de caja pertenece
   usuario_id     INT NULL,                          -- cajero que vendió (snapshot en auditoría)
   cliente_id     INT NULL,                          -- solo si fue venta fiado
-  folio          INT NULL,                          -- número correlativo por negocio (opcional)
+  folio          INT NULL,                          -- correlativo POR NEGOCIO (uso interno)
   fecha          DATETIME NOT NULL,                 -- momento de la venta (lo pone la caja)
   subtotal       DECIMAL(14,2) NOT NULL,
   descuento_total DECIMAL(14,2) NOT NULL DEFAULT 0,
@@ -267,9 +267,17 @@ CREATE TABLE ventas (
   FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE SET NULL,
   FOREIGN KEY (usuario_id)     REFERENCES usuarios(id)     ON DELETE SET NULL,
   FOREIGN KEY (cliente_id)     REFERENCES clientes(id)     ON DELETE SET NULL,
+  UNIQUE KEY uq_venta_folio (negocio_id, folio),     -- correlativo sin repetir por negocio
   INDEX idx_venta_negocio_fecha (negocio_id, fecha),
   INDEX idx_venta_sesion (caja_sesion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+> **Folio y offline**: el correlativo lo **asigna el servidor** al recibir la venta (no la
+> caja), así dos terminales nunca generan el mismo número. Mientras una venta está en la
+> cola offline se identifica por su `uuid`; al subir recibe su folio definitivo.
+
+```sql
 
 CREATE TABLE venta_items (
   id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -288,6 +296,23 @@ CREATE TABLE venta_items (
   FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
   INDEX idx_vitem_venta (venta_id),
   INDEX idx_vitem_producto (producto_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE ventas_espera (      -- tickets aparcados: carritos sin cobrar todavía
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  uuid           CHAR(36) NOT NULL UNIQUE,
+  negocio_id     INT NOT NULL,
+  caja_sesion_id INT NULL,                          -- turno en que se aparcó
+  usuario_id     INT NULL,
+  numero         INT NULL,                          -- correlativo visible del ticket
+  etiqueta       VARCHAR(80) NULL,                  -- "Sra. María", "el del pan"...
+  items          TEXT NOT NULL,                     -- carrito serializado en JSON
+  total_estimado DECIMAL(14,2) NULL,
+  creado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id)     REFERENCES negocios(id)      ON DELETE CASCADE,
+  FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE CASCADE,
+  INDEX idx_espera_sesion (caja_sesion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE venta_pagos (
@@ -574,7 +599,9 @@ muestra una **alerta** — evita quedarse sin saldo con un cliente esperando.
 2. **Vender**: cada venta se asocia a esa sesión abierta.
 3. **Entradas/salidas**: retiros, pagos a proveedores en efectivo, etc.
    (`caja_movimientos`).
-4. **Cerrar caja / arqueo**: el sistema calcula el **efectivo esperado**:
+4. **Cerrar caja / arqueo**: primero se verifica que **no queden tickets en espera** (si
+   los hay, el cierre se bloquea y pide cobrarlos o descartarlos). Luego el sistema
+   calcula el **efectivo esperado**:
 
    ```
    efectivo_esperado = fondo_inicial
@@ -664,8 +691,11 @@ Cada etapa es **usable por sí sola** (no hay que esperar al final para vender).
     stock en ninguna parte. Esto simplifica bastante esta etapa.
   - `producto_form.php` (crear/editar producto a mano); importación Excel ajustada a
     **upsert** (conserva lo que ya exista; deja de borrar y reinsertar).
-  - `pos.php`: escanear → carrito → cobrar con **un medio por venta** (efectivo con
-    cálculo de vuelto, tarjeta o transferencia) → boleta en pantalla/PDF.
+  - `pos.php`: escanear / buscar por nombre / **producto común** / monto libre → carrito →
+    cobrar con **un medio por venta** (efectivo con cálculo de vuelto, tarjeta o
+    transferencia) → boleta en pantalla/PDF. Folio correlativo por negocio.
+  - **Ventas en espera** (varios tickets a la vez, con etiqueta) — se usa a diario, no es
+    opcional.
   - `caja.php`: abrir/cerrar caja con arqueo y diferencia.
   - **Pago de cuentas / recaudación** (con el convenio actual, Klap): registrar el pago
     del cliente para que el **efectivo entre al arqueo sin contarse como venta**. Va en
@@ -693,6 +723,126 @@ Cada etapa es **usable por sí sola** (no hay que esperar al final para vender).
 > **Nota sobre el orden**: las etapas 1–3 dejan el POS **completo y confiable para
 > vender** sin haber tocado inventario. La Etapa 4 es una mejora sobre un sistema que
 > ya está funcionando, no un requisito para arrancar.
+
+## 12.0 Decisiones de UX de la venta (confirmadas con el usuario)
+
+Cómo se agrega un producto al carrito. **Cuatro caminos, todos en la misma pantalla**:
+
+1. **Escanear código de barras** — el camino principal (lector láser en la caja fija,
+   cámara en la caja móvil).
+2. **Buscar por nombre** — se escriben las primeras letras y se elige de la lista.
+3. **"Producto común"** — *equivalente a la función homónima de Eleventa, que el usuario
+   ya usa a diario*: se escribe **un nombre libre + un precio** y se agrega la línea, sin
+   necesidad de que el producto exista en el catálogo. Es la forma en que hoy se venden
+   pan, frutas, verduras y granel.
+4. **Monto libre / venta rápida** — igual que el anterior pero sin nombre (ej. "Varios
+   $1.200"). Más rápido, pero deja menos rastro de qué se vendió.
+
+> **Implicancia técnica**: las opciones 3 y 4 generan líneas **sin `producto_id`**. El
+> modelo ya lo soporta: `venta_items.producto_id` es `NULL`able y `nombre` es un snapshot
+> de texto. **No requiere tablas nuevas.** Ojo: esas líneas no tienen `costo_unitario`, así
+> que no aportan a la ganancia calculada (se puede pedir el costo opcionalmente más
+> adelante).
+
+**Venta por peso**: se pospone para cuando exista catálogo con precio por kilo. Hoy el
+granel se resuelve con "producto común" (se escribe el total ya calculado), que es
+exactamente como se trabaja actualmente.
+
+### Flujo real observado en Eleventa (capturas del usuario, ago-2026)
+
+El usuario instaló Eleventa y documentó **exactamente qué usa a diario**. Esto manda sobre
+cualquier suposición de diseño.
+
+**Su flujo de cobro completo son 2 teclas**: escanear (o `ENTER` para agregar) → `F12`
+(Cobrar) → `F2` (Cobrar **sin** imprimir). **El POS debe igualar o superar esa velocidad**;
+si obliga a usar el mouse, será más lento que Eleventa y fracasará.
+
+**Funciones que SÍ usa** (las únicas que la Etapa 1 debe replicar):
+
+| Tecla | Función | Dónde vive en nuestro POS |
+|-------|---------|---------------------------|
+| *(escanear)* + `ENTER` | Agregar producto por código | Input siempre enfocado en `pos.php` |
+| `Ctrl+P` | **Producto Común** (nombre + precio libres) | Modal rápido; línea sin `producto_id` |
+| `F10` | Buscar producto por nombre | Modal de búsqueda |
+| `F7` | **Entrada** de efectivo a la caja | En la pantalla de venta (no escondido) |
+| `F8` | **Salida** de efectivo ("sacar efectivo de la caja") | Ídem |
+| `DEL` | Borrar el **artículo seleccionado** | Sobre la línea marcada del carrito |
+| `F6` | Dejar la venta **pendiente** (ticket en espera) | Ver "Ventas en espera" |
+| *(botón)* | **Eliminar** la venta completa en curso | Distinto de `DEL` (que borra una línea) |
+| `F12` | **Cobrar** | Abre el diálogo de cobro |
+| `F2` *(en cobro)* | **Cobrar sin imprimir** ← su opción por defecto | Acción **primaria** del diálogo |
+| `ESC` *(en cobro)* | Cancelar | — |
+| *(botón)* | **Ventas del día y devoluciones** | Historial con folio, hora, total, detalle |
+
+**Funciones que NO usa** (fuera de alcance de la Etapa 1): `INS` Varios, `F11` Mayoreo,
+`F9` Verificador, `F5` Cambiar, Reimprimir Último Ticket, Asignar cliente.
+
+**Detalles de UI observados que hay que replicar:**
+- **Panel de la última venta** siempre visible abajo: `Total` / `Pagó Con` / `Cambio`.
+  Sirve cuando el cliente pregunta por el vuelto después de cerrada la venta.
+- **Pestañas de tickets** arriba, para ver los pendientes de un vistazo.
+- **Cálculo de vuelto en vivo** al escribir "Pagó Con" (ej. paga $6.000 de $5.350 → `$650`).
+- **Historial del día** con búsqueda **por folio o por nombre del ticket**, filtro por
+  fecha y cajero, detalle de la venta, y acciones *Devolver artículo* / *Cancelar venta*
+  (las acciones son Etapa 2; la pantalla de consulta es Etapa 1).
+- Columna **"Existencia: Ilim"** en todos sus productos → **confirma que no usa control de
+  stock**. Refuerza la decisión de 4.0 (inventario apagado).
+- Cliente por defecto: *"Público en general"* (sin obligar a elegir cliente).
+
+### ⚠️ Conflicto de teclas con el navegador — **resuelto: kiosco + tecla alterna**
+
+`F12` abre las DevTools y `F1` la ayuda en Chrome/Edge: son atajos **del navegador** que
+una página web **no puede interceptar**. Justo las teclas más usadas. **Decisión del
+usuario: A + B combinadas.**
+
+- **A — Modo kiosco/app**: acceso directo en el escritorio que abre el POS con Chrome en
+  modo aplicación/kiosco (sin barra de direcciones, atajos del navegador desactivados).
+  Se siente como un programa nativo y **libera `F12`/`F1`**. Se configura una vez por
+  terminal; hay que documentarlo en la guía de instalación del POS.
+- **B — Tecla alternativa siempre disponible**: además de `F12`, el `+` del teclado
+  numérico también cobra (atajo habitual en POS). Red de seguridad si alguien abre el POS
+  en un navegador normal.
+
+Las demás teclas (`F6`, `F7`, `F8`, `F10`, `DEL`, `Ctrl+P`, `ESC`) sí se pueden capturar
+sin problema en cualquier navegador. `F5` (recargar) también se puede bloquear para no
+perder el carrito por error.
+
+**Acción principal del cobro: "Cobrar sin imprimir"** (`F2`), tal como trabaja hoy. Es el
+botón grande y destacado: cobra y devuelve de inmediato la pantalla lista para el siguiente
+cliente. Ver la boleta queda como acción secundaria (para PDF/WhatsApp cuando alguien la
+pida).
+
+### Ventas en espera (varios tickets abiertos a la vez) — **imprescindible**
+
+Réplica mejorada del flujo de tickets de Eleventa, **que el usuario usa a diario**: un
+cliente se demora eligiendo, se **deja su ticket en espera** y se atiende al siguiente sin
+perder el carrito. Sin esto el POS es inusable en hora peak.
+
+- **"Dejar en espera"** guarda el carrito completo (`ventas_espera`) y limpia la pantalla.
+  Un contador visible muestra cuántos hay (*"2 en espera"*).
+- **Retomar**: se elige de la lista y el carrito vuelve tal cual estaba.
+- **Etiqueta libre** además del número correlativo: en un almacén de barrio *"Sra. María"*
+  o *"el del pan"* identifica mejor que *"ticket 64"*. El número se asigna solo si no se
+  escribe etiqueta.
+- Un ticket en espera **no es una venta**: no tiene folio, no descuenta stock, no aparece
+  en reportes ni en el corte. Solo se vuelve `ventas` cuando se cobra.
+- **No se puede cerrar la caja con tickets en espera**: el cierre avisa (*"tienes 2 ventas
+  sin terminar"*) y obliga a cobrarlas o descartarlas. Esto cumple el requisito original
+  de que *ninguna venta pendiente se pierda silenciosamente*. Descartar un ticket queda
+  registrado en auditoría.
+- **Dónde vive**: en la **Etapa 1** se guarda en el **servidor** (simple y robusto:
+  sobrevive al cierre del navegador, al corte de luz y hasta al cambio de terminal). En la
+  **Etapa 3** se agrega además copia local, para poder aparcar y retomar **sin internet**.
+
+**Folio (número de venta)**: **sí**, correlativo **por negocio** (`ventas.folio`). No es
+para el cliente — al cliente se le entrega el comprobante de la máquina Klap — sino de uso
+interno: buscar una venta, anularla/devolverla (Etapa 2), resolver reclamos y dar
+trazabilidad a la auditoría ("anuló la venta 47"). Es barato ahora e imposible de agregar
+retroactivamente.
+
+**Caja obligatoria**: **sí**. No se puede vender sin un turno abierto. Garantiza que toda
+venta pertenezca a un turno y que el arqueo siempre cuadre. Si no hay caja abierta, `pos.php`
+lleva primero a abrirla.
 
 ## 12.1 Estrategia de trabajo seguro (cómo no romper lo que ya funciona)
 
