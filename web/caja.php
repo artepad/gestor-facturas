@@ -57,6 +57,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 throw new RuntimeException('Indica un monto válido mayor que cero.');
             }
             $motivo = trim($_POST['motivo'] ?? '');
+            // El motivo es obligatorio al SACAR plata: una salida sin explicación
+            // no le sirve a nadie al revisar el turno. En las entradas es opcional.
+            if ($tipo === 'salida' && $motivo === '') {
+                throw new RuntimeException('Escribe el motivo de la salida (para qué se sacó la plata).');
+            }
             registrar_movimiento_caja($pdo, $usuario, (int)$sesion['id'], $tipo, $monto, $motivo);
             registrar_auditoria($pdo, $usuario, 'ventas', 'movimiento_caja', null,
                 ucfirst($tipo) . ' de efectivo por ' . clp($monto) .
@@ -205,7 +210,7 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                     <input type="hidden" name="accion" value="movimiento">
                     <div class="campo">
                         <label>Tipo</label>
-                        <select name="tipo">
+                        <select name="tipo" id="movTipo">
                             <option value="salida">Salida (sale del cajón)</option>
                             <option value="entrada">Entrada (entra al cajón)</option>
                         </select>
@@ -215,14 +220,31 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                         <input type="text" name="monto" placeholder="5.000" inputmode="numeric" required>
                     </div>
                     <div class="campo" style="flex:1 1 220px">
-                        <label>Motivo</label>
-                        <input type="text" name="motivo" placeholder="Pago pan proveedor" style="width:100%">
+                        <label id="movMotivoLbl">Motivo *</label>
+                        <input type="text" name="motivo" id="movMotivo" required
+                               placeholder="Pago pan proveedor" style="width:100%">
                     </div>
                     <div class="campo">
                         <label>&nbsp;</label>
                         <button class="btn" type="submit">Registrar</button>
                     </div>
                 </form>
+                <script>
+                // El motivo es obligatorio solo al sacar plata (el backend lo
+                // vuelve a validar; esto es para avisar antes de enviar).
+                (function () {
+                    var tipo = document.getElementById('movTipo'),
+                        campo = document.getElementById('movMotivo'),
+                        lbl = document.getElementById('movMotivoLbl');
+                    if (!tipo || !campo || !lbl) return;
+                    tipo.addEventListener('change', function () {
+                        var salida = tipo.value === 'salida';
+                        campo.required = salida;
+                        lbl.textContent = salida ? 'Motivo *' : 'Motivo (opcional)';
+                        campo.placeholder = salida ? 'Pago pan proveedor' : 'Abono de fiado en efectivo';
+                    });
+                })();
+                </script>
 
                 <?php if ($movimientos): ?>
                     <div class="tabla-wrap">
