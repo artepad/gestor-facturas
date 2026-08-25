@@ -82,7 +82,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             registrar_auditoria($pdo, $usuario, 'ventas', 'cerrar_caja', null,
                 'Cerró la caja. Esperado ' . clp($r['efectivo_esperado']) .
                 ', contado ' . clp($contado) . ', diferencia ' . clp($r['diferencia']));
-            header('Location: caja.php?cerrada=1');
+            header('Location: caja.php?cerrada=' . (int)($r['corte_id'] ?? 0));
             exit;
         }
     } catch (Throwable $e) {
@@ -90,8 +90,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
+$corteNuevo = 0;
 if (isset($_GET['cerrada'])) {
-    $aviso = 'Caja cerrada. Puedes ver el detalle en el historial de turnos.';
+    $corteNuevo = (int)$_GET['cerrada'];
+    $aviso = 'Caja cerrada. El corte del turno ya quedó registrado en Ingresos.';
 }
 
 $resumen     = $sesion ? resumen_caja($pdo, (int)$sesion['id']) : null;
@@ -113,7 +115,16 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
         </div>
 
         <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
-        <?php if ($aviso): ?><div class="panel exito"><p><?= h($aviso) ?></p></div><?php endif; ?>
+        <?php if ($aviso): ?>
+            <div class="panel exito">
+                <p>
+                    <?= h($aviso) ?>
+                    <?php if ($corteNuevo): ?>
+                        <a href="corte.php?id=<?= $corteNuevo ?>">Ver el corte</a>
+                    <?php endif; ?>
+                </p>
+            </div>
+        <?php endif; ?>
 
         <?php if (!$sesion): ?>
             <!-- ================= Abrir caja ================= -->
@@ -382,7 +393,8 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                     <table>
                         <thead><tr>
                             <th>Cerrado</th><th>Negocio</th><th>Caja</th><th>Cajero</th>
-                            <th class="monto-col">Esperado</th><th class="monto-col">Contado</th><th class="monto-col">Diferencia</th>
+                            <th class="monto-col">Esperado</th><th class="monto-col">Contado</th>
+                            <th class="monto-col">Diferencia</th><th>Corte</th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($historial as $s): ?>
@@ -398,6 +410,11 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                                     <span class="dif <?= $d < 0 ? 'dif-falta' : ($d > 0 ? 'dif-sobra' : 'dif-ok') ?>">
                                         <?= $d == 0 ? 'Cuadró' : (($d > 0 ? 'Sobra ' : 'Falta ') . clp(abs($d))) ?>
                                     </span>
+                                </td>
+                                <td>
+                                    <?php if ($s['corte_id']): ?>
+                                        <a href="corte.php?id=<?= (int)$s['corte_id'] ?>">Ver corte</a>
+                                    <?php else: ?>—<?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

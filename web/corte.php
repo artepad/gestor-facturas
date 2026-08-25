@@ -68,9 +68,22 @@ $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
                     <tr><td>Fondo de caja</td><td><?= clp($corte['fondo_caja']) ?: '—' ?></td></tr>
                     <tr><td>Ventas en efectivo</td><td>+ <?= clp($corte['ventas_efectivo']) ?: '$0' ?></td></tr>
                     <tr><td>Abonos en efectivo</td><td>+ <?= clp($corte['abonos_efectivo']) ?: '$0' ?></td></tr>
+                    <?php if (($corte['recaudado_efectivo'] ?? null) !== null): ?>
+                        <!-- Solo en cortes del POS propio: pagos de cuentas (Klap y otros
+                             convenios). Entran al cajón pero NO son venta del negocio. -->
+                        <tr><td>Pagos de cuentas <small class="texto-tenue">(no es venta)</small></td>
+                            <td>+ <?= clp($corte['recaudado_efectivo']) ?: '$0' ?></td></tr>
+                    <?php endif; ?>
                     <tr><td>Entradas</td><td>+ <?= clp($corte['entradas_caja']) ?: '$0' ?></td></tr>
                     <tr><td>Salidas</td><td>− <?= clp($corte['salidas_caja']) ?: '$0' ?></td></tr>
                     <tr class="fila-total"><td>Esperado en caja</td><td><?= clp($corte['efectivo_esperado']) ?: '—' ?></td></tr>
+                    <?php if (($corte['diferencia'] ?? null) !== null): ?>
+                        <?php $dif = (float)$corte['diferencia']; ?>
+                        <tr><td>Resultado del arqueo</td>
+                            <td><span class="dif <?= $dif < 0 ? 'dif-falta' : ($dif > 0 ? 'dif-sobra' : 'dif-ok') ?>">
+                                <?= $dif == 0 ? 'Cuadró' : (($dif > 0 ? 'Sobra ' : 'Falta ') . clp(abs($dif))) ?>
+                            </span></td></tr>
+                    <?php endif; ?>
                 </table>
             </div>
             <div class="panel">

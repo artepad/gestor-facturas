@@ -297,6 +297,9 @@ function registrar_corte(PDO $pdo, int $negocioId, ?int $correoId, array $d): in
             'efectivo_esperado' => $d['efectivo_esperado'], 'ventas_tarjeta' => $d['ventas_tarjeta'],
             'ventas_credito' => $d['ventas_credito'], 'ventas_vales' => $d['ventas_vales'],
             'ventas_transferencia' => $d['ventas_transferencia'],
+            // Solo los aporta el POS propio; el correo de Eleventa no los trae.
+            'recaudado_efectivo' => $d['recaudado_efectivo'] ?? null,
+            'diferencia' => $d['diferencia'] ?? null,
         ];
 
         $st = $pdo->prepare("SELECT id FROM cortes WHERE negocio_id = ? AND cerrado_en = ? AND cajero_id = ?");

@@ -206,6 +206,12 @@ CREATE TABLE IF NOT EXISTS cortes (
   ventas_credito       DECIMAL(14,2) NULL,
   ventas_vales         DECIMAL(14,2) NULL,
   ventas_transferencia DECIMAL(14,2) NULL,
+  -- Columnas que aporta el POS propio (los cortes de Eleventa las dejan NULL).
+  -- recaudado_efectivo: pagos de cuentas cobrados en efectivo. NO son venta,
+  -- pero entran al cajon, asi que sin esto el corte no cuadraria consigo mismo
+  -- (fondo + ventas_efectivo + recaudado + entradas - salidas = esperado).
+  recaudado_efectivo   DECIMAL(14,2) NULL,
+  diferencia           DECIMAL(14,2) NULL,   -- contado - esperado en el arqueo
   creado_en            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_corte (negocio_id, cerrado_en, cajero_id),  -- reprocesar no duplica
   FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,

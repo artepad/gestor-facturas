@@ -311,6 +311,10 @@ agregar_columna($pdo, 'productos', 'stock',         "DECIMAL(14,3) NOT NULL DEFA
 agregar_columna($pdo, 'productos', 'stock_minimo',  "DECIMAL(14,3) NULL");
 agregar_columna($pdo, 'productos', 'activo',        "TINYINT(1) NOT NULL DEFAULT 1");
 agregar_columna($pdo, 'productos', 'afecto_iva',    "TINYINT(1) NOT NULL DEFAULT 1");
+// El corte que genera el POS al cerrar caja aporta dos datos que el de
+// Eleventa no trae (quedan NULL en los cortes que llegan por correo).
+agregar_columna($pdo, 'cortes', 'recaudado_efectivo', "DECIMAL(14,2) NULL");
+agregar_columna($pdo, 'cortes', 'diferencia',         "DECIMAL(14,2) NULL");
 
 // Tablas del POS. El orden importa por las claves foraneas:
 // caja_sesiones -> ventas -> venta_items/venta_pagos/ventas_espera,

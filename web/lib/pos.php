@@ -137,13 +137,17 @@ function resumen_caja(PDO $pdo, int $sesionId): array
 
     // Ventas del turno (solo las no anuladas).
     $st = $pdo->prepare(
-        "SELECT COUNT(*) n, COALESCE(SUM(total),0) t
+        "SELECT COUNT(*) n, COALESCE(SUM(total),0) t, COALESCE(SUM(costo_total),0) c
            FROM ventas WHERE caja_sesion_id = ? AND estado = 'completada'"
     );
     $st->execute([$sesionId]);
     $v = $st->fetch();
     $r['numero_ventas'] = (int)$v['n'];
     $r['ventas_total']  = (float)$v['t'];
+    $r['costo_total']   = (float)$v['c'];
+    // Ganancia real del turno. Solo tiene sentido si los productos vendidos
+    // traían precio de costo (el producto común no aporta costo).
+    $r['ganancia'] = $r['costo_total'] > 0 ? $r['ventas_total'] - $r['costo_total'] : null;
 
     // Desglose por medio de pago (una venta puede tener varios: pago mixto).
     $st = $pdo->prepare(
@@ -189,8 +193,93 @@ function resumen_caja(PDO $pdo, int $sesionId): array
 }
 
 /**
+ * Ventas por departamento del turno, para el corte. Las líneas sin
+ * departamento (producto común, monto libre) se agrupan en "Sin departamento".
+ */
+function departamentos_del_turno(PDO $pdo, int $sesionId): array
+{
+    $st = $pdo->prepare(
+        "SELECT COALESCE(NULLIF(i.departamento,''), 'Sin departamento') AS departamento,
+                COALESCE(SUM(i.total),0) AS monto
+           FROM venta_items i
+           JOIN ventas v ON v.id = i.venta_id
+          WHERE v.caja_sesion_id = ? AND v.estado = 'completada'
+          GROUP BY departamento
+          ORDER BY monto DESC"
+    );
+    $st->execute([$sesionId]);
+    return $st->fetchAll();
+}
+
+/**
+ * Genera el `corte` del turno reutilizando registrar_corte() de lib/eleventa.php
+ * — el mismo que usan los correos de Eleventa. Así el módulo Ingresos y todos
+ * los reportes siguen funcionando igual, pero con datos reales del POS.
+ *
+ * Es idempotente por (negocio, cerrado_en, cajero), como el de los correos.
+ * Devuelve el id del corte.
+ */
+function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
+                                 array $r, float $contado, float $diferencia): int
+{
+    if (!function_exists('registrar_corte')) {
+        require_once __DIR__ . '/eleventa.php';
+    }
+    $negocioId = (int)$sesion['negocio_id'];
+    $cajero = trim((string)($usuario['nombre'] ?? '')) ?: 'Cajero';
+
+    $movs = [];
+    foreach (movimientos_caja($pdo, (int)$sesion['id']) as $m) {
+        $movs[] = [
+            'tipo'        => $m['tipo'],
+            'hora'        => substr((string)$m['creado_en'], 11, 5),
+            'descripcion' => $m['motivo'],
+            'monto'       => (float)$m['monto'],
+        ];
+    }
+
+    $corteId = registrar_corte($pdo, $negocioId, null, [
+        'cajero'        => $cajero,
+        'caja'          => $sesion['caja'],
+        'abierto_en'    => $sesion['abierto_en'],
+        'cerrado_en'    => date('Y-m-d H:i:s'),
+        // Ventas del negocio. La recaudación de convenios NO va acá: no es
+        // venta (ver POS_DISENO.md 7.7); viaja en recaudado_efectivo.
+        'ventas_totales'       => $r['ventas_total'],
+        'ganancia'             => ($r['ganancia'] ?? null),
+        'numero_ventas'        => $r['numero_ventas'],
+        'fondo_caja'           => $r['fondo_inicial'],
+        'ventas_efectivo'      => $r['ventas_efectivo'],
+        'abonos_efectivo'      => null,     // los abonos de fiados llegan en la Etapa 2
+        'entradas_caja'        => $r['entradas'],
+        'salidas_caja'         => $r['salidas'],
+        'efectivo_esperado'    => $r['efectivo_esperado'],
+        'ventas_tarjeta'       => $r['ventas_tarjeta'],
+        'ventas_credito'       => $r['ventas_credito'],
+        'ventas_vales'         => 0,        // no aplica en Chile (ver POS_DISENO.md)
+        'ventas_transferencia' => $r['ventas_transferencia'],
+        'recaudado_efectivo'   => $r['recaudado_efectivo'],
+        'diferencia'           => $diferencia,
+        'movimientos'          => $movs,
+        'departamentos'        => departamentos_del_turno($pdo, (int)$sesion['id']),
+    ]);
+
+    // Vincula el cajero con el usuario web si aún no lo estaba: permite
+    // reportes "por vendedor de la plataforma".
+    $pdo->prepare(
+        "UPDATE cajeros SET usuario_id = ?
+          WHERE negocio_id = ? AND nombre = ? AND usuario_id IS NULL"
+    )->execute([$usuario['id'] ?? null, $negocioId, $cajero]);
+
+    return $corteId;
+}
+
+/**
  * Cierra el turno guardando el arqueo. Devuelve el resumen con la diferencia
  * (contado − esperado): negativa = faltante, positiva = sobrante.
+ *
+ * Al cerrar genera además el `corte`, que es lo que alimenta el módulo
+ * Ingresos y el balance por negocio (reemplaza al correo de Eleventa).
  *
  * Lanza RuntimeException si quedan tickets en espera (no se puede cerrar con
  * ventas a medio hacer) o si el turno ya estaba cerrado.
@@ -211,20 +300,29 @@ function cerrar_caja(PDO $pdo, array $usuario, int $sesionId,
             throw new RuntimeException('Esta caja ya está cerrada.');
         }
 
+        $st = $pdo->prepare("SELECT * FROM caja_sesiones WHERE id = ?");
+        $st->execute([$sesionId]);
+        $sesion = $st->fetch();
+
         $r = resumen_caja($pdo, $sesionId);
         $diferencia = $contado - $r['efectivo_esperado'];
+
+        // Genera el corte que alimenta Ingresos (reemplaza al correo de Eleventa).
+        $corteId = generar_corte_de_sesion($pdo, $usuario, $sesion, $r, $contado, $diferencia);
 
         $pdo->prepare(
             "UPDATE caja_sesiones
                 SET estado='cerrada', cerrado_en=NOW(), usuario_cierre=?,
-                    efectivo_contado=?, efectivo_esperado=?, diferencia=?, nota=?
+                    efectivo_contado=?, efectivo_esperado=?, diferencia=?, nota=?,
+                    corte_id=?
               WHERE id = ?"
         )->execute([$usuario['id'] ?? null, $contado, $r['efectivo_esperado'],
-                    $diferencia, ($nota !== '' ? $nota : null), $sesionId]);
+                    $diferencia, ($nota !== '' ? $nota : null), $corteId, $sesionId]);
 
         if ($propia) $pdo->commit();
         $r['efectivo_contado'] = $contado;
         $r['diferencia'] = $diferencia;
+        $r['corte_id'] = $corteId;
         return $r;
     } catch (Throwable $e) {
         if ($propia && $pdo->inTransaction()) $pdo->rollBack();
