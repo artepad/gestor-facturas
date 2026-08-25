@@ -96,6 +96,7 @@ if (isset($_GET['cerrada'])) {
 
 $resumen     = $sesion ? resumen_caja($pdo, (int)$sesion['id']) : null;
 $movimientos = $sesion ? movimientos_caja($pdo, (int)$sesion['id']) : [];
+$recaudado   = $sesion ? recaudaciones_del_turno($pdo, (int)$sesion['id']) : [];
 $enEspera    = $sesion ? tickets_en_espera($pdo, (int)$sesion['id']) : 0;
 $otrasAbiertas = $esAdmin ? sesiones_abiertas($pdo, $idsVisibles) : [];
 $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
@@ -273,6 +274,42 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                     <p class="vacio">Sin movimientos de efectivo en este turno.</p>
                 <?php endif; ?>
             </div>
+
+            <!-- ================= Pagos de cuentas del turno ================= -->
+            <?php if ($recaudado): ?>
+            <div class="panel">
+                <h2>Pagos de cuentas (Klap y otros convenios)</h2>
+                <p class="ec-intro">
+                    Estos <strong>no son ventas tuyas</strong>: el dinero es de la empresa de
+                    servicios. Se registran acá porque el efectivo sí entra al cajón y el
+                    arqueo tiene que contarlo. Se registran desde la pantalla de venta con <b>F9</b>.
+                </p>
+                <div class="tabla-wrap">
+                    <table>
+                        <thead><tr>
+                            <th>Hora</th><th>Servicio</th><th>Convenio</th><th>Pagó con</th>
+                            <th>Comprobante</th><th class="monto-col">Monto</th>
+                        </tr></thead>
+                        <tbody>
+                        <?php foreach ($recaudado as $o): ?>
+                            <tr>
+                                <td><?= h(substr((string)$o['fecha'], 11, 5)) ?></td>
+                                <td><?= h($o['servicio']) ?></td>
+                                <td><?= h($o['convenio']) ?></td>
+                                <td>
+                                    <span class="badge-mov <?= $o['medio_pago'] === 'efectivo' ? 'b-entrada' : 'b-salida' ?>">
+                                        <?= h(ucfirst((string)$o['medio_pago'])) ?>
+                                    </span>
+                                </td>
+                                <td><?= h($o['referencia'] ?: '—') ?></td>
+                                <td class="monto-col"><?= clp($o['monto']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- ================= Cerrar caja (arqueo) ================= -->
             <div class="panel">

@@ -78,6 +78,7 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     <button type="button" class="pos-tecla" data-accion="entrada"><b>F7</b> Entradas</button>
     <button type="button" class="pos-tecla" data-accion="salida"><b>F8</b> Salidas</button>
     <button type="button" class="pos-tecla" data-accion="borrar"><b>Supr</b> Borrar art.</button>
+    <button type="button" class="pos-tecla pos-tecla-cuenta" data-accion="cuenta"><b>F9</b> Pago de cuenta</button>
 </div>
 
 <!-- Pestañas de tickets: el activo + los que quedaron en espera -->
@@ -204,6 +205,36 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     <input type="text" id="pendEtiqueta" autocomplete="off" placeholder="Sra. María">
     <div class="pos-modal-btns">
         <button type="button" class="btn verde" id="btnPendOk">Dejar en espera</button>
+        <button type="button" class="btn gris" data-cerrar>Cancelar (Esc)</button>
+    </div>
+</section>
+
+<!-- Pago de cuenta (recaudación de un convenio) -->
+<section class="pos-modal" id="modalCuenta" hidden aria-label="Pago de cuenta">
+    <h2>Pago de cuenta</h2>
+    <p class="pos-modal-ayuda">
+        Luz, agua, teléfono… El dinero entra a la caja pero <b>no es una venta tuya</b>:
+        es de la empresa de servicios. Lo tuyo es la comisión.
+    </p>
+    <label for="ctaServicio">Servicio</label>
+    <select id="ctaServicio">
+        <?php foreach (SERVICIOS_RECAUDACION as $s): ?>
+            <option value="<?= h($s) ?>"><?= h($s) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <label for="ctaMonto">Monto que pagó el cliente</label>
+    <input type="text" id="ctaMonto" inputmode="numeric" autocomplete="off" placeholder="30.000">
+    <label for="ctaMedio">Con qué pagó</label>
+    <select id="ctaMedio">
+        <option value="efectivo">Efectivo (entra al cajón)</option>
+        <option value="tarjeta">Tarjeta (no entra al cajón)</option>
+        <option value="transferencia">Transferencia (no entra al cajón)</option>
+    </select>
+    <label for="ctaRef">N° de comprobante (opcional)</label>
+    <input type="text" id="ctaRef" autocomplete="off" placeholder="Del comprobante de la máquina">
+    <div class="pos-modal-err" id="ctaErr" hidden></div>
+    <div class="pos-modal-btns">
+        <button type="button" class="btn verde" id="btnCuentaOk">Registrar pago</button>
         <button type="button" class="btn gris" data-cerrar>Cancelar (Esc)</button>
     </div>
 </section>
@@ -652,6 +683,41 @@ $('pendEtiqueta').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); dejarPendiente(); }
 });
 
+// ---------- Pago de cuenta (recaudación) ----------
+// No toca el carrito: es una operación aparte de la venta. El efectivo entra
+// al cajón para que el arqueo cuadre, pero NO cuenta como venta del negocio.
+function abrirCuenta() {
+    $('ctaMonto').value = ''; $('ctaRef').value = '';
+    $('ctaMedio').value = 'efectivo';
+    $('ctaErr').hidden = true;
+    abrirModal('modalCuenta', 'ctaMonto');
+}
+function guardarCuenta() {
+    var b = $('btnCuentaOk');
+    if (b.disabled) return;
+    b.disabled = true;
+    api('recaudacion', {
+        uuid: uuid4(),
+        servicio: $('ctaServicio').value,
+        monto: $('ctaMonto').value,
+        medio_pago: $('ctaMedio').value,
+        referencia: $('ctaRef').value.trim()
+    }).then(function (j) {
+        var o = j.operacion;
+        cerrarModal();
+        toast('Pago de ' + o.servicio + ' por ' + clp(o.monto) + ' registrado' +
+              (o.medio_pago === 'efectivo' ? ' · entró al cajón' : ''));
+    }).catch(function (e) {
+        $('ctaErr').textContent = e.message; $('ctaErr').hidden = false;
+    }).then(function () { b.disabled = false; });
+}
+$('btnCuentaOk').addEventListener('click', guardarCuenta);
+['ctaMonto', 'ctaRef'].forEach(function (id) {
+    $(id).addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); guardarCuenta(); }
+    });
+});
+
 // ---------- Entrada / salida de efectivo ----------
 var movTipo = 'salida';
 function abrirMov(tipo) {
@@ -709,6 +775,7 @@ function accion(a) {
     if (a === 'buscar')    return abrirBuscar($('codigo').value.trim());
     if (a === 'entrada')   return abrirMov('entrada');
     if (a === 'salida')    return abrirMov('salida');
+    if (a === 'cuenta')    return abrirCuenta();
     if (a === 'pendiente') return abrirPendiente();
     if (a === 'borrar') {
         if (sel >= 0 && sel < carrito.length) quitar(sel);
@@ -741,6 +808,7 @@ document.addEventListener('keydown', function (e) {
         case 'F10': e.preventDefault(); return accion('buscar');
         case 'F7':  e.preventDefault(); return accion('entrada');
         case 'F8':  e.preventDefault(); return accion('salida');
+        case 'F9':  e.preventDefault(); return accion('cuenta');
         case 'F6':  e.preventDefault(); return accion('pendiente');
         case 'F12': e.preventDefault(); return abrirCobrar();
         case 'Delete': e.preventDefault(); return accion('borrar');

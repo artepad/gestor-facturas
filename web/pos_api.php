@@ -165,6 +165,43 @@ try {
         responder_json(['ok' => true, 'mensaje' => ucfirst($tipo) . ' registrada: ' . clp($monto)]);
     }
 
+    // ---------- Pago de cuenta (recaudación de un convenio: Klap y otros) ----------
+    if ($accion === 'recaudacion') {
+        $uuid = trim((string)($datos['uuid'] ?? ''));
+        if ($uuid === '') responder_json(['error' => 'Falta el identificador de la operación.'], 400);
+
+        $monto = parsear_monto((string)($datos['monto'] ?? ''));
+        if ($monto === null || $monto <= 0) {
+            responder_json(['error' => 'Escribe el monto de la cuenta.'], 400);
+        }
+        $convenio = (int)($datos['convenio_id'] ?? 0)
+                  ?: (int)convenio_por_defecto($pdo, $negocioId)['id'];
+        $comision = ($datos['comision'] ?? '') !== ''
+                  ? parsear_monto((string)$datos['comision']) : null;
+
+        $r = registrar_recaudacion(
+            $pdo, $usuario, $sesion, $uuid, $convenio,
+            trim((string)($datos['servicio'] ?? 'Otro servicio')), $monto,
+            (string)($datos['medio_pago'] ?? 'efectivo'),
+            trim((string)($datos['referencia'] ?? '')), $comision
+        );
+        $o = $r['operacion'];
+        if (!$r['duplicada']) {
+            registrar_auditoria($pdo, $usuario, 'ventas', 'recaudacion', null,
+                'Pago de cuenta (' . $o['servicio'] . ') por ' . clp($o['monto']) .
+                ' en ' . $o['medio_pago']);
+        }
+        responder_json([
+            'ok' => true,
+            'duplicada' => $r['duplicada'],
+            'operacion' => [
+                'id' => (int)$o['id'], 'servicio' => $o['servicio'],
+                'monto' => (float)$o['monto'], 'medio_pago' => $o['medio_pago'],
+            ],
+            'resumen' => resumen_caja($pdo, (int)$sesion['id']),
+        ]);
+    }
+
     responder_json(['error' => 'Acción desconocida.'], 400);
 
 } catch (RuntimeException $e) {

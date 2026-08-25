@@ -1339,3 +1339,10 @@ th.col-num { text-align: right; }
   .pos-cuenta-n { font-size: 20px; }
   .pos-total-caja { min-width: 0; padding: 6px 12px; }
 }
+
+/* Boton de pago de cuenta: no es una venta, se distingue en violeta */
+.pos-tecla-cuenta b { background: #f3e8fb; color: #8e44ad; }
+.pos-tecla-cuenta:hover { background: #f6eefc; border-color: #8e44ad; }
+/* Los selects de los modales igualan a los inputs */
+.pos-modal select { width: 100%; font-size: 17px; padding: 10px 12px;
+  border: 1px solid var(--borde); border-radius: 8px; background: #fff; }

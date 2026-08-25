@@ -516,6 +516,120 @@ function descartar_espera(PDO $pdo, int $sesionId, int $esperaId): string
     return ($t['etiqueta'] ?: 'Ticket ' . $t['numero']) . ' por ' . clp($t['total_estimado']);
 }
 
+// ============ Recaudación de servicios (Klap y otros convenios) ============
+// CRÍTICO para el balance y el arqueo: la plata que paga el cliente NO es venta
+// del negocio (es de la empresa de servicios), pero el efectivo SÍ entra al
+// cajón. Ver POS_DISENO.md sección 7.7.
+
+/** Servicios que se pueden pagar. Lista fija por ahora; se puede volver tabla. */
+const SERVICIOS_RECAUDACION = [
+    'Luz', 'Agua', 'Gas', 'Teléfono/Internet', 'Recarga celular',
+    'Cuenta municipal', 'Otro servicio',
+];
+
+/** Convenios activos de un negocio. */
+function convenios_de(PDO $pdo, int $negocioId): array
+{
+    $st = $pdo->prepare(
+        "SELECT * FROM convenios WHERE negocio_id = ? AND activo = 1 ORDER BY nombre"
+    );
+    $st->execute([$negocioId]);
+    return $st->fetchAll();
+}
+
+/**
+ * Convenio con el que registrar un pago. Si el negocio todavía no tiene
+ * ninguno, crea "Klap" (prepago) para que el vendedor no tenga que configurar
+ * nada antes de cobrar la primera cuenta. La gestión de convenios llega en la
+ * Etapa 2; esto solo evita que el paso 1D quede bloqueado.
+ */
+function convenio_por_defecto(PDO $pdo, int $negocioId): array
+{
+    $lista = convenios_de($pdo, $negocioId);
+    if ($lista) return $lista[0];
+
+    $pdo->prepare(
+        "INSERT IGNORE INTO convenios (negocio_id, nombre, modalidad) VALUES (?, 'Klap', 'prepago')"
+    )->execute([$negocioId]);
+    $lista = convenios_de($pdo, $negocioId);
+    if (!$lista) throw new RuntimeException('No se pudo preparar el convenio de recaudación.');
+    return $lista[0];
+}
+
+/** Operación de servicio ya registrada con ese uuid, o null (idempotencia). */
+function operacion_por_uuid(PDO $pdo, string $uuid): ?array
+{
+    $st = $pdo->prepare("SELECT * FROM servicio_operaciones WHERE uuid = ?");
+    $st->execute([$uuid]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Registra el pago de una cuenta de un cliente.
+ *
+ * IDEMPOTENTE por uuid, igual que las ventas: reenviar el mismo pago no lo
+ * duplica. NO crea una venta ni toca `ventas`; solo deja la operación, que el
+ * arqueo suma al efectivo esperado cuando el medio es efectivo.
+ */
+function registrar_recaudacion(PDO $pdo, array $usuario, array $sesion, string $uuid,
+                               int $convenioId, string $servicio, float $monto,
+                               string $medioPago, string $referencia = '',
+                               ?float $comision = null): array
+{
+    if ($previa = operacion_por_uuid($pdo, $uuid)) {
+        return ['operacion' => $previa, 'duplicada' => true];
+    }
+    if ($monto <= 0) {
+        throw new RuntimeException('El monto de la cuenta debe ser mayor que cero.');
+    }
+    if (!in_array($medioPago, ['efectivo', 'tarjeta', 'transferencia'], true)) {
+        throw new RuntimeException('Medio de pago desconocido: ' . $medioPago);
+    }
+    // El convenio debe ser del mismo negocio del turno (no se confía en el navegador).
+    $st = $pdo->prepare("SELECT * FROM convenios WHERE id = ? AND negocio_id = ? AND activo = 1");
+    $st->execute([$convenioId, (int)$sesion['negocio_id']]);
+    if (!$st->fetch()) {
+        throw new RuntimeException('Convenio inválido para este negocio.');
+    }
+
+    $st = $pdo->prepare(
+        "INSERT INTO servicio_operaciones
+            (uuid, negocio_id, convenio_id, caja_sesion_id, usuario_id, tipo,
+             servicio, monto, medio_pago, comision, referencia, fecha)
+         VALUES (?,?,?,?,?, 'recaudacion', ?,?,?,?,?, NOW())"
+    );
+    try {
+        $st->execute([$uuid, (int)$sesion['negocio_id'], $convenioId, (int)$sesion['id'],
+                      $usuario['id'] ?? null, substr($servicio, 0, 80), $monto, $medioPago,
+                      $comision, ($referencia !== '' ? substr($referencia, 0, 120) : null)]);
+    } catch (PDOException $e) {
+        // 23000 = uuid duplicado: llegó dos veces la misma operación.
+        if ($e->getCode() === '23000' && ($previa = operacion_por_uuid($pdo, $uuid))) {
+            return ['operacion' => $previa, 'duplicada' => true];
+        }
+        throw $e;
+    }
+    $st = $pdo->prepare("SELECT * FROM servicio_operaciones WHERE id = ?");
+    $st->execute([(int)$pdo->lastInsertId()]);
+    return ['operacion' => $st->fetch(), 'duplicada' => false];
+}
+
+/** Pagos de cuentas registrados en el turno, del más nuevo al más viejo. */
+function recaudaciones_del_turno(PDO $pdo, int $sesionId, int $limite = 50): array
+{
+    $st = $pdo->prepare(
+        "SELECT o.*, c.nombre AS convenio, u.nombre AS usuario
+           FROM servicio_operaciones o
+           JOIN convenios c ON c.id = o.convenio_id
+           LEFT JOIN usuarios u ON u.id = o.usuario_id
+          WHERE o.caja_sesion_id = ? AND o.tipo = 'recaudacion'
+          ORDER BY o.id DESC
+          LIMIT " . (int)$limite
+    );
+    $st->execute([$sesionId]);
+    return $st->fetchAll();
+}
+
 /** Turnos ya cerrados de los negocios dados (historial). */
 function sesiones_cerradas(PDO $pdo, array $idsNegocios, int $limite = 30): array
 {
