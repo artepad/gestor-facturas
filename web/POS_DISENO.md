@@ -218,28 +218,84 @@ Convenciones existentes: InnoDB + utf8mb4, montos `DECIMAL(14,2)`, cantidades co
 decimales `DECIMAL(14,3)` (permite granel/peso), fechas `DATE`/`DATETIME`, `uuid`
 `CHAR(36) UNIQUE` como clave de idempotencia.
 
-### 7.1 Evolución de `productos` (NO se crea de nuevo)
+### 7.1 Catálogo de productos: **compartido entre los negocios**
 
-`productos` ya existe (catálogo por negocio cargado desde Excel). Se le **agregan
-columnas** (vía `ALTER TABLE`). Las columnas `activo`/`afecto_iva` se usan desde la
-Etapa 1; `stock`/`stock_minimo` **solo cuando se active el control de inventario**
-(Etapa 4) — se pueden crear igual desde el principio (una columna en 0 no molesta):
+**Decisión del usuario (ago-2026):** un **único catálogo para los dos negocios**. Si se
+agrega un producto en uno, aparece en el otro; si se cambia un precio, cambia en ambos.
+Mismo criterio que ya usan `precios_fv` (Frutas y Verduras) y `categorias_gasto`.
+
+**La migración es sin pérdida.** Verificado sobre los datos reales antes de decidir: los
+dos negocios tenían **exactamente los mismos 2.694 productos**, con nombre, precio de
+venta, costo, mayoreo, departamento y tipo de venta **idénticos**; cero productos
+exclusivos de un local y cero diferencias de precio. No hay ningún conflicto que
+resolver: unificar es quedarse con una copia.
 
 ```sql
-ALTER TABLE productos ADD COLUMN stock        DECIMAL(14,3) NOT NULL DEFAULT 0;
-ALTER TABLE productos ADD COLUMN stock_minimo DECIMAL(14,3) NULL;
-ALTER TABLE productos ADD COLUMN activo       TINYINT(1)    NOT NULL DEFAULT 1;
-ALTER TABLE productos ADD COLUMN afecto_iva   TINYINT(1)    NOT NULL DEFAULT 1;
+-- productos deja de tener negocio_id: el codigo pasa a ser unico global.
+ALTER TABLE productos ADD COLUMN activo          TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE productos ADD COLUMN afecto_iva      TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE productos ADD COLUMN creado_por      INT NULL;
+ALTER TABLE productos ADD COLUMN actualizado_por INT NULL;
+ALTER TABLE productos ADD COLUMN actualizado_en  TIMESTAMP
+      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+-- (la migración deduplica por codigo, borra negocio_id y deja UNIQUE (codigo))
 ```
 
+> **⚠️ El stock NO se comparte.** "Qué es el producto y cuánto vale" es común a los dos
+> locales; "cuántos tengo" es de cada uno. Si el stock fuera compartido, vender una Coca
+> en Minimark descontaría existencias en El Maitén. Por eso el stock **no vive en
+> `productos`** sino en una tabla puente por negocio (Etapa 4):
+>
+> ```sql
+> CREATE TABLE producto_stock (
+>   producto_id  INT NOT NULL,
+>   negocio_id   INT NOT NULL,
+>   stock        DECIMAL(14,3) NOT NULL DEFAULT 0,
+>   stock_minimo DECIMAL(14,3) NULL,
+>   PRIMARY KEY (producto_id, negocio_id),
+>   FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+>   FOREIGN KEY (negocio_id)  REFERENCES negocios(id)  ON DELETE CASCADE
+> ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+> ```
+>
+> Corrige lo hecho en el paso 1A, que había puesto `stock`/`stock_minimo` dentro de
+> `productos`. Se hace **ahora que esas columnas están en cero y sin usar**.
+
 > **⚠️ Cambio crítico en la importación de Excel.** Hoy `reemplazar_catalogo()`
-> **borra y reinserta** todo el catálogo en cada carga. Con stock eso NO puede pasar
-> (borraría las existencias). Se cambia a un **upsert por `(negocio_id, codigo)`** que
-> actualiza nombre/precios/departamento **pero conserva `stock`**. "Vaciar catálogo"
-> queda aún más protegido (exigir escribir `ELIMINAR`, y advertir que borra el stock).
+> **borra y reinserta** todo el catálogo en cada carga. Se cambia a un **upsert por
+> `codigo`** que actualiza nombre/precios/departamento **pero conserva el stock y las
+> marcas de quién editó**. Con el catálogo compartido, además, **basta subir el Excel una
+> vez** (antes había que hacerlo por cada negocio). "Vaciar catálogo" mantiene sus
+> salvaguardas (archivo vacío no borra nada; exige escribir `ELIMINAR`).
+
+**Precios distintos por local**: hoy no se necesitan (0 diferencias) y el usuario quiere
+que los cambios se propaguen. Si algún día hiciera falta, se agrega una tabla de
+excepciones `producto_precio_negocio` sin rehacer nada de lo anterior.
 
 *(Opcional, etapa posterior)* `producto_codigos` para varios códigos de barra por
 producto: `(id, producto_id FK, codigo)`.
+
+### 7.1.1 Registro de cambios del catálogo
+
+**Decisión del usuario:** llevar historial **con pantalla para consultarlo** (a diferencia
+de Fiados, donde se optó por solo guardar).
+
+Se **reutiliza la tabla `auditoria`** que ya existe, en vez de crear una paralela. Como
+hoy su única referencia es `cliente_id`, se le agregan dos columnas genéricas:
+
+```sql
+ALTER TABLE auditoria ADD COLUMN referencia_tipo VARCHAR(20) NULL;  -- producto, venta, caja...
+ALTER TABLE auditoria ADD COLUMN referencia_id   INT NULL;
+```
+
+Se registra `crear_producto`, `editar_producto` (con el antes/después en `detalle`, para
+poder leer "precio: $1.200 → $1.500"), `eliminar_producto` y `carga_excel`. Además,
+`productos.actualizado_por`/`actualizado_en` dan el "actualizado por Fulana el 17-08"
+que se muestra al editar, igual que en Frutas y Verduras.
+
+**Permisos (decisión del usuario):** crear y editar productos lo pueden hacer **admin y
+vendedoras**. Todo queda registrado con nombre y rol, así que un cambio de precio
+indebido se puede rastrear.
 
 ### 7.2 Ventas
 
@@ -689,8 +745,12 @@ Cada etapa es **usable por sí sola** (no hay que esperar al final para vender).
 - **Etapa 1 — Vender de verdad (mínimo usable), SIN inventario**
   - `negocios.control_stock` (nace **apagado** en ambos negocios) → el POS no habla de
     stock en ninguna parte. Esto simplifica bastante esta etapa.
-  - `producto_form.php` (crear/editar producto a mano); importación Excel ajustada a
-    **upsert** (conserva lo que ya exista; deja de borrar y reinsertar).
+  - **Catálogo (paso 1F, el último por ser el más delicado)**, en cuatro tramos:
+    **1F-a** unificar el catálogo entre los dos negocios y mover el stock a
+    `producto_stock` (ver 7.1); **1F-b** `producto_form.php` para crear/editar a mano,
+    con permiso para admin y vendedoras y auditoría de cada cambio; **1F-c** importación
+    de Excel por **upsert** (deja de borrar y reinsertar, y basta subirla una vez);
+    **1F-d** pantalla de historial de cambios del catálogo (ver 7.1.1).
   - `pos.php`: escanear / buscar por nombre / **producto común** / monto libre → carrito →
     cobrar con **un medio por venta** (efectivo con cálculo de vuelto, tarjeta o
     transferencia) → boleta en pantalla/PDF. Folio correlativo por negocio.
