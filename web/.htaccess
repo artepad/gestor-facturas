@@ -9,6 +9,12 @@ Options -Indexes
     Require all denied
 </FilesMatch>
 
+# Tipo MIME del manifiesto de la app de caja (pos.php). Sin esto algunos
+# Apache lo sirven sin tipo y el navegador no ofrece instalarla.
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
 # Denegar cualquier archivo oculto (.git, .env, etc.) y la carpeta .git completa.
 <FilesMatch "^\.">
     Require all denied

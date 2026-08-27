@@ -1,0 +1,26 @@
+{
+  "name": "Minimark · Punto de Venta",
+  "short_name": "Venta",
+  "description": "Caja del almacén: vender, cobrar y cerrar turno.",
+  "start_url": "pos.php",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8f9fa",
+  "theme_color": "#0d9488",
+  "lang": "es-CL",
+  "icons": [
+    {
+      "src": "assets/pos-icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/pos-icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

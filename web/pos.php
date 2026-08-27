@@ -44,6 +44,11 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Venta · <?= h($sesion['negocio_nombre']) ?></title>
 <link rel="stylesheet" href="assets/estilo.css?v=<?= @filemtime(__DIR__ . '/assets/estilo.css') ?>">
+<!-- La caja se puede "instalar" como aplicación: abre en su propia ventana,
+     sin barra de direcciones. Ver INSTALAR_POS.md -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d9488">
+<link rel="icon" type="image/svg+xml" href="assets/pos-icono.svg">
 </head>
 <body class="pos-body">
 
@@ -55,6 +60,7 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
             · <?= h($sesion['caja'] ?: 'Caja') ?></span>
     </div>
     <div class="pos-top-der">
+        <span class="pos-conexion" id="posConexion" hidden>Sin conexión</span>
         <span class="pos-cajero">Le atiende: <b><?= h($usuario['nombre'] ?? '') ?></b></span>
         <a class="pos-btn-top" href="caja.php"><?= icono('caja') ?> Caja</a>
         <a class="pos-btn-top" href="home.php"><?= icono('salir') ?> Salir</a>
@@ -1117,6 +1123,29 @@ document.addEventListener('click', function (e) {
 window.addEventListener('beforeunload', function (e) {
     if (carrito.length || espera.length) { e.preventDefault(); e.returnValue = ''; }
 });
+
+// ---------- Instalable y aviso de conexión ----------
+// El service worker guarda la pantalla y el CSS para que la caja abra aunque
+// no haya internet. Vender sin conexión llega en el paso 3C.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {
+            // Sin service worker la caja funciona igual, solo que necesita
+            // internet para abrir. No vale la pena molestar al vendedor.
+        });
+    });
+}
+
+function pintarConexion() {
+    var el = $('posConexion');
+    el.hidden = navigator.onLine;
+    $('posAyuda').textContent = navigator.onLine
+        ? 'Punto de Venta · Teclee o escanee el código del producto.'
+        : 'Sin conexión a internet · avísale al administrador.';
+}
+window.addEventListener('online', function () { pintarConexion(); toast('Conexión restablecida.'); });
+window.addEventListener('offline', function () { pintarConexion(); toast('Se cayó internet.', true); });
+pintarConexion();
 
 pintarCarrito();   // pinta también las pestañas y el título del ticket
 })();
