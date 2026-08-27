@@ -1359,3 +1359,23 @@ th.col-num { text-align: right; }
 .firma-cambio { margin: 14px 0 0; font-size: 12.5px; }
 /* Producto oculto de la venta: se ve atenuado en el listado */
 .fila-inactiva td { opacity: .55; }
+
+/* ===== Historial de cambios del catalogo ===== */
+.tabla-historial td { vertical-align: top; }
+/* Fecha en dos lineas: dia arriba, hora abajo en gris */
+.hist-fecha { white-space: nowrap; line-height: 1.2; }
+.hist-fecha .hf-dia  { display: block; font-weight: 600; }
+.hist-fecha .hf-hora { display: block; font-size: 11.5px; color: var(--texto-sec); }
+/* "precio de venta: $1.200 -> $1.500" */
+.lista-cambios { margin: 0; padding: 0; list-style: none; }
+.lista-cambios li { padding: 2px 0; font-size: 13px; }
+.lc-campo   { color: var(--texto-sec); }
+.lc-antes   { text-decoration: line-through; color: var(--texto-sec); }
+.lc-flecha  { color: var(--texto-sec); margin: 0 2px; }
+.lc-despues { font-weight: 700; }
+.lc-despues.lc-precio { color: var(--verde-ok); }
+/* Navegacion entre paginas del historial */
+.paginacion { display: flex; align-items: center; gap: 12px;
+  justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+/* Grupo de botones a la derecha de una cabecera */
+.cab-botones { display: flex; gap: 8px; flex-wrap: wrap; }

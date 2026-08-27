@@ -172,7 +172,12 @@ foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n[
         <div class="panel">
             <div class="cab-acciones">
                 <h2 class="panel-titulo">Buscar y editar productos</h2>
-                <a class="btn verde" href="producto_form.php">+ Nuevo producto</a>
+                <div class="cab-botones">
+                    <?php if (puede($usuario, 'usuarios')): ?>
+                        <a class="btn gris" href="historial_productos.php">Ver historial</a>
+                    <?php endif; ?>
+                    <a class="btn verde" href="producto_form.php">+ Nuevo producto</a>
+                </div>
             </div>
             <p class="texto-ayuda">
                 El catálogo es <strong>compartido por los dos negocios</strong>: lo que
