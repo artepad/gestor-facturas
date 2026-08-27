@@ -1457,3 +1457,18 @@ th.col-num { text-align: right; }
 .cerrojo-caja .btn { width: 100%; margin-top: 14px; }
 .cerrojo-ayuda { margin-top: 16px !important; font-size: 12px !important; }
 .cerrojo-salir { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--texto-sec); }
+
+/* ===== Inventario (Etapa 4B) ===== */
+/* El stock: rojo si esta negativo, naranjo si esta bajo el minimo */
+.stock-val { font-weight: 700; }
+.stock-val.st-neg  { color: var(--rojo); }
+.stock-val.st-bajo { color: #e67e22; }
+/* Fila con los formularios de ajuste bajo cada producto */
+.fila-acciones td { background: #f8f9fa; padding-top: 4px; padding-bottom: 8px; }
+.filtros-compacto { margin: 0; gap: 6px; }
+.filtros-compacto .campo { margin: 0; }
+.filtros-compacto .campo input, .filtros-compacto .campo select {
+  padding: 6px 9px; font-size: 13px; }
+/* Las tarjetas del resumen que son enlaces no deben verse como texto azul */
+a.stat-card { text-decoration: none; color: inherit; transition: box-shadow .15s, transform .15s; }
+a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translateY(-1px); }

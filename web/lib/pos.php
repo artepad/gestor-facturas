@@ -636,6 +636,86 @@ function stock_de(PDO $pdo, int $productoId, int $negocioId): float
     return $v === false ? 0.0 : (float)$v;
 }
 
+/**
+ * Resumen del inventario de un negocio: cuánto hay, cuánto vale y qué hay que
+ * mirar (bajo el mínimo o en negativo).
+ */
+function resumen_inventario(PDO $pdo, int $negocioId): array
+{
+    $st = $pdo->prepare(
+        "SELECT COUNT(*) con_stock,
+                COALESCE(SUM(s.stock * COALESCE(p.precio_costo,0)),0) valor_costo,
+                COALESCE(SUM(s.stock * COALESCE(p.precio_venta,0)),0) valor_venta,
+                SUM(CASE WHEN s.stock < 0 THEN 1 ELSE 0 END) negativos,
+                SUM(CASE WHEN s.stock_minimo IS NOT NULL AND s.stock <= s.stock_minimo
+                         THEN 1 ELSE 0 END) bajos
+           FROM producto_stock s
+           JOIN productos p ON p.id = s.producto_id
+          WHERE s.negocio_id = ? AND s.stock <> 0"
+    );
+    $st->execute([$negocioId]);
+    $r = $st->fetch();
+    $r['total_catalogo'] = (int)$pdo->query("SELECT COUNT(*) FROM productos WHERE activo = 1")->fetchColumn();
+    return $r;
+}
+
+/**
+ * Productos con su stock en un negocio, para la pantalla de inventario.
+ * $filtro: texto de búsqueda; $solo: '' | 'bajos' | 'negativos' | 'con_stock'.
+ */
+function productos_con_stock(PDO $pdo, int $negocioId, string $filtro = '',
+                             string $solo = '', int $limite = 100): array
+{
+    $where = ['p.activo = 1'];
+    $args  = [$negocioId];
+    if ($filtro !== '') {
+        $where[] = '(p.codigo LIKE ? OR p.nombre LIKE ?)';
+        $args[] = $filtro . '%';
+        $args[] = '%' . $filtro . '%';
+    }
+    if ($solo === 'bajos') {
+        $where[] = 's.stock_minimo IS NOT NULL AND COALESCE(s.stock,0) <= s.stock_minimo';
+    } elseif ($solo === 'negativos') {
+        $where[] = 'COALESCE(s.stock,0) < 0';
+    } elseif ($solo === 'con_stock') {
+        $where[] = 'COALESCE(s.stock,0) <> 0';
+    }
+    $sql = "SELECT p.id, p.codigo, p.nombre, p.departamento, p.precio_costo, p.precio_venta,
+                   COALESCE(s.stock,0) stock, s.stock_minimo
+              FROM productos p
+              LEFT JOIN producto_stock s ON s.producto_id = p.id AND s.negocio_id = ?
+             WHERE " . implode(' AND ', $where) . "
+             ORDER BY (COALESCE(s.stock,0) < 0) DESC, p.nombre
+             LIMIT " . (int)$limite;
+    $st = $pdo->prepare($sql);
+    $st->execute($args);
+    return $st->fetchAll();
+}
+
+/** Fija el mínimo a partir del cual avisar que queda poco. */
+function fijar_stock_minimo(PDO $pdo, int $productoId, int $negocioId, ?float $minimo): void
+{
+    $pdo->prepare(
+        "INSERT INTO producto_stock (producto_id, negocio_id, stock, stock_minimo)
+         VALUES (?,?,0,?)
+         ON DUPLICATE KEY UPDATE stock_minimo = VALUES(stock_minimo)"
+    )->execute([$productoId, $negocioId, $minimo]);
+}
+
+/** Movimientos de inventario de un producto (su kardex). */
+function kardex_producto(PDO $pdo, int $productoId, int $negocioId, int $limite = 60): array
+{
+    $st = $pdo->prepare(
+        "SELECT m.*, u.nombre AS usuario
+           FROM inventario_movimientos m
+           LEFT JOIN usuarios u ON u.id = m.usuario_id
+          WHERE m.producto_id = ? AND m.negocio_id = ?
+          ORDER BY m.id DESC LIMIT " . (int)$limite
+    );
+    $st->execute([$productoId, $negocioId]);
+    return $st->fetchAll();
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {

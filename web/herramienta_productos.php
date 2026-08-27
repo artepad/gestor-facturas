@@ -176,6 +176,7 @@ foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n[
                     <?php if (puede($usuario, 'usuarios')): ?>
                         <a class="btn gris" href="historial_productos.php">Ver historial</a>
                     <?php endif; ?>
+                    <a class="btn gris" href="inventario.php">Inventario</a>
                     <a class="btn gris" href="promociones.php">Promociones</a>
                     <a class="btn verde" href="producto_form.php">+ Nuevo producto</a>
                 </div>
