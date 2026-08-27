@@ -639,6 +639,31 @@ echo "
 // que otra persona no use la caja que quedo abierta. Ver POS_DISENO.md 3D.
 agregar_columna($pdo, 'usuarios', 'pin_hash', "VARCHAR(64) NULL");
 
+echo "\n[Inventario]\n";
+// Libro mayor del stock: cada venta, compra, ajuste o merma deja una linea
+// aca. producto_stock guarda el saldo rapido; esto es el historial auditable
+// (el "kardex"). Solo se llena si el negocio tiene control_stock = 1.
+$pdo->exec("CREATE TABLE IF NOT EXISTS inventario_movimientos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    negocio_id INT NOT NULL,
+    producto_id INT NULL,
+    tipo VARCHAR(12) NOT NULL,
+    cantidad DECIMAL(14,3) NOT NULL,
+    stock_resultante DECIMAL(14,3) NULL,
+    referencia_tipo VARCHAR(12) NULL,
+    referencia_id INT NULL,
+    motivo VARCHAR(255) NULL,
+    usuario_id INT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+    INDEX idx_invmov_producto (producto_id, negocio_id, creado_en),
+    INDEX idx_invmov_negocio (negocio_id, creado_en),
+    INDEX idx_invmov_ref (referencia_tipo, referencia_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla inventario_movimientos lista\n";
+
 echo "\n[Auditoria: referencia generica]\n";
 // Hasta ahora la auditoria solo podia apuntar a un cliente. Con estas dos
 // columnas puede referirse a cualquier cosa (producto, venta, caja...).

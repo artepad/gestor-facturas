@@ -341,6 +341,7 @@ function cerrar_caja(PDO $pdo, array $usuario, int $sesionId,
  */
 function buscar_producto_pos(PDO $pdo, string $termino, int $limite = 20): array
 {
+    // (el stock se agrega aparte en el endpoint, solo si el negocio lo lleva)
     $t = trim($termino);
     if ($t === '') return [];
 
@@ -570,6 +571,71 @@ function huella_pin(string $pin, int $usuarioId): string
     return hash('sha256', $pin . ':' . $usuarioId);
 }
 
+// ===================== Inventario (Etapa 4, opcional) =====================
+// TODO esto solo actúa si el negocio tiene control_stock = 1. Con el control
+// apagado —como nacen los dos negocios— el POS ni menciona el stock.
+// Ver POS_DISENO.md sección 4.0.
+
+/** ¿Este negocio lleva control de existencias? */
+function negocio_controla_stock(PDO $pdo, int $negocioId): bool
+{
+    static $cache = [];
+    if (!isset($cache[$negocioId])) {
+        $st = $pdo->prepare("SELECT control_stock FROM negocios WHERE id = ?");
+        $st->execute([$negocioId]);
+        $cache[$negocioId] = (bool)$st->fetchColumn();
+    }
+    return $cache[$negocioId];
+}
+
+/**
+ * Mueve el stock de un producto en un negocio y lo deja anotado en el libro
+ * mayor. `$cantidad` va con signo: negativo saca, positivo entra.
+ *
+ * NUNCA bloquea por falta de stock: en un almacén, si el producto está en la
+ * mano se vende. Si el saldo queda negativo se registra igual y se muestra en
+ * rojo para que el dueño lo revise (POS_DISENO.md 4.1).
+ *
+ * Devuelve el stock que quedó, o null si el negocio no lleva control.
+ */
+function mover_stock(PDO $pdo, array $usuario, int $negocioId, ?int $productoId,
+                     float $cantidad, string $tipo, ?string $refTipo = null,
+                     ?int $refId = null, string $motivo = ''): ?float
+{
+    // El producto común y el monto libre no tienen producto: no hay qué mover.
+    if (!$productoId || !negocio_controla_stock($pdo, $negocioId)) return null;
+
+    $pdo->prepare(
+        "INSERT INTO producto_stock (producto_id, negocio_id, stock)
+         VALUES (?,?,?)
+         ON DUPLICATE KEY UPDATE stock = stock + VALUES(stock)"
+    )->execute([$productoId, $negocioId, $cantidad]);
+
+    $st = $pdo->prepare("SELECT stock FROM producto_stock WHERE producto_id = ? AND negocio_id = ?");
+    $st->execute([$productoId, $negocioId]);
+    $resultante = (float)$st->fetchColumn();
+
+    $pdo->prepare(
+        "INSERT INTO inventario_movimientos
+           (negocio_id, producto_id, tipo, cantidad, stock_resultante,
+            referencia_tipo, referencia_id, motivo, usuario_id)
+         VALUES (?,?,?,?,?,?,?,?,?)"
+    )->execute([$negocioId, $productoId, $tipo, $cantidad, $resultante,
+                $refTipo, $refId, ($motivo !== '' ? substr($motivo, 0, 255) : null),
+                $usuario['id'] ?? null]);
+
+    return $resultante;
+}
+
+/** Existencias de un producto en un negocio (0 si nunca se movió). */
+function stock_de(PDO $pdo, int $productoId, int $negocioId): float
+{
+    $st = $pdo->prepare("SELECT stock FROM producto_stock WHERE producto_id = ? AND negocio_id = ?");
+    $st->execute([$productoId, $negocioId]);
+    $v = $st->fetchColumn();
+    return $v === false ? 0.0 : (float)$v;
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {
@@ -745,6 +811,12 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
                            ($p['referencia'] ?? '') !== '' ? $p['referencia'] : null]);
         }
 
+        // Descuenta el stock de lo vendido (solo si el negocio lleva control).
+        foreach ($lineas as $l) {
+            mover_stock($pdo, $usuario, $negocioId, $l['producto_id'], -$l['cantidad'],
+                        'venta', 'venta', $ventaId, 'Venta N° ' . $folio);
+        }
+
         // La parte fiada se anota como deuda del cliente en el modulo Fiados.
         // Queda enlazada a la venta (venta_id) para poder revertirla al anular.
         if ($montoCredito > 0) {
@@ -820,6 +892,13 @@ function anular_venta(PDO $pdo, array $usuario, int $ventaId, string $motivo): a
         $fiado = (float)$stF->fetchColumn();
         if ($fiado > 0) {
             $pdo->prepare("DELETE FROM fiados WHERE venta_id = ?")->execute([$ventaId]);
+        }
+
+        // Devuelve al stock lo que la venta habia descontado.
+        foreach (items_de_venta($pdo, $ventaId) as $i) {
+            mover_stock($pdo, $usuario, (int)$v['negocio_id'], $i['producto_id'],
+                        (float)$i['cantidad'], 'devolucion', 'venta', $ventaId,
+                        'Anulacion de la venta N° ' . $v['folio']);
         }
 
         $pdo->prepare(
