@@ -708,6 +708,76 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
     return ['venta' => $st->fetch(), 'duplicada' => false];
 }
 
+/**
+ * Anula una venta del turno abierto.
+ *
+ * Solo se pueden anular ventas de una caja TODAVÍA ABIERTA. Una vez cerrada,
+ * su corte ya está registrado en Ingresos y anular reescribiría historia
+ * contable: para eso corresponde una devolución, que saca la plata de la caja
+ * de hoy. El mensaje de error se lo explica al usuario.
+ *
+ * Si la venta había generado un fiado, se elimina: el cliente nunca debió esa
+ * plata. Queda el rastro en la auditoría.
+ *
+ * El arqueo se corrige solo, porque resumen_caja() solo cuenta las ventas
+ * 'completada'.
+ */
+function anular_venta(PDO $pdo, array $usuario, int $ventaId, string $motivo): array
+{
+    $motivo = trim($motivo);
+    if ($motivo === '') {
+        throw new RuntimeException('Escribe el motivo de la anulación.');
+    }
+
+    $propia = !$pdo->inTransaction();
+    if ($propia) $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare(
+            "SELECT v.*, s.estado AS estado_caja, s.usuario_apertura
+               FROM ventas v
+               LEFT JOIN caja_sesiones s ON s.id = v.caja_sesion_id
+              WHERE v.id = ? FOR UPDATE"
+        );
+        $st->execute([$ventaId]);
+        $v = $st->fetch();
+
+        if (!$v) throw new RuntimeException('Esa venta ya no existe.');
+        if ($v['estado'] === 'anulada') {
+            throw new RuntimeException('Esa venta ya estaba anulada.');
+        }
+        if (($v['estado_caja'] ?? '') !== 'abierta') {
+            throw new RuntimeException(
+                'No se puede anular una venta de una caja ya cerrada: su corte ya quedó '
+                . 'registrado. Para devolverle la plata al cliente, registra una salida '
+                . 'de efectivo (F8) indicando la venta N° ' . $v['folio'] . '.'
+            );
+        }
+        if (!puede_ver_negocio($usuario, (int)$v['negocio_id'])) {
+            throw new RuntimeException('No tienes acceso a esa venta.');
+        }
+
+        // Revierte el fiado que hubiera generado esta venta.
+        $fiado = 0.0;
+        $stF = $pdo->prepare("SELECT COALESCE(SUM(monto),0) FROM fiados WHERE venta_id = ?");
+        $stF->execute([$ventaId]);
+        $fiado = (float)$stF->fetchColumn();
+        if ($fiado > 0) {
+            $pdo->prepare("DELETE FROM fiados WHERE venta_id = ?")->execute([$ventaId]);
+        }
+
+        $pdo->prepare(
+            "UPDATE ventas SET estado='anulada', anulada_en=NOW(), anulada_por=?,
+                    motivo_anulacion=? WHERE id=?"
+        )->execute([$usuario['id'] ?? null, mb_substr($motivo, 0, 255), $ventaId]);
+
+        if ($propia) $pdo->commit();
+        return ['venta' => $v, 'fiado_revertido' => $fiado];
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
 /** Líneas de una venta. */
 function items_de_venta(PDO $pdo, int $ventaId): array
 {

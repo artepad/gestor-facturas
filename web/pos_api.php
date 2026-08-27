@@ -74,6 +74,21 @@ try {
         ]);
     }
 
+    // ---------- Ventas del turno ----------
+    if ($accion === 'ventas_turno') {
+        $out = array_map(fn($v) => [
+            'id'     => (int)$v['id'],
+            'folio'  => (int)$v['folio'],
+            'total'  => (float)$v['total'],
+            'hora'   => substr((string)$v['fecha'], 11, 5),
+            'n'      => (int)$v['n_items'],
+            'medios' => $v['medios'],
+            'estado' => $v['estado'],
+            'motivo' => $v['motivo_anulacion'],
+        ], ventas_del_turno($pdo, (int)$sesion['id'], 50));
+        responder_json(['ok' => true, 'ventas' => $out]);
+    }
+
     // ---------- Clientes para fiar ----------
     if ($accion === 'clientes') {
         responder_json(['ok' => true, 'clientes' => clientes_para_pos($pdo, $negocioId)]);
@@ -165,6 +180,24 @@ try {
                     fn($p) => $p['medio'] === 'credito' ? $p['monto'] : 0, $pagos)),
                 'medios' => implode('+', array_map(fn($p) => $p['medio'], $pagos)),
             ],
+        ]);
+    }
+
+    // ---------- Anular una venta del turno ----------
+    if ($accion === 'anular') {
+        $r = anular_venta($pdo, $usuario, (int)($datos['id'] ?? 0),
+                          (string)($datos['motivo'] ?? ''));
+        $v = $r['venta'];
+        registrar_auditoria($pdo, $usuario, 'ventas', 'anular_venta', null,
+            'Anuló la venta N° ' . $v['folio'] . ' de ' . clp($v['total']) .
+            ' · Motivo: ' . trim((string)$datos['motivo']),
+            json_encode(['total' => $v['total'], 'fiado_revertido' => $r['fiado_revertido']]),
+            'venta', (int)$v['id']);
+        responder_json([
+            'ok' => true,
+            'folio' => (int)$v['folio'],
+            'fiado_revertido' => $r['fiado_revertido'],
+            'resumen' => resumen_caja($pdo, (int)$sesion['id']),
         ]);
     }
 

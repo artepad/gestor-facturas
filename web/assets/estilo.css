@@ -1408,3 +1408,10 @@ th.col-num { text-align: right; }
   color: var(--texto-sec); text-decoration: line-through; }
 .pos-tabla tbody tr.sel .linea-promo,
 .pos-tabla tbody tr.sel .imp-antes { color: #e8d5f5; }
+
+/* ===== Anulacion de ventas (Etapa 2C) ===== */
+.anular-aviso { background: #fdecea; color: #a93226; border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+/* Venta anulada en el listado del turno */
+.espera-fila.fila-anulada { opacity: .6; }
+.espera-fila.fila-anulada .espera-monto { text-decoration: line-through; }

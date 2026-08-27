@@ -285,6 +285,24 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     </div>
 </section>
 
+<!-- Anular una venta -->
+<section class="pos-modal" id="modalAnular" hidden aria-label="Anular venta">
+    <h2>Anular venta</h2>
+    <p class="pos-modal-ayuda" id="anularQue"></p>
+    <div class="anular-aviso">
+        La venta deja de contar en la caja y en los reportes. Si fue fiada, se le
+        quita la deuda al cliente. Queda registrado con tu nombre.
+    </div>
+    <label for="anularMotivo">Motivo *</label>
+    <input type="text" id="anularMotivo" autocomplete="off"
+           placeholder="Se equivocó de producto / el cliente se arrepintió">
+    <div class="pos-modal-err" id="anularErr" hidden></div>
+    <div class="pos-modal-btns">
+        <button type="button" class="btn rojo" id="btnAnularOk">Anular venta</button>
+        <button type="button" class="btn gris" data-cerrar>Cancelar (Esc)</button>
+    </div>
+</section>
+
 <!-- Ventas del día -->
 <section class="pos-modal pos-modal-ancho" id="modalVentas" hidden aria-label="Ventas del turno">
     <h2>Ventas de este turno</h2>
@@ -313,9 +331,10 @@ var espera = <?= json_encode($espera, JSON_UNESCAPED_UNICODE) ?>;
 // el precio correcto mientras arma la venta.
 var promos = <?= json_encode(promociones_vigentes($pdo, (int)$sesion['negocio_id']), JSON_UNESCAPED_UNICODE) ?>;
 var ventas = <?= json_encode(array_map(fn($v) => [
-        'folio' => (int)$v['folio'], 'total' => (float)$v['total'],
+        'id' => (int)$v['id'], 'folio' => (int)$v['folio'], 'total' => (float)$v['total'],
         'hora' => substr((string)$v['fecha'], 11, 5),
         'n' => (int)$v['n_items'], 'medios' => $v['medios'],
+        'estado' => $v['estado'], 'motivo' => $v['motivo_anulacion'],
     ], $ventas), JSON_UNESCAPED_UNICODE) ?>;
 
 var $ = function (id) { return document.getElementById(id); };
@@ -773,8 +792,9 @@ function cobrar() {
             $('uPago').textContent = clp(v.pago_con || 0);
             $('uVuelto').textContent = clp(v.vuelto || 0);
             $('uTitulo').textContent = 'Última venta · N° ' + v.folio + ':';
-            ventas.unshift({ folio: v.folio, total: v.total, hora: new Date().toTimeString().slice(0, 5),
-                             n: carrito.length,
+            ventas.unshift({ id: v.id, folio: v.folio, total: v.total,
+                             hora: new Date().toTimeString().slice(0, 5),
+                             n: carrito.length, estado: 'completada',
                              medios: (v.medios || medio) });
             ticketNum++;                 // el siguiente cliente parte con un ticket nuevo
             vaciar();
@@ -932,25 +952,87 @@ $('btnMovOk').addEventListener('click', guardarMov);
 });
 
 // ---------- Ventas del turno ----------
-$('btnVentas').addEventListener('click', function () {
+function pintarVentas() {
     var c = $('ventasLista');
     c.innerHTML = '';
-    if (!ventas.length) { c.innerHTML = '<p class="pos-vacio">Aún no hay ventas en este turno.</p>'; }
+    if (!ventas.length) {
+        c.innerHTML = '<p class="pos-vacio">Aún no hay ventas en este turno.</p>';
+        return;
+    }
     ventas.forEach(function (v) {
+        var anulada = v.estado === 'anulada';
         var f = document.createElement('div');
-        f.className = 'espera-fila';
+        f.className = 'espera-fila' + (anulada ? ' fila-anulada' : '');
         var i = document.createElement('div');
         i.className = 'espera-info';
         i.innerHTML = '<b></b><span></span>';
-        i.querySelector('b').textContent = 'N° ' + v.folio + ' · ' + v.hora;
-        i.querySelector('span').textContent = v.n + ' producto(s) · ' + (v.medios || '');
+        i.querySelector('b').textContent = 'N° ' + v.folio + ' · ' + v.hora +
+            (anulada ? '  (ANULADA)' : '');
+        i.querySelector('span').textContent = anulada
+            ? ('Motivo: ' + (v.motivo || '—'))
+            : (v.n + ' producto(s) · ' + (v.medios || ''));
         var m = document.createElement('div');
         m.className = 'espera-monto';
         m.textContent = clp(v.total);
         f.appendChild(i); f.appendChild(m);
+        if (!anulada) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = 'btn rojo sm'; b.textContent = 'Anular';
+            b.addEventListener('click', function () { abrirAnular(v); });
+            f.appendChild(b);
+        }
         c.appendChild(f);
     });
+}
+
+function cargarVentas() {
+    return api('ventas_turno', null, 'GET').then(function (j) {
+        ventas = j.ventas || [];
+        pintarVentas();
+    }).catch(function (e) { toast(e.message, true); });
+}
+
+$('btnVentas').addEventListener('click', function () {
+    pintarVentas();               // muestra lo que ya se sabe
     abrirModal('modalVentas');
+    cargarVentas();               // y lo refresca del servidor
+});
+
+// ---------- Anular una venta ----------
+var ventaAnular = null;
+function abrirAnular(v) {
+    ventaAnular = v;
+    $('anularQue').textContent = 'Venta N° ' + v.folio + ' de ' + clp(v.total) +
+        ' (' + v.hora + ').';
+    $('anularMotivo').value = '';
+    $('anularErr').hidden = true;
+    abrirModal('modalAnular', 'anularMotivo');
+}
+function confirmarAnular() {
+    if (!ventaAnular) return;
+    var motivo = $('anularMotivo').value.trim();
+    if (!motivo) {
+        $('anularErr').textContent = 'Escribe el motivo de la anulación.';
+        $('anularErr').hidden = false;
+        return;
+    }
+    var b = $('btnAnularOk');
+    if (b.disabled) return;
+    b.disabled = true;
+    api('anular', { id: ventaAnular.id, motivo: motivo }).then(function (j) {
+        cerrarModal();
+        toast('Venta N° ' + j.folio + ' anulada' +
+              (j.fiado_revertido > 0
+                 ? ' · se le quitó ' + clp(j.fiado_revertido) + ' de deuda al cliente' : ''));
+        cargarVentas();
+    }).catch(function (e) {
+        $('anularErr').textContent = e.message;
+        $('anularErr').hidden = false;
+    }).then(function () { b.disabled = false; });
+}
+$('btnAnularOk').addEventListener('click', confirmarAnular);
+$('anularMotivo').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); confirmarAnular(); }
 });
 
 // ---------- Botones de la barra de acciones ----------
