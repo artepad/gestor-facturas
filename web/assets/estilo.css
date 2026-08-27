@@ -1427,3 +1427,12 @@ th.col-num { text-align: right; }
   padding: 6px 14px; font-size: 12.5px; font-weight: 600; }
 .pos-catalogo-aviso.medio { background: #fdf3e3; color: #8a5a10; border-bottom-color: #f0dcb8; }
 .pos-catalogo-aviso.grave { background: #fdecea; color: #a93226; border-bottom-color: #f3c6c0; }
+
+/* ===== Ventas pendientes de subir (Etapa 3C) ===== */
+/* Contador en la barra superior: se puede tocar para forzar la subida */
+.pos-pendientes { background: #e67e22; color: #fff; border: 0; border-radius: 7px;
+  padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.pos-pendientes:hover { background: #d35400; }
+/* Venta guardada que todavia no llega al servidor */
+.espera-fila.fila-pendiente { background: #fdf3e3; }
+.espera-fila.fila-pendiente .espera-info b { color: #8a5a10; }

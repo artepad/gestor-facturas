@@ -61,6 +61,7 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     </div>
     <div class="pos-top-der">
         <span class="pos-conexion" id="posConexion" hidden>Sin conexión</span>
+        <button type="button" class="pos-pendientes" id="posPendientes" hidden></button>
         <span class="pos-cajero">Le atiende: <b><?= h($usuario['nombre'] ?? '') ?></b></span>
         <a class="pos-btn-top" href="caja.php"><?= icono('caja') ?> Caja</a>
         <a class="pos-btn-top" href="home.php"><?= icono('salir') ?> Salir</a>
@@ -381,7 +382,7 @@ function toast(msg, malo) {
 // escanear sea instantáneo y para poder vender aunque se caiga internet.
 // Ver POS_DISENO.md (Etapa 3).
 
-var DB_NOMBRE = 'minimark-pos', DB_VERSION = 1;
+var DB_NOMBRE = 'minimark-pos', DB_VERSION = 2;
 var catalogo = [];          // productos en memoria (búsqueda instantánea)
 var porCodigo = {};         // índice código -> producto
 var catalogoFecha = null;   // cuándo se bajó esta copia
@@ -396,6 +397,10 @@ function abrirDB() {
             }
             if (!db.objectStoreNames.contains('meta')) {
                 db.createObjectStore('meta', { keyPath: 'k' });
+            }
+            // Cola de ventas hechas sin internet, esperando subir.
+            if (!db.objectStoreNames.contains('cola')) {
+                db.createObjectStore('cola', { keyPath: 'uuid' });
             }
         };
         r.onsuccess = function () { ok(r.result); };
@@ -510,6 +515,134 @@ function pintarAvisoCatalogo() {
     el.hidden = false;
 }
 
+// ================= Carrito a prueba de cortes =================
+// El carrito se guarda en el PC en cada cambio. Si se cierra el navegador o
+// se corta la luz, al volver a abrir está tal cual quedó.
+
+var restaurando = false;    // evita guardar mientras se está restaurando
+
+function guardarCarrito() {
+    if (restaurando) return;
+    guardarMeta('carrito', { items: carrito, ticket: ticketNum, ts: Date.now() });
+}
+
+function restaurarCarrito() {
+    return leerMeta('carrito').then(function (g) {
+        if (!g || !g.items || !g.items.length) return false;
+        restaurando = true;
+        carrito = g.items;
+        ticketNum = g.ticket || 1;
+        sel = carrito.length - 1;
+        restaurando = false;
+        pintarCarrito();
+        toast('Se recuperó la venta que había quedado a medias.');
+        return true;
+    }).catch(function () { return false; });
+}
+
+// ================= Ventas sin internet =================
+// Al cobrar sin conexión, la venta se guarda en una cola local y sube sola
+// cuando vuelve internet. Cada una lleva su uuid: el servidor la registra una
+// sola vez aunque se reenvíe (misma idempotencia que las facturas).
+
+var pendientes = 0;
+var sincronizando = false;
+
+function guardarEnCola(venta) {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok, err) {
+            var t = db.transaction('cola', 'readwrite');
+            t.objectStore('cola').put(venta);
+            t.oncomplete = function () { ok(true); };
+            t.onerror = function () { err(t.error); };
+        });
+    });
+}
+
+function leerCola() {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok) {
+            var p = db.transaction('cola', 'readonly').objectStore('cola').getAll();
+            p.onsuccess = function () { ok(p.result || []); };
+            p.onerror = function () { ok([]); };
+        });
+    }).catch(function () { return []; });
+}
+
+function borrarDeCola(uuid) {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok) {
+            var t = db.transaction('cola', 'readwrite');
+            t.objectStore('cola').delete(uuid);
+            t.oncomplete = function () { ok(true); };
+            t.onerror = function () { ok(false); };
+        });
+    }).catch(function () { return false; });
+}
+
+function pintarPendientes() {
+    var b = $('posPendientes');
+    b.hidden = pendientes === 0;
+    b.textContent = pendientes === 1
+        ? '1 venta por subir'
+        : pendientes + ' ventas por subir';
+}
+
+function contarPendientes() {
+    return leerCola().then(function (c) {
+        pendientes = c.length;
+        pintarPendientes();
+        return pendientes;
+    });
+}
+
+/**
+ * Vacía la cola. Cada venta se manda con su uuid; si el servidor responde que
+ * ya la tenía ("duplicada"), igual se saca de la cola: ya está registrada.
+ * Si falla por falta de internet, se deja para el próximo intento.
+ */
+function sincronizarCola() {
+    if (sincronizando || !navigator.onLine) return Promise.resolve(0);
+    sincronizando = true;
+    var subidas = 0;
+    return leerCola().then(function (cola) {
+        // De a una y en orden, para que los folios salgan en el orden real.
+        return cola.reduce(function (cadena, v) {
+            return cadena.then(function () {
+                return api('cobrar', v.payload).then(function () {
+                    subidas++;
+                    return borrarDeCola(v.uuid);
+                }).catch(function (e) {
+                    // Un error de datos (no de red) no se puede reintentar
+                    // eternamente: se saca de la cola y se avisa.
+                    if (navigator.onLine && /pago|total|producto|medio|cliente/i.test(e.message)) {
+                        toast('Una venta guardada no se pudo subir: ' + e.message, true);
+                        return borrarDeCola(v.uuid);
+                    }
+                    throw e;   // corta la cadena: se reintenta después
+                });
+            });
+        }, Promise.resolve());
+    }).catch(function () { /* se reintenta al próximo evento */ })
+      .then(function () {
+        sincronizando = false;
+        return contarPendientes().then(function () {
+            if (subidas > 0) {
+                toast(subidas === 1 ? 'Se subió 1 venta pendiente.'
+                                    : 'Se subieron ' + subidas + ' ventas pendientes.');
+                cargarVentas();
+            }
+            return subidas;
+        });
+    });
+}
+
+$('posPendientes').addEventListener('click', function () {
+    if (!navigator.onLine) { toast('Sin internet todavía. Se subirán solas al volver.', true); return; }
+    toast('Subiendo las ventas pendientes...');
+    sincronizarCola();
+});
+
 // ---------- Promociones (espejo del calculo del servidor) ----------
 function precioConPromo(p, cant, precio) {
     var n = Number(p.cantidad || 0), v = Number(p.valor);
@@ -607,6 +740,7 @@ function pintarCarrito() {
     $('nItems').textContent = (n === 1 ? 'Producto en la venta actual.'
                                        : 'Productos en la venta actual.');
     pintarTabs();
+    guardarCarrito();     // que sobreviva a un cierre o corte de luz
 }
 
 // ---------- Pestañas de tickets (el activo + los que están en espera) ----------
@@ -945,8 +1079,42 @@ function cobrar() {
 
     cobrando = true;
     $('btnCobrarOk').disabled = true;
-    api('cobrar', { uuid: uuid4(), items: carrito, pagos: pagos,
-                    pago_con: pago, cliente_id: cliente })
+    var payload = { uuid: uuid4(), items: carrito, pagos: pagos,
+                    pago_con: pago, cliente_id: cliente };
+
+    // Sin internet: la venta se guarda en la cola y se cobra igual. El cliente
+    // se va con su vuelto; la venta sube sola cuando vuelva la conexión.
+    if (!navigator.onLine) {
+        var vueltoLocal = (pago !== null && pago > (payload.pagos.filter(function (x) {
+            return x.medio === 'efectivo'; })[0] || { monto: 0 }).monto)
+            ? pago - (payload.pagos.filter(function (x) { return x.medio === 'efectivo'; })[0].monto)
+            : 0;
+        guardarEnCola({ uuid: payload.uuid, payload: payload, creado: new Date().toISOString() })
+            .then(function () {
+                $('uTotal').textContent = clp(t);
+                $('uPago').textContent = clp(pago || 0);
+                $('uVuelto').textContent = clp(vueltoLocal);
+                $('uTitulo').textContent = 'Última venta (sin subir):';
+                ventas.unshift({ id: null, folio: '—', total: t,
+                                 hora: new Date().toTimeString().slice(0, 5),
+                                 n: carrito.length, estado: 'pendiente',
+                                 medios: pagos.map(function (x) { return x.medio; }).join('+') });
+                ticketNum++;
+                vaciar();
+                cerrarModal();
+                contarPendientes();
+                toast('Venta cobrada sin internet' +
+                      (vueltoLocal > 0 ? ' · Cambio ' + clp(vueltoLocal) : '') +
+                      ' · se subirá sola al volver la conexión.');
+            })
+            .catch(function () {
+                errCobro('No se pudo guardar la venta en este equipo. Anótala en papel.');
+            })
+            .then(function () { cobrando = false; $('btnCobrarOk').disabled = false; });
+        return;
+    }
+
+    api('cobrar', payload)
         .then(function (j) {
             var v = j.venta;
             $('uTotal').textContent = clp(v.total);
@@ -965,6 +1133,16 @@ function cobrar() {
                   (v.fiado > 0 ? ' · Fiado ' + clp(v.fiado) : ''));
         })
         .catch(function (e) {
+            // "Failed to fetch" = no llegó al servidor (internet intermitente).
+            // La venta se guarda en la cola en vez de perderse.
+            if (/failed to fetch|networkerror|load failed/i.test(e.message)) {
+                guardarEnCola({ uuid: payload.uuid, payload: payload,
+                                creado: new Date().toISOString() }).then(function () {
+                    vaciar(); cerrarModal(); contarPendientes();
+                    toast('No se pudo conectar: la venta quedó guardada y subirá sola.', true);
+                });
+                return;
+            }
             $('cobrarErr').textContent = e.message;
             $('cobrarErr').hidden = false;
         })
@@ -1295,7 +1473,19 @@ document.addEventListener('click', function (e) {
 
 // Aviso al salir con una venta a medias o tickets sin cobrar.
 window.addEventListener('beforeunload', function (e) {
-    if (carrito.length || espera.length) { e.preventDefault(); e.returnValue = ''; }
+    if (carrito.length || espera.length || pendientes > 0) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Cerrar la caja con ventas sin subir daría un corte incompleto: se avisa
+// antes de salir de la pantalla de venta.
+Array.prototype.forEach.call(document.querySelectorAll('a.pos-btn-top'), function (a) {
+    a.addEventListener('click', function (e) {
+        if (pendientes > 0) {
+            e.preventDefault();
+            toast('Tienes ' + pendientes + ' venta(s) sin subir. Espera a que haya internet ' +
+                  'antes de cerrar la caja, o el corte quedará incompleto.', true);
+        }
+    });
 });
 
 // ---------- Instalable y aviso de conexión ----------
@@ -1337,9 +1527,21 @@ function iniciarCatalogo() {
     }).catch(function () { /* la caja funciona igual con lo que tenga */ });
 }
 iniciarCatalogo();
-window.addEventListener('online', function () { pintarConexion(); toast('Conexión restablecida.'); });
+window.addEventListener('online', function () {
+    pintarConexion();
+    toast('Conexión restablecida.');
+    sincronizarCola();          // sube lo que haya quedado pendiente
+    sincronizarCatalogo().then(function (c) { if (c) pintarAvisoCatalogo(); });
+});
 window.addEventListener('offline', function () { pintarConexion(); toast('Se cayó internet.', true); });
 pintarConexion();
+
+// Recupera lo que hubiera quedado a medias y sube la cola pendiente.
+restaurarCarrito();
+contarPendientes().then(function (n) { if (n > 0) sincronizarCola(); });
+// Reintento periódico: si internet vuelve sin disparar el evento 'online'
+// (pasa con wifi inestable), igual se sube la cola.
+setInterval(function () { if (pendientes > 0) sincronizarCola(); }, 45000);
 
 pintarCarrito();   // pinta también las pestañas y el título del ticket
 })();
