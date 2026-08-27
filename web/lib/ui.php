@@ -42,6 +42,7 @@ function icono(string $nombre, string $extra = ''): string
         'inventario'=> '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/>',
         'lupa'      => '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
         'codigo-barras' => '<path d="M3 5v14M6 5v14M9.5 5v14M13 5v14M16 5v14M18 5v14M21 5v14"/>',
+        'servicios' => '<path d="M4 21V8a1 1 0 0 1 1-1h5V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17"/><path d="M2 21h20"/><path d="M14 7h3M14 11h3M14 15h3"/><path d="M7 11h1M7 15h1"/>',
         'ventas'    => '<circle cx="9" cy="20" r="1.6" fill="currentColor" stroke="none"/><circle cx="18" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M2 3h3l2.7 12.4a1.5 1.5 0 0 0 1.5 1.1h8.4a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/>',
         'caja'      => '<path d="M3 9l1.5-4.5A1.5 1.5 0 0 1 6 3.5h12a1.5 1.5 0 0 1 1.5 1L21 9"/><rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M9 13h6"/>',
     ];
@@ -119,6 +120,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
           <?= $item('home', 'Home', 'home.php') ?>
           <?php if (puede($usuario, 'ventas')): ?><?= $item('ventas', 'Ventas', 'pos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'ingresos')): ?><?= $item('ingresos', 'Ingresos', 'ingresos.php') ?><?php endif; ?>
+          <?php if (puede($usuario, 'ingresos')): ?><?= $item('servicios', 'Servicios', 'servicios.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'gastos')): ?><?= $item('gastos', 'Gastos', 'gastos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'fiados')): ?><?= $item('fiados', 'Fiados', 'fiados.php') ?><?php endif; ?>

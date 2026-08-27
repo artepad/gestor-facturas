@@ -919,6 +919,13 @@ function guardarCuenta() {
         cerrarModal();
         toast('Pago de ' + o.servicio + ' por ' + clp(o.monto) + ' registrado' +
               (o.medio_pago === 'efectivo' ? ' · entró al cajón' : ''));
+        // Aviso de saldo bajo: mejor enterarse ahora que con un cliente esperando.
+        if (j.saldo && j.saldo.bajo) {
+            setTimeout(function () {
+                toast('⚠ Queda poco saldo en ' + j.saldo.convenio + ': ' +
+                      clp(j.saldo.monto) + '. Avísale al administrador.', true);
+            }, 2800);
+        }
     }).catch(function (e) {
         $('ctaErr').textContent = e.message; $('ctaErr').hidden = false;
     }).then(function () { b.disabled = false; });

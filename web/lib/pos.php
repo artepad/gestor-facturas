@@ -976,6 +976,142 @@ function registrar_recaudacion(PDO $pdo, array $usuario, array $sesion, string $
     return ['operacion' => $st->fetch(), 'duplicada' => false];
 }
 
+/**
+ * Saldo estimado de un convenio.
+ *
+ *   prepago  (Klap): recargas + comisiones − recaudaciones + ajuste
+ *                    → es un HABER: cuánto te queda para seguir cobrando cuentas.
+ *   postpago:        recaudaciones − liquidaciones + ajuste
+ *                    → es una DEUDA: cuánto le debes al convenio.
+ *
+ * Es un cálculo propio, no un dato en línea del proveedor: por eso se muestra
+ * siempre como "estimado" y existe `saldo_ajuste` para cuadrarlo contra el
+ * portal. Ver POS_DISENO.md 7.7.
+ */
+function saldo_convenio(PDO $pdo, array $convenio): array
+{
+    $st = $pdo->prepare(
+        "SELECT tipo, COALESCE(SUM(monto),0) m, COUNT(*) n
+           FROM servicio_operaciones WHERE convenio_id = ? GROUP BY tipo"
+    );
+    $st->execute([(int)$convenio['id']]);
+    $t = ['recaudacion' => 0.0, 'recarga_saldo' => 0.0, 'comision' => 0.0, 'liquidacion' => 0.0];
+    $n = ['recaudacion' => 0, 'recarga_saldo' => 0, 'comision' => 0, 'liquidacion' => 0];
+    foreach ($st->fetchAll() as $f) {
+        if (isset($t[$f['tipo']])) { $t[$f['tipo']] = (float)$f['m']; $n[$f['tipo']] = (int)$f['n']; }
+    }
+    $ajuste = (float)$convenio['saldo_ajuste'];
+
+    $esPrepago = ($convenio['modalidad'] ?? 'prepago') === 'prepago';
+    $saldo = $esPrepago
+        ? $t['recarga_saldo'] + $t['comision'] - $t['recaudacion'] + $ajuste
+        : $t['recaudacion'] - $t['liquidacion'] + $ajuste;
+
+    $minimo = $convenio['saldo_minimo'] !== null ? (float)$convenio['saldo_minimo'] : null;
+    return [
+        'saldo'      => round($saldo, 2),
+        'es_prepago' => $esPrepago,
+        'totales'    => $t,
+        'conteos'    => $n,
+        'ajuste'     => $ajuste,
+        // Solo tiene sentido avisar en prepago: es cuando te puedes quedar sin.
+        'bajo'       => $esPrepago && $minimo !== null && $saldo <= $minimo,
+        'minimo'     => $minimo,
+    ];
+}
+
+/** Convenios de un negocio con su saldo ya calculado. */
+function convenios_con_saldo(PDO $pdo, int $negocioId, bool $soloActivos = true): array
+{
+    $sql = "SELECT * FROM convenios WHERE negocio_id = ?"
+         . ($soloActivos ? " AND activo = 1" : "") . " ORDER BY nombre";
+    $st = $pdo->prepare($sql);
+    $st->execute([$negocioId]);
+    $out = [];
+    foreach ($st->fetchAll() as $c) {
+        $out[] = $c + ['calc' => saldo_convenio($pdo, $c)];
+    }
+    return $out;
+}
+
+/**
+ * Registra una recarga de saldo, una liquidación o una comisión.
+ *
+ * OJO con la contabilidad (POS_DISENO.md 7.7): recargar saldo NO es un gasto
+ * (es plata propia cambiando de bolsillo) y liquidar tampoco. El único ingreso
+ * real del negocio es la comisión.
+ *
+ * Si el dinero sale de la caja (`origen_fondos = 'caja'`), además se registra
+ * la salida de efectivo para que el arqueo cuadre.
+ */
+function registrar_operacion_convenio(PDO $pdo, array $usuario, int $convenioId,
+                                      string $tipo, float $monto, string $origenFondos = 'banco',
+                                      string $referencia = '', string $nota = '',
+                                      ?array $sesion = null): array
+{
+    if (!in_array($tipo, ['recarga_saldo', 'liquidacion', 'comision'], true)) {
+        throw new RuntimeException('Tipo de operación desconocido.');
+    }
+    if ($monto <= 0) {
+        throw new RuntimeException('El monto debe ser mayor que cero.');
+    }
+    $st = $pdo->prepare("SELECT * FROM convenios WHERE id = ?");
+    $st->execute([$convenioId]);
+    $conv = $st->fetch();
+    if (!$conv) throw new RuntimeException('Ese convenio no existe.');
+    if (!puede_ver_negocio($usuario, (int)$conv['negocio_id'])) {
+        throw new RuntimeException('No tienes acceso a ese convenio.');
+    }
+    // La comisión siempre llega del proveedor; no sale de la caja.
+    if ($tipo === 'comision') $origenFondos = 'banco';
+    if (!in_array($origenFondos, ['banco', 'caja'], true)) $origenFondos = 'banco';
+    if ($origenFondos === 'caja' && !$sesion) {
+        throw new RuntimeException('Para sacar la plata de la caja necesitas un turno abierto.');
+    }
+
+    $propia = !$pdo->inTransaction();
+    if ($propia) $pdo->beginTransaction();
+    try {
+        $pdo->prepare(
+            "INSERT INTO servicio_operaciones
+               (uuid, negocio_id, convenio_id, caja_sesion_id, usuario_id, tipo,
+                monto, origen_fondos, referencia, nota, fecha)
+             VALUES (?,?,?,?,?,?,?,?,?,?,NOW())"
+        )->execute([uuid4(), (int)$conv['negocio_id'], $convenioId,
+                    $sesion ? (int)$sesion['id'] : null, $usuario['id'] ?? null, $tipo,
+                    $monto, $origenFondos,
+                    ($referencia !== '' ? substr($referencia, 0, 120) : null),
+                    ($nota !== '' ? substr($nota, 0, 255) : null)]);
+        $id = (int)$pdo->lastInsertId();
+
+        if ($origenFondos === 'caja') {
+            $etiqueta = $tipo === 'recarga_saldo' ? 'Recarga de saldo ' : 'Liquidación a ';
+            registrar_movimiento_caja($pdo, $usuario, (int)$sesion['id'], 'salida', $monto,
+                                      $etiqueta . $conv['nombre']);
+        }
+
+        if ($propia) $pdo->commit();
+        return ['id' => $id, 'convenio' => $conv];
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/** Últimas operaciones de un convenio (todas: cobros, recargas, comisiones). */
+function operaciones_convenio(PDO $pdo, int $convenioId, int $limite = 60): array
+{
+    $st = $pdo->prepare(
+        "SELECT o.*, u.nombre AS usuario
+           FROM servicio_operaciones o
+           LEFT JOIN usuarios u ON u.id = o.usuario_id
+          WHERE o.convenio_id = ?
+          ORDER BY o.id DESC LIMIT " . (int)$limite
+    );
+    $st->execute([$convenioId]);
+    return $st->fetchAll();
+}
+
 /** Pagos de cuentas registrados en el turno, del más nuevo al más viejo. */
 function recaudaciones_del_turno(PDO $pdo, int $sesionId, int $limite = 50): array
 {

@@ -270,6 +270,13 @@ try {
                 'Pago de cuenta (' . $o['servicio'] . ') por ' . clp($o['monto']) .
                 ' en ' . $o['medio_pago']);
         }
+        // Saldo del convenio tras el cobro: si quedó bajo, la caja debe avisar
+        // antes de que alguien se quede sin poder atender.
+        $stC = $pdo->prepare("SELECT * FROM convenios WHERE id = ?");
+        $stC->execute([$convenio]);
+        $conv = $stC->fetch();
+        $k = $conv ? saldo_convenio($pdo, $conv) : null;
+
         responder_json([
             'ok' => true,
             'duplicada' => $r['duplicada'],
@@ -277,6 +284,12 @@ try {
                 'id' => (int)$o['id'], 'servicio' => $o['servicio'],
                 'monto' => (float)$o['monto'], 'medio_pago' => $o['medio_pago'],
             ],
+            'saldo' => $k ? [
+                'convenio'   => $conv['nombre'],
+                'monto'      => $k['saldo'],
+                'bajo'       => $k['bajo'],
+                'es_prepago' => $k['es_prepago'],
+            ] : null,
             'resumen' => resumen_caja($pdo, (int)$sesion['id']),
         ]);
     }
