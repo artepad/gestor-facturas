@@ -603,6 +603,34 @@ try {
 } catch (Throwable $e) { echo "  - indice idx_fiado_venta ya existe
 "; }
 
+echo "\n[Promociones]\n";
+// Promociones automaticas que el POS aplica solo al vender (ej. "4 x $1.000").
+// Ver POS_DISENO.md. Idempotente.
+$pdo->exec("CREATE TABLE IF NOT EXISTS promociones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    negocio_id INT NULL,
+    nombre VARCHAR(120) NOT NULL,
+    tipo VARCHAR(12) NOT NULL,
+    producto_id INT NULL,
+    departamento VARCHAR(150) NULL,
+    cantidad DECIMAL(14,3) NULL,
+    valor DECIMAL(14,2) NOT NULL,
+    desde DATE NULL,
+    hasta DATE NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_por INT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+    INDEX idx_promo_producto (producto_id, activo),
+    INDEX idx_promo_depto (departamento, activo)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla promociones lista\n";
+// Que promocion se aplico a cada linea vendida (para reportes y para explicar
+// por que una linea salio mas barata).
+agregar_columna($pdo, 'venta_items', 'promocion_id', "INT NULL");
+
 echo "\n[Auditoria: referencia generica]\n";
 // Hasta ahora la auditoria solo podia apuntar a un cliente. Con estas dos
 // columnas puede referirse a cualquier cosa (producto, venta, caja...).

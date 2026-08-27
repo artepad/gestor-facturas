@@ -308,6 +308,10 @@ var cobrando = false;      // evita cobrar dos veces con doble clic/tecla
 var ticketNum = 1;         // número del ticket en curso (solo visual, como Eleventa)
 var clientes = null;       // clientes de fiado (se cargan al elegir Fiado o Mixto)
 var espera = <?= json_encode($espera, JSON_UNESCAPED_UNICODE) ?>;
+// Promociones vigentes, embebidas para que el carrito las muestre al instante.
+// El servidor las RECALCULA al cobrar: esto es solo para que la vendedora vea
+// el precio correcto mientras arma la venta.
+var promos = <?= json_encode(promociones_vigentes($pdo, (int)$sesion['negocio_id']), JSON_UNESCAPED_UNICODE) ?>;
 var ventas = <?= json_encode(array_map(fn($v) => [
         'folio' => (int)$v['folio'], 'total' => (float)$v['total'],
         'hora' => substr((string)$v['fecha'], 11, 5),
@@ -344,11 +348,55 @@ function toast(msg, malo) {
     t._t = setTimeout(function () { t.hidden = true; }, 2600);
 }
 
+// ---------- Promociones (espejo del calculo del servidor) ----------
+function precioConPromo(p, cant, precio) {
+    var n = Number(p.cantidad || 0), v = Number(p.valor);
+    if (p.tipo === 'pack') {
+        if (n <= 0) return cant * precio;
+        var g = Math.floor(cant / n);
+        return (g * v) + ((cant - g * n) * precio);
+    }
+    if (p.tipo === 'nxm') {
+        if (n <= 0 || v <= 0 || v >= n) return cant * precio;
+        var gr = Math.floor(cant / n);
+        return ((gr * v) + (cant - gr * n)) * precio;
+    }
+    if (p.tipo === 'precio')     return cant * v;
+    if (p.tipo === 'porcentaje') return cant * precio * (1 - v / 100);
+    return cant * precio;
+}
+
+// Devuelve {promo, total, descuento} para una línea. Gana la que más le
+// conviene al cliente; las de producto mandan sobre las de departamento.
+function promoDeLinea(l) {
+    var normal = Math.round(l.cantidad * l.precio_unitario * 100) / 100;
+    var cands = [];
+    if (l.producto_id && promos.producto && promos.producto[l.producto_id]) {
+        cands = promos.producto[l.producto_id];
+    } else if (l.departamento && promos.departamento && promos.departamento[l.departamento]) {
+        cands = promos.departamento[l.departamento];
+    }
+    var mejor = null, mejorTotal = normal;
+    cands.forEach(function (p) {
+        var t = Math.round(precioConPromo(p, l.cantidad, l.precio_unitario) * 100) / 100;
+        if (t < mejorTotal - 0.001) { mejorTotal = t; mejor = p; }
+    });
+    return { promo: mejor, total: mejorTotal, descuento: Math.round((normal - mejorTotal) * 100) / 100 };
+}
+
+// Etiqueta corta de la promo, igual que en el servidor.
+function textoPromo(p) {
+    var n = String(Number(p.cantidad || 0));
+    if (p.tipo === 'pack')       return n + ' x ' + clp(p.valor);
+    if (p.tipo === 'nxm')        return 'Lleve ' + n + ' pague ' + Number(p.valor);
+    if (p.tipo === 'precio')     return 'Oferta ' + clp(p.valor);
+    if (p.tipo === 'porcentaje') return Number(p.valor) + '% dcto.';
+    return p.nombre;
+}
+
 // ---------- Carrito ----------
 function totalCarrito() {
-    return carrito.reduce(function (s, l) {
-        return s + l.cantidad * l.precio_unitario - (l.descuento || 0);
-    }, 0);
+    return carrito.reduce(function (s, l) { return s + promoDeLinea(l).total; }, 0);
 }
 
 function pintarCarrito() {
@@ -359,13 +407,26 @@ function pintarCarrito() {
         if (i === sel) tr.className = 'sel';
         tr.tabIndex = 0;
         tr.addEventListener('click', function () { sel = i; pintarCarrito(); });
-        var imp = l.cantidad * l.precio_unitario - (l.descuento || 0);
-        [[l.codigo || '—', 'c-cod'], [l.nombre, ''], [clp(l.precio_unitario), 'c-num'],
+        var ap = promoDeLinea(l);
+        [[l.codigo || '—', 'c-cod'], [l.nombre, 'c-desc'], [clp(l.precio_unitario), 'c-num'],
          [(l.cantidad % 1 === 0 ? l.cantidad : l.cantidad.toFixed(3)), 'c-num'],
-         [clp(imp), 'c-num c-imp']].forEach(function (par) {
+         [clp(ap.total), 'c-num c-imp']].forEach(function (par) {
             var td = document.createElement('td');
             td.className = par[1];
             td.textContent = par[0];
+            // Si hay promo, se avisa bajo el nombre y se tacha el precio de lista.
+            if (par[1] === 'c-desc' && ap.promo) {
+                var b = document.createElement('span');
+                b.className = 'linea-promo';
+                b.textContent = textoPromo(ap.promo) + ' · ahorra ' + clp(ap.descuento);
+                td.appendChild(b);
+            }
+            if (par[1] === 'c-num c-imp' && ap.promo) {
+                var v = document.createElement('span');
+                v.className = 'imp-antes';
+                v.textContent = clp(l.cantidad * l.precio_unitario);
+                td.insertBefore(v, td.firstChild);
+            }
             tr.appendChild(td);
         });
         var tdx = document.createElement('td');
@@ -476,7 +537,10 @@ function vaciar() { carrito = []; sel = -1; pintarCarrito(); }
 
 // ---------- Comunicación con el servidor ----------
 function api(accion, datos, metodo) {
-    var url = 'pos_api.php?accion=' + encodeURIComponent(accion);
+    // OJO: `accion` puede traer parametros ya codificados (ej. "buscar&q=..."),
+    // asi que NO se vuelve a codificar entera: eso convertiria el & y el = en
+    // texto y el servidor no reconoceria la accion.
+    var url = 'pos_api.php?accion=' + accion;
     var op = { method: metodo || 'POST', headers: { 'Content-Type': 'application/json' } };
     if (op.method === 'POST') op.body = JSON.stringify(datos || {});
     return fetch(url, op).then(function (r) {

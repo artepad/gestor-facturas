@@ -383,6 +383,136 @@ function clientes_para_pos(PDO $pdo, int $negocioId): array
     return $st->fetchAll();
 }
 
+// ===================== Promociones automáticas =====================
+// El POS las aplica solo al vender: si hay "4 yogures por $1.000" y el cliente
+// lleva 4, cobra $1.000 en vez de 4 × $300. La vendedora no tiene que
+// acordarse ni calcular nada.
+
+/**
+ * Promociones vigentes hoy para un negocio (las de negocio_id NULL valen en
+ * los dos). Devuelve las de producto y las de departamento por separado.
+ */
+function promociones_vigentes(PDO $pdo, int $negocioId): array
+{
+    $st = $pdo->prepare(
+        "SELECT * FROM promociones
+          WHERE activo = 1
+            AND (negocio_id IS NULL OR negocio_id = ?)
+            AND (desde IS NULL OR desde <= CURDATE())
+            AND (hasta IS NULL OR hasta >= CURDATE())
+          ORDER BY id"
+    );
+    $st->execute([$negocioId]);
+
+    $porProducto = [];
+    $porDepto = [];
+    foreach ($st->fetchAll() as $p) {
+        if ($p['producto_id'])       $porProducto[(int)$p['producto_id']][] = $p;
+        elseif ($p['departamento'])  $porDepto[$p['departamento']][] = $p;
+    }
+    return ['producto' => $porProducto, 'departamento' => $porDepto];
+}
+
+/**
+ * Cuánto cuestan $cantidad unidades de un producto de $precio con esta promo.
+ * Devuelve el total ya rebajado.
+ *
+ *   pack       "4 x $1.000": cada grupo de `cantidad` cuesta `valor`; el resto
+ *              que no completa un grupo va a precio normal.
+ *   nxm        "lleve 3 pague 2": cantidad=3, valor=2.
+ *   precio     precio unitario rebajado (`valor`).
+ *   porcentaje `valor`% de descuento.
+ */
+function precio_con_promocion(array $promo, float $cantidad, float $precio): float
+{
+    $n = (float)($promo['cantidad'] ?? 0);
+    $v = (float)$promo['valor'];
+
+    switch ($promo['tipo']) {
+        case 'pack':
+            if ($n <= 0) return $cantidad * $precio;
+            $grupos = floor($cantidad / $n);
+            $resto  = $cantidad - ($grupos * $n);
+            return ($grupos * $v) + ($resto * $precio);
+
+        case 'nxm':
+            if ($n <= 0 || $v <= 0 || $v >= $n) return $cantidad * $precio;
+            $grupos = floor($cantidad / $n);
+            $resto  = $cantidad - ($grupos * $n);
+            return (($grupos * $v) + $resto) * $precio;
+
+        case 'precio':
+            return $cantidad * $v;
+
+        case 'porcentaje':
+            return $cantidad * $precio * (1 - ($v / 100));
+    }
+    return $cantidad * $precio;
+}
+
+/**
+ * Elige la promo que le conviene al cliente para una línea y calcula su
+ * descuento. Las de producto mandan sobre las de departamento; entre varias,
+ * gana la que deja el total más bajo.
+ *
+ * Devuelve ['promocion' => fila|null, 'descuento' => float, 'total' => float].
+ */
+function promocion_para_linea(array $promos, ?int $productoId, ?string $departamento,
+                              float $cantidad, float $precio): array
+{
+    $normal = round($cantidad * $precio, 2);
+    $candidatas = [];
+    if ($productoId && isset($promos['producto'][$productoId])) {
+        $candidatas = $promos['producto'][$productoId];
+    } elseif ($departamento && isset($promos['departamento'][$departamento])) {
+        $candidatas = $promos['departamento'][$departamento];
+    }
+    if (!$candidatas) return ['promocion' => null, 'descuento' => 0.0, 'total' => $normal];
+
+    $mejor = null;
+    $mejorTotal = $normal;
+    foreach ($candidatas as $p) {
+        $t = round(precio_con_promocion($p, $cantidad, $precio), 2);
+        if ($t < $mejorTotal - 0.001) { $mejorTotal = $t; $mejor = $p; }
+    }
+    return [
+        'promocion' => $mejor,
+        'descuento' => round($normal - $mejorTotal, 2),
+        'total'     => $mejorTotal,
+    ];
+}
+
+/** Texto corto de la promo para mostrarla en el carrito y la boleta. */
+function texto_promocion(array $p): string
+{
+    $n = rtrim(rtrim(number_format((float)($p['cantidad'] ?? 0), 3, ',', '.'), '0'), ',');
+    switch ($p['tipo']) {
+        case 'pack':       return $n . ' x ' . clp($p['valor']);
+        case 'nxm':        return 'Lleve ' . $n . ' pague ' . (int)$p['valor'];
+        case 'precio':     return 'Oferta ' . clp($p['valor']);
+        case 'porcentaje': return rtrim(rtrim(number_format((float)$p['valor'], 2, ',', '.'), '0'), ',') . '% dcto.';
+    }
+    return $p['nombre'];
+}
+
+/**
+ * Total de un carrito con las promociones ya aplicadas. Lo usa el endpoint
+ * para validar que los pagos cuadren con lo que el cliente realmente paga.
+ */
+function total_con_promociones(PDO $pdo, int $negocioId, array $items): float
+{
+    $promos = promociones_vigentes($pdo, $negocioId);
+    $total = 0.0;
+    foreach ($items as $it) {
+        $cant   = (float)($it['cantidad'] ?? 0);
+        $precio = (float)($it['precio_unitario'] ?? 0);
+        $pid = isset($it['producto_id']) && $it['producto_id'] ? (int)$it['producto_id'] : null;
+        $dep = ($it['departamento'] ?? '') !== '' ? (string)$it['departamento'] : null;
+        $total += promocion_para_linea($promos, $pid, $dep, $cant, $precio)['total'];
+    }
+    return round($total, 2);
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {
@@ -417,17 +547,23 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
     }
 
     // Normaliza las líneas y calcula los totales del lado del servidor.
+    // Las promociones se recalculan ACÁ: nunca se confía en el descuento que
+    // manda el navegador (podría manipularse).
+    $promos = promociones_vigentes($pdo, (int)$sesion['negocio_id']);
     $lineas = [];
     $subtotal = 0.0; $descuentos = 0.0; $costoTotal = 0.0;
     foreach ($items as $it) {
         $nombre = trim((string)($it['nombre'] ?? ''));
         $cant   = (float)($it['cantidad'] ?? 0);
         $precio = (float)($it['precio_unitario'] ?? 0);
-        $desc   = (float)($it['descuento'] ?? 0);
         if ($nombre === '' || $cant <= 0 || $precio < 0) {
             throw new RuntimeException('Hay una línea de la venta con datos inválidos.');
         }
-        $totalLinea = round($cant * $precio - $desc, 2);
+        $pid = isset($it['producto_id']) && $it['producto_id'] ? (int)$it['producto_id'] : null;
+        $dep = ($it['departamento'] ?? '') !== '' ? (string)$it['departamento'] : null;
+        $ap  = promocion_para_linea($promos, $pid, $dep, $cant, $precio);
+        $desc = $ap['descuento'];
+        $totalLinea = $ap['total'];
         if ($totalLinea < 0) $totalLinea = 0.0;
 
         $costoUnit = isset($it['costo_unitario']) && $it['costo_unitario'] !== null
@@ -447,6 +583,7 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
             'total'           => $totalLinea,
             'costo_unitario'  => $costoUnit,
             'afecto_iva'      => !empty($it['afecto_iva']) ? 1 : 0,
+            'promocion_id'    => $ap['promocion'] ? (int)$ap['promocion']['id'] : null,
         ];
     }
     $total = round($subtotal - $descuentos, 2);
@@ -530,13 +667,13 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
         $stI = $pdo->prepare(
             "INSERT INTO venta_items (venta_id, producto_id, codigo, nombre, departamento,
                                       cantidad, precio_unitario, descuento, total,
-                                      costo_unitario, afecto_iva)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+                                      costo_unitario, afecto_iva, promocion_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
         );
         foreach ($lineas as $l) {
             $stI->execute([$ventaId, $l['producto_id'], $l['codigo'], $l['nombre'], $l['departamento'],
                            $l['cantidad'], $l['precio_unitario'], $l['descuento'], $l['total'],
-                           $l['costo_unitario'], $l['afecto_iva']]);
+                           $l['costo_unitario'], $l['afecto_iva'], $l['promocion_id']]);
         }
 
         $stP = $pdo->prepare(

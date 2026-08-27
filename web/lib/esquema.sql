@@ -461,6 +461,7 @@ CREATE TABLE IF NOT EXISTS venta_items (
   total           DECIMAL(14,2) NOT NULL,
   costo_unitario  DECIMAL(14,2) NULL,
   afecto_iva      TINYINT(1) NOT NULL DEFAULT 1,
+  promocion_id    INT NULL,                          -- que promo rebajo esta linea
   FOREIGN KEY (venta_id)    REFERENCES ventas(id)    ON DELETE CASCADE,
   FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
   INDEX idx_vitem_venta (venta_id),
@@ -539,4 +540,31 @@ CREATE TABLE IF NOT EXISTS servicio_operaciones (
   INDEX idx_servop_negocio_fecha (negocio_id, fecha),
   INDEX idx_servop_convenio (convenio_id, fecha),
   INDEX idx_servop_sesion (caja_sesion_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ===== Promociones automaticas (el POS las aplica solo al vender) =====
+-- El caso que pidio el usuario: "4 yogures por $1.000" cuando el yogur suelto
+-- vale $300 -> al pasar 4, el total es 1.000 y no 1.200.
+CREATE TABLE IF NOT EXISTS promociones (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_id   INT NULL,                     -- NULL = vale en los dos negocios
+  nombre       VARCHAR(120) NOT NULL,        -- "4 yogures por $1.000"
+  tipo         VARCHAR(12) NOT NULL,         -- pack | precio | porcentaje | nxm
+  producto_id  INT NULL,                     -- aplica a un producto...
+  departamento VARCHAR(150) NULL,            -- ...o a un departamento entero
+  cantidad     DECIMAL(14,3) NULL,           -- pack/nxm: cuantas unidades entran
+  valor        DECIMAL(14,2) NOT NULL,       -- pack: precio del pack
+                                             -- precio: precio unitario rebajado
+                                             -- porcentaje: % de descuento
+                                             -- nxm: cuantas se pagan
+  desde        DATE NULL,                    -- vigencia (NULL = sin limite)
+  hasta        DATE NULL,
+  activo       TINYINT(1) NOT NULL DEFAULT 1,
+  creado_por   INT NULL,
+  creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (negocio_id)  REFERENCES negocios(id)  ON DELETE CASCADE,
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por)  REFERENCES usuarios(id)  ON DELETE SET NULL,
+  INDEX idx_promo_producto (producto_id, activo),
+  INDEX idx_promo_depto (departamento, activo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

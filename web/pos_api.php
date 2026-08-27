@@ -48,6 +48,11 @@ function cuerpo_json(): array
 $esPost = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
 
 try {
+    // ---------- Promociones vigentes (el navegador las usa para mostrar) ----------
+    if ($accion === 'promos') {
+        responder_json(['ok' => true, 'promos' => promociones_vigentes($pdo, $negocioId)]);
+    }
+
     // ---------- Buscar productos (escáner o búsqueda por nombre) ----------
     if ($accion === 'buscar') {
         $q = (string)($_GET['q'] ?? '');
@@ -87,13 +92,10 @@ try {
         $items = $datos['items'] ?? [];
         $MEDIOS = ['efectivo', 'tarjeta', 'transferencia', 'credito'];
 
-        // El total se recalcula en registrar_venta(); acá solo armamos los pagos.
-        $total = 0.0;
-        foreach ($items as $it) {
-            $total += ((float)($it['cantidad'] ?? 0)) * ((float)($it['precio_unitario'] ?? 0))
-                    - (float)($it['descuento'] ?? 0);
-        }
-        $total = round($total, 2);
+        // Total CON las promociones aplicadas, calculado acá igual que en
+        // registrar_venta(). Si se usara el precio de lista, los pagos no
+        // cuadrarian con lo que el cliente realmente debe pagar.
+        $total = round(total_con_promociones($pdo, (int)$sesion['negocio_id'], $items), 2);
 
         // Acepta un medio único (forma simple) o varios (pago mixto).
         $pagos = [];
@@ -169,11 +171,7 @@ try {
     // ---------- Tickets en espera ----------
     if ($accion === 'espera_guardar') {
         $items = $datos['items'] ?? [];
-        $total = 0.0;
-        foreach ($items as $it) {
-            $total += ((float)($it['cantidad'] ?? 0)) * ((float)($it['precio_unitario'] ?? 0))
-                    - (float)($it['descuento'] ?? 0);
-        }
+        $total = total_con_promociones($pdo, (int)$sesion['negocio_id'], $items);
         $t = guardar_espera($pdo, $usuario, $sesion, $items,
                             trim((string)($datos['etiqueta'] ?? '')), round($total, 2));
         responder_json(['ok' => true, 'ticket' => $t, 'espera' => listar_espera($pdo, (int)$sesion['id'])]);
