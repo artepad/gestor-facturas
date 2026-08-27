@@ -48,6 +48,23 @@ function cuerpo_json(): array
 $esPost = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
 
 try {
+    // ---------- Catálogo completo (la caja lo guarda en el PC) ----------
+    // Con ?firma=... el servidor responde "sin cambios" y se ahorra mandar los
+    // miles de productos cuando el catálogo no se movió.
+    if ($accion === 'catalogo') {
+        $firma = firma_catalogo($pdo);
+        if (($_GET['firma'] ?? '') === $firma) {
+            responder_json(['ok' => true, 'sin_cambios' => true, 'firma' => $firma]);
+        }
+        responder_json([
+            'ok' => true,
+            'sin_cambios' => false,
+            'firma' => $firma,
+            'productos' => catalogo_para_pos($pdo),
+            'promos' => promociones_vigentes($pdo, $negocioId),
+        ]);
+    }
+
     // ---------- Promociones vigentes (el navegador las usa para mostrar) ----------
     if ($accion === 'promos') {
         responder_json(['ok' => true, 'promos' => promociones_vigentes($pdo, $negocioId)]);

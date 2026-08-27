@@ -513,6 +513,46 @@ function total_con_promociones(PDO $pdo, int $negocioId, array $items): float
     return round($total, 2);
 }
 
+/**
+ * "Firma" del catálogo: cambia si se agregó, editó o borró algún producto.
+ * La caja la guarda junto con su copia local y solo vuelve a descargar el
+ * catálogo completo si la firma cambió.
+ */
+function firma_catalogo(PDO $pdo): string
+{
+    $f = $pdo->query(
+        "SELECT COUNT(*) n, COALESCE(MAX(id),0) mx,
+                COALESCE(MAX(actualizado_en), '0') act
+           FROM productos WHERE activo = 1"
+    )->fetch();
+    return $f['n'] . '-' . $f['mx'] . '-' . $f['act'];
+}
+
+/**
+ * Catálogo completo para que la caja lo guarde en el PC y pueda vender sin
+ * internet. Solo los campos que necesita la venta (nada de datos de más).
+ */
+function catalogo_para_pos(PDO $pdo): array
+{
+    $st = $pdo->query(
+        "SELECT id, codigo, nombre, precio_venta, precio_costo, departamento, afecto_iva
+           FROM productos WHERE activo = 1 ORDER BY id"
+    );
+    $out = [];
+    foreach ($st->fetchAll() as $p) {
+        $out[] = [
+            'producto_id'     => (int)$p['id'],
+            'codigo'          => $p['codigo'],
+            'nombre'          => $p['nombre'],
+            'precio_unitario' => (float)$p['precio_venta'],
+            'costo_unitario'  => $p['precio_costo'] !== null ? (float)$p['precio_costo'] : null,
+            'departamento'    => $p['departamento'],
+            'afecto_iva'      => (int)$p['afecto_iva'],
+        ];
+    }
+    return $out;
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {

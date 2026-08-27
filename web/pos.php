@@ -87,6 +87,9 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
     <button type="button" class="pos-tecla pos-tecla-cuenta" data-accion="cuenta"><b>F9</b> Pago de cuenta</button>
 </div>
 
+<!-- Aviso de que se está trabajando con una copia local del catálogo -->
+<div class="pos-catalogo-aviso" id="avisoCatalogo" hidden></div>
+
 <!-- Pestañas de tickets: el activo + los que quedaron en espera -->
 <div class="pos-tabs" id="posTabs"></div>
 
@@ -373,6 +376,140 @@ function toast(msg, malo) {
     t._t = setTimeout(function () { t.hidden = true; }, 2600);
 }
 
+// ================= Copia local del catálogo =================
+// La caja guarda todo el catálogo en el propio PC (IndexedDB) para que
+// escanear sea instantáneo y para poder vender aunque se caiga internet.
+// Ver POS_DISENO.md (Etapa 3).
+
+var DB_NOMBRE = 'minimark-pos', DB_VERSION = 1;
+var catalogo = [];          // productos en memoria (búsqueda instantánea)
+var porCodigo = {};         // índice código -> producto
+var catalogoFecha = null;   // cuándo se bajó esta copia
+
+function abrirDB() {
+    return new Promise(function (ok, err) {
+        var r = indexedDB.open(DB_NOMBRE, DB_VERSION);
+        r.onupgradeneeded = function (e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains('productos')) {
+                db.createObjectStore('productos', { keyPath: 'codigo' });
+            }
+            if (!db.objectStoreNames.contains('meta')) {
+                db.createObjectStore('meta', { keyPath: 'k' });
+            }
+        };
+        r.onsuccess = function () { ok(r.result); };
+        r.onerror = function () { err(r.error); };
+    });
+}
+
+/** Lee un valor suelto del almacén 'meta'. */
+function leerMeta(clave) {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok) {
+            var p = db.transaction('meta', 'readonly').objectStore('meta').get(clave);
+            p.onsuccess = function () { ok(p.result ? p.result.v : null); };
+            p.onerror = function () { ok(null); };
+        });
+    }).catch(function () { return null; });
+}
+
+function guardarMeta(clave, valor) {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok) {
+            var t = db.transaction('meta', 'readwrite');
+            t.objectStore('meta').put({ k: clave, v: valor });
+            t.oncomplete = function () { ok(true); };
+            t.onerror = function () { ok(false); };
+        });
+    }).catch(function () { return false; });
+}
+
+/** Guarda el catálogo completo (reemplaza el anterior). */
+function guardarCatalogo(productos) {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok, err) {
+            var t = db.transaction('productos', 'readwrite');
+            var st = t.objectStore('productos');
+            st.clear();
+            productos.forEach(function (p) { st.put(p); });
+            t.oncomplete = function () { ok(true); };
+            t.onerror = function () { err(t.error); };
+        });
+    });
+}
+
+/** Lee el catálogo guardado a memoria. */
+function cargarCatalogoLocal() {
+    return abrirDB().then(function (db) {
+        return new Promise(function (ok) {
+            var p = db.transaction('productos', 'readonly').objectStore('productos').getAll();
+            p.onsuccess = function () { ok(p.result || []); };
+            p.onerror = function () { ok([]); };
+        });
+    }).catch(function () { return []; });
+}
+
+function indexarCatalogo(lista) {
+    catalogo = lista || [];
+    porCodigo = {};
+    catalogo.forEach(function (p) { porCodigo[String(p.codigo)] = p; });
+}
+
+/**
+ * Baja el catálogo si cambió. Manda la firma que ya tenemos: si el servidor
+ * responde "sin cambios", no viaja ni un producto.
+ */
+function sincronizarCatalogo() {
+    if (!navigator.onLine) return Promise.resolve(false);
+    return leerMeta('firma').then(function (firma) {
+        return api('catalogo' + (firma ? '&firma=' + encodeURIComponent(firma) : ''), null, 'GET');
+    }).then(function (j) {
+        if (j.sin_cambios) return false;
+        return guardarCatalogo(j.productos)
+            .then(function () { return guardarMeta('firma', j.firma); })
+            .then(function () { return guardarMeta('fecha', new Date().toISOString()); })
+            .then(function () {
+                indexarCatalogo(j.productos);
+                if (j.promos) promos = j.promos;
+                catalogoFecha = new Date();
+                return true;
+            });
+    }).catch(function () { return false; });   // sin internet: se sigue con lo local
+}
+
+/** Busca en la copia local: por código exacto, o por nombre/código parcial. */
+function buscarLocal(q) {
+    q = String(q || '').trim();
+    if (!q) return [];
+    if (porCodigo[q]) return [porCodigo[q]];
+    var t = q.toLowerCase(), out = [];
+    for (var i = 0; i < catalogo.length && out.length < 20; i++) {
+        var p = catalogo[i];
+        if (String(p.codigo).indexOf(q) === 0 || p.nombre.toLowerCase().indexOf(t) >= 0) {
+            out.push(p);
+        }
+    }
+    return out;
+}
+
+/** Franja que avisa con qué tan vieja es la lista de precios. */
+function pintarAvisoCatalogo() {
+    var el = $('avisoCatalogo');
+    if (!catalogoFecha) { el.hidden = true; return; }
+    var dias = Math.floor((Date.now() - catalogoFecha.getTime()) / 86400000);
+    var sinNet = !navigator.onLine;
+    // Con internet y copia fresca no se molesta al vendedor.
+    if (!sinNet && dias < 1) { el.hidden = true; return; }
+    var f = catalogoFecha.toLocaleDateString('es-CL',
+            { weekday: 'long', day: 'numeric', month: 'long' });
+    el.className = 'pos-catalogo-aviso' + (dias >= 7 ? ' grave' : (dias >= 2 ? ' medio' : ''));
+    el.textContent = (sinNet ? '⚠ Sin conexión — ' : 'Lista de precios del ')
+        + f + (dias >= 2 ? '  (hace ' + dias + ' días)' : '')
+        + (sinNet ? '. Los precios pueden estar desactualizados.' : '');
+    el.hidden = false;
+}
+
 // ---------- Promociones (espejo del calculo del servidor) ----------
 function precioConPromo(p, cant, precio) {
     var n = Number(p.cantidad || 0), v = Number(p.valor);
@@ -590,6 +727,24 @@ function agregarPorCodigo() {
             $('codigo').value = '';
             return;
         }
+    }
+    // Primero la copia local: es instantánea y funciona sin internet.
+    var local = buscarLocal(q);
+    if (local.length === 1 && String(local[0].codigo) === q) {
+        agregarLinea(local[0]);
+        $('codigo').value = '';
+        return;
+    }
+    if (!navigator.onLine) {
+        // Sin internet solo existe lo local.
+        if (!local.length) {
+            toast('No está en la lista guardada. Usa Ctrl+P para cobrarlo a mano.', true);
+            $('codigo').select();
+        } else {
+            $('codigo').value = '';
+            abrirBuscar(q);
+        }
+        return;
     }
     api('buscar&q=' + encodeURIComponent(q), null, 'GET').then(function (j) {
         if (!j.resultados.length) {
@@ -851,9 +1006,28 @@ function abrirBuscar(q) {
     abrirModal('modalBuscar', 'buscarQ');
     if (q) buscar();
 }
+function pintarResultados(lista) {
+    var c = $('buscarRes');
+    c.innerHTML = '';
+    if (!lista.length) { c.innerHTML = '<p class="pos-vacio">Sin resultados.</p>'; return; }
+    lista.forEach(function (p) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'buscar-item';
+        b.innerHTML = '<span class="bi-nom"></span><span class="bi-cod"></span><span class="bi-pre"></span>';
+        b.querySelector('.bi-nom').textContent = p.nombre;
+        b.querySelector('.bi-cod').textContent = p.codigo || '';
+        b.querySelector('.bi-pre').textContent = clp(p.precio_unitario);
+        b.addEventListener('click', function () { agregarLinea(p); cerrarModal(); });
+        c.appendChild(b);
+    });
+}
+
 function buscar() {
     var q = $('buscarQ').value.trim();
     if (q.length < 2) { $('buscarRes').innerHTML = '<p class="pos-vacio">Escribe al menos 2 letras.</p>'; return; }
+    // La copia local responde al instante; sin internet es la única fuente.
+    pintarResultados(buscarLocal(q));
+    if (!navigator.onLine) return;
     api('buscar&q=' + encodeURIComponent(q), null, 'GET').then(function (j) {
         var c = $('buscarRes');
         c.innerHTML = '';
@@ -1142,7 +1316,27 @@ function pintarConexion() {
     $('posAyuda').textContent = navigator.onLine
         ? 'Punto de Venta · Teclee o escanee el código del producto.'
         : 'Sin conexión a internet · avísale al administrador.';
+    pintarAvisoCatalogo();
 }
+
+// Al arrancar: primero lo guardado (instantáneo), y en paralelo se busca si
+// hay algo nuevo. Así la caja abre al toque incluso sin internet.
+function iniciarCatalogo() {
+    cargarCatalogoLocal().then(function (lista) {
+        indexarCatalogo(lista);
+        return leerMeta('fecha');
+    }).then(function (f) {
+        if (f) catalogoFecha = new Date(f);
+        pintarAvisoCatalogo();
+        return sincronizarCatalogo();
+    }).then(function (cambio) {
+        if (cambio) {
+            pintarAvisoCatalogo();
+            pintarCarrito();      // los precios pueden haber cambiado
+        }
+    }).catch(function () { /* la caja funciona igual con lo que tenga */ });
+}
+iniciarCatalogo();
 window.addEventListener('online', function () { pintarConexion(); toast('Conexión restablecida.'); });
 window.addEventListener('offline', function () { pintarConexion(); toast('Se cayó internet.', true); });
 pintarConexion();

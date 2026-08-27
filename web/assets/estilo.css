@@ -1420,3 +1420,10 @@ th.col-num { text-align: right; }
 /* Aviso rojo en la barra superior cuando se cae internet */
 .pos-conexion { background: #a93226; color: #fff; border-radius: 7px;
   padding: 5px 11px; font-size: 12.5px; font-weight: 700; }
+
+/* ===== Aviso de catalogo local (Etapa 3B) ===== */
+/* Franja bajo el titulo que dice de cuando es la lista de precios */
+.pos-catalogo-aviso { background: #eaf3fb; color: #1b4f7f; border-bottom: 1px solid #cfe0f0;
+  padding: 6px 14px; font-size: 12.5px; font-weight: 600; }
+.pos-catalogo-aviso.medio { background: #fdf3e3; color: #8a5a10; border-bottom-color: #f0dcb8; }
+.pos-catalogo-aviso.grave { background: #fdecea; color: #a93226; border-bottom-color: #f3c6c0; }
