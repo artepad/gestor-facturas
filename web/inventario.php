@@ -169,6 +169,7 @@ function n3($v) { return rtrim(rtrim(number_format((float)$v, 3, ',', '.'), '0')
                 <h2>Inventario</h2>
             </div>
             <div class="cab-botones">
+                <a class="btn gris" href="compras.php?negocio_id=<?= $negocioId ?>">Compras</a>
                 <a class="btn gris" href="herramienta_productos.php">Catálogo</a>
                 <?php if (count($negocios) > 1): ?>
                 <form method="get">

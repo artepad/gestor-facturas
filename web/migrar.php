@@ -664,6 +664,57 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS inventario_movimientos (
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 echo "  ~ tabla inventario_movimientos lista\n";
 
+echo "\n[Proveedores y compras]\n";
+// Recibir mercaderia suma stock (solo si el negocio lleva inventario).
+// Una compra puede quedar enlazada a una factura ya escaneada.
+$tablasCompras = [
+    'proveedores' => "CREATE TABLE IF NOT EXISTS proveedores (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    negocio_id INT NULL,
+    nombre VARCHAR(150) NOT NULL,
+    rut VARCHAR(20) NULL,
+    telefono VARCHAR(40) NULL,
+    correo VARCHAR(150) NULL,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+    INDEX idx_prov_nombre (nombre)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'compras' => "CREATE TABLE IF NOT EXISTS compras (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    negocio_id INT NOT NULL,
+    proveedor_id INT NULL,
+    factura_id INT NULL,
+    fecha DATE NOT NULL,
+    total DECIMAL(14,2) NULL,
+    nota VARCHAR(255) NULL,
+    usuario_id INT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+    FOREIGN KEY (proveedor_id) REFERENCES proveedores(id) ON DELETE SET NULL,
+    FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE SET NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+    INDEX idx_compra_negocio (negocio_id, fecha)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    'compra_items' => "CREATE TABLE IF NOT EXISTS compra_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    compra_id INT NOT NULL,
+    producto_id INT NULL,
+    codigo VARCHAR(40) NULL,
+    nombre VARCHAR(255) NOT NULL,
+    cantidad DECIMAL(14,3) NOT NULL,
+    costo_unitario DECIMAL(14,2) NULL,
+    total DECIMAL(14,2) NULL,
+    FOREIGN KEY (compra_id) REFERENCES compras(id) ON DELETE CASCADE,
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
+    INDEX idx_citem_compra (compra_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+];
+foreach ($tablasCompras as $nombre => $ddl) {
+    $pdo->exec($ddl);
+    echo "  ~ tabla $nombre lista\n";
+}
+
 echo "\n[Auditoria: referencia generica]\n";
 // Hasta ahora la auditoria solo podia apuntar a un cliente. Con estas dos
 // columnas puede referirse a cualquier cosa (producto, venta, caja...).

@@ -716,6 +716,121 @@ function kardex_producto(PDO $pdo, int $productoId, int $negocioId, int $limite 
     return $st->fetchAll();
 }
 
+// ===================== Compras (recepción de mercadería) =====================
+
+/** Proveedores del negocio (los de negocio_id NULL sirven para ambos). */
+function proveedores_de(PDO $pdo, int $negocioId, bool $soloActivos = true): array
+{
+    $st = $pdo->prepare(
+        "SELECT * FROM proveedores
+          WHERE (negocio_id IS NULL OR negocio_id = ?)"
+        . ($soloActivos ? " AND activo = 1" : "") . "
+          ORDER BY nombre"
+    );
+    $st->execute([$negocioId]);
+    return $st->fetchAll();
+}
+
+/**
+ * Registra una compra y SUMA el stock de lo recibido.
+ *
+ * $items: [{codigo, cantidad, costo_unitario?}]. Los códigos que no existan en
+ * el catálogo se informan y no se cargan (no se inventan productos solos).
+ *
+ * Si el negocio no lleva inventario, la compra se guarda igual como registro
+ * de lo que se compró; simplemente no mueve existencias.
+ */
+function registrar_compra(PDO $pdo, array $usuario, int $negocioId, ?int $proveedorId,
+                          string $fecha, array $items, string $nota = '',
+                          ?int $facturaId = null): array
+{
+    if (!$items) throw new RuntimeException('La compra no tiene productos.');
+
+    $propia = !$pdo->inTransaction();
+    if ($propia) $pdo->beginTransaction();
+    try {
+        $pdo->prepare(
+            "INSERT INTO compras (negocio_id, proveedor_id, factura_id, fecha, nota, usuario_id)
+             VALUES (?,?,?,?,?,?)"
+        )->execute([$negocioId, $proveedorId ?: null, $facturaId,
+                    $fecha, ($nota !== '' ? substr($nota, 0, 255) : null),
+                    $usuario['id'] ?? null]);
+        $compraId = (int)$pdo->lastInsertId();
+
+        $stI = $pdo->prepare(
+            "INSERT INTO compra_items (compra_id, producto_id, codigo, nombre,
+                                       cantidad, costo_unitario, total)
+             VALUES (?,?,?,?,?,?,?)"
+        );
+        $stP = $pdo->prepare("SELECT id, nombre FROM productos WHERE codigo = ?");
+        $total = 0.0;
+        $noEncontrados = [];
+        $cargados = 0;
+
+        foreach ($items as $it) {
+            $cod  = trim((string)($it['codigo'] ?? ''));
+            $cant = (float)($it['cantidad'] ?? 0);
+            $costo = isset($it['costo_unitario']) && $it['costo_unitario'] !== null
+                   ? (float)$it['costo_unitario'] : null;
+            if ($cod === '' || $cant <= 0) continue;
+
+            $stP->execute([$cod]);
+            $p = $stP->fetch();
+            if (!$p) { $noEncontrados[] = $cod; continue; }
+
+            $lineaTotal = $costo !== null ? round($cant * $costo, 2) : null;
+            if ($lineaTotal !== null) $total += $lineaTotal;
+
+            $stI->execute([$compraId, (int)$p['id'], $cod, $p['nombre'], $cant, $costo, $lineaTotal]);
+            // Suma el stock (mover_stock decide solo si el negocio lo lleva).
+            mover_stock($pdo, $usuario, $negocioId, (int)$p['id'], $cant, 'compra',
+                        'compra', $compraId, 'Compra N° ' . $compraId);
+            $cargados++;
+        }
+
+        if ($cargados === 0) {
+            throw new RuntimeException(
+                'Ningún código del listado está en el catálogo'
+                . ($noEncontrados ? ': ' . implode(', ', array_slice($noEncontrados, 0, 5)) : '') . '.'
+            );
+        }
+
+        $pdo->prepare("UPDATE compras SET total = ? WHERE id = ?")
+            ->execute([$total > 0 ? $total : null, $compraId]);
+
+        if ($propia) $pdo->commit();
+        return ['id' => $compraId, 'cargados' => $cargados,
+                'no_encontrados' => $noEncontrados, 'total' => $total];
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/** Últimas compras de un negocio. */
+function compras_de(PDO $pdo, int $negocioId, int $limite = 30): array
+{
+    $st = $pdo->prepare(
+        "SELECT c.*, p.nombre AS proveedor, u.nombre AS usuario,
+                (SELECT COUNT(*) FROM compra_items i WHERE i.compra_id = c.id) n_items
+           FROM compras c
+           LEFT JOIN proveedores p ON p.id = c.proveedor_id
+           LEFT JOIN usuarios u ON u.id = c.usuario_id
+          WHERE c.negocio_id = ?
+          ORDER BY c.fecha DESC, c.id DESC LIMIT " . (int)$limite
+    );
+    $st->execute([$negocioId]);
+    return $st->fetchAll();
+}
+
+/** Líneas de una compra. */
+function items_de_compra(PDO $pdo, int $compraId): array
+{
+    $st = $pdo->prepare("SELECT * FROM compra_items WHERE compra_id = ? ORDER BY id");
+    $st->execute([$compraId]);
+    return $st->fetchAll();
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {
