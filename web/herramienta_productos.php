@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $negocioId) {
         if (trim($_POST['confirmar'] ?? '') !== 'ELIMINAR') {
             $mensaje = ['tipo' => 'error', 'texto' => 'Para vaciar el catálogo debes escribir ELIMINAR en mayúsculas.'];
         } else {
-            vaciar_catalogo($pdo, $negocioId);
+            vaciar_catalogo($pdo);
             $mensaje = ['tipo' => 'ok',
                         'texto' => 'La base de datos fue eliminada. Ahora no hay productos cargados; '
                                  . 'sube un Excel cuando quieras crear el catálogo de nuevo.'];
@@ -75,8 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $negocioId) {
 }
 
 // ---- Datos para mostrar ----
-$ultima  = $negocioId ? ultima_carga($pdo, $negocioId) : null;
-$totalP  = $negocioId ? contar_productos($pdo, $negocioId) : 0;
+$ultima  = ultima_carga($pdo);
+$totalP  = contar_productos($pdo);
 
 // El estado depende de si HAY productos cargados ahora mismo: si el catálogo se
 // vació, no decimos "Actualizada hoy" (la fecha de carga existe pero no hay base).
@@ -84,26 +84,15 @@ $estado = $totalP > 0
     ? estado_actualizacion($ultima['cargado_en'] ?? null)
     : ['nivel' => 'vacio', 'dias' => null, 'texto' => 'No hay una base de datos disponible'];
 
-// Carga "activa": la que estampó los productos que están cargados ahora. Sirve
-// para marcar cada fila del historial como Activa / Reemplazada / Eliminada.
-$cargaActiva = null;
-if ($totalP > 0) {
-    $st = $pdo->prepare("SELECT carga_id FROM productos WHERE negocio_id = ? LIMIT 1");
-    $st->execute([$negocioId]);
-    $cargaActiva = (int)$st->fetchColumn();
-}
-
-// Historial de cargas (últimas 8).
-$historial = [];
-if ($negocioId) {
-    $st = $pdo->prepare(
-        "SELECT c.*, u.nombre AS usuario_nombre
-         FROM producto_cargas c LEFT JOIN usuarios u ON u.id = c.cargado_por
-         WHERE c.negocio_id = ? ORDER BY c.cargado_en DESC, c.id DESC LIMIT 8"
-    );
-    $st->execute([$negocioId]);
-    $historial = $st->fetchAll();
-}
+// Historial de cargas (ultimas 8). El catalogo es compartido, asi que el
+// historial es global: se muestra desde que negocio se subio cada archivo.
+$historial = $pdo->query(
+    "SELECT c.*, u.nombre AS usuario_nombre, n.nombre AS negocio_nombre
+       FROM producto_cargas c
+       LEFT JOIN usuarios u ON u.id = c.cargado_por
+       LEFT JOIN negocios n ON n.id = c.negocio_id
+      ORDER BY c.cargado_en DESC, c.id DESC LIMIT 8"
+)->fetchAll();
 
 $nombreNegocio = '';
 foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n['nombre'];
@@ -186,29 +175,20 @@ foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n[
                 <table>
                     <thead><tr>
                         <th>Fecha</th><th>Archivo</th><th class="col-num">Productos</th>
-                        <th class="col-num">Omitidos</th><th>Cargado por</th><th>Estado</th>
+                        <th class="col-num">Nuevos</th><th class="col-num">Actualizados</th>
+                        <th class="col-num">Omitidos</th><th>Cargado por</th><th>Desde</th>
                     </tr></thead>
                     <tbody>
                     <?php foreach ($historial as $i => $c): ?>
-                        <?php
-                        // Activa = la carga cuyos productos están cargados ahora.
-                        // Eliminada = la más reciente cuando el catálogo está vacío (se vació).
-                        // Reemplazada = cualquier carga anterior superada por otra.
-                        if ($cargaActiva !== null && (int)$c['id'] === $cargaActiva) {
-                            $badge = ['activa', 'Activa'];
-                        } elseif ($cargaActiva === null && $i === 0) {
-                            $badge = ['eliminada', 'Eliminada'];
-                        } else {
-                            $badge = ['reemplazada', 'Reemplazada'];
-                        }
-                        ?>
                         <tr>
                             <td><?= h(date('d-m-Y H:i', strtotime($c['cargado_en']))) ?></td>
                             <td><?= h($c['archivo_nombre'] ?: '—') ?></td>
                             <td class="col-num"><?= (int)$c['total_productos'] ?></td>
+                            <td class="col-num"><?= (int)$c['total_nuevos'] ?></td>
+                            <td class="col-num"><?= (int)$c['total_actualizados'] ?></td>
                             <td class="col-num"><?= (int)$c['total_omitidos'] ?></td>
                             <td><?= h($c['usuario_nombre'] ?: '—') ?></td>
-                            <td><span class="badge-carga b-<?= $badge[0] ?>"><?= $badge[1] ?></span></td>
+                            <td><?= h($c['negocio_nombre'] ?: '—') ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>

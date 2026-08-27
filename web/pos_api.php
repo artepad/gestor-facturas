@@ -51,7 +51,7 @@ try {
     // ---------- Buscar productos (escáner o búsqueda por nombre) ----------
     if ($accion === 'buscar') {
         $q = (string)($_GET['q'] ?? '');
-        $filas = buscar_producto_pos($pdo, $negocioId, $q);
+        $filas = buscar_producto_pos($pdo, $q);
         $out = array_map(fn($p) => [
             'producto_id'     => (int)$p['id'],
             'codigo'          => $p['codigo'],

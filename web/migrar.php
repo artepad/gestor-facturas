@@ -41,6 +41,29 @@ function agregar_columna(PDO $pdo, string $tabla, string $col, string $def): voi
     echo "  + $tabla.$col agregada\n";
 }
 
+/** Devuelve true si la tabla existe en la base actual. */
+function tiene_tabla(PDO $pdo, string $tabla): bool
+{
+    $st = $pdo->prepare(
+        "SELECT COUNT(*) FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?"
+    );
+    $st->execute([$tabla]);
+    return (int)$st->fetchColumn() > 0;
+}
+
+/** Nombre de la clave foránea de una columna, o null si no tiene. */
+function nombre_fk(PDO $pdo, string $tabla, string $col): ?string
+{
+    $st = $pdo->prepare(
+        "SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+           AND REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1"
+    );
+    $st->execute([$tabla, $col]);
+    return $st->fetchColumn() ?: null;
+}
+
 echo "== Migraciones ==\n\n";
 echo "[Perfil de negocios]\n";
 agregar_columna($pdo, 'negocios', 'rut',       "VARCHAR(20) NULL AFTER nombre");
@@ -472,5 +495,109 @@ foreach ($tablasPos as $nombre => $ddl) {
     $pdo->exec($ddl);
     echo "  ~ tabla $nombre lista\n";
 }
+
+echo "\n[Catalogo compartido entre negocios]\n";
+// A DIFERENCIA DEL RESTO DE ESTE ARCHIVO, este bloque NO es solo aditivo:
+// deduplica filas y quita la columna negocio_id de `productos`. Ver
+// POS_DISENO.md 7.1. Antes de tocar nada verifica que los catalogos de los
+// negocios sean identicos; si NO lo son, ABORTA el bloque sin cambiar nada y
+// muestra las diferencias para que el usuario decida.
+if (!tiene_columna($pdo, 'productos', 'negocio_id')) {
+    echo "  - el catalogo ya esta unificado\n";
+} else {
+    $difs = $pdo->query(
+        "SELECT codigo, COUNT(*) copias,
+                COUNT(DISTINCT nombre) n, COUNT(DISTINCT COALESCE(precio_venta,-1)) pv,
+                COUNT(DISTINCT COALESCE(precio_costo,-1)) pc,
+                COUNT(DISTINCT COALESCE(precio_mayoreo,-1)) pm,
+                COUNT(DISTINCT COALESCE(departamento,'~')) dep,
+                COUNT(DISTINCT COALESCE(tipo_venta,'~')) tv
+           FROM productos GROUP BY codigo
+         HAVING n > 1 OR pv > 1 OR pc > 1 OR pm > 1 OR dep > 1 OR tv > 1"
+    )->fetchAll();
+
+    if ($difs) {
+        echo "  !! ABORTADO: hay " . count($difs) . " producto(s) con datos DISTINTOS entre negocios.\n";
+        echo "     No se cambio nada. Revisa y decide cual dato queda antes de unificar:\n";
+        foreach (array_slice($difs, 0, 20) as $d) {
+            echo "       codigo {$d['codigo']}\n";
+        }
+        if (count($difs) > 20) echo "       ... y " . (count($difs) - 20) . " mas\n";
+    } else {
+        // 1. Stock por negocio (el stock NUNCA se comparte: ver POS_DISENO.md 7.1).
+        $pdo->exec("CREATE TABLE IF NOT EXISTS producto_stock (
+            producto_id INT NOT NULL,
+            negocio_id INT NOT NULL,
+            stock DECIMAL(14,3) NOT NULL DEFAULT 0,
+            stock_minimo DECIMAL(14,3) NULL,
+            actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (producto_id, negocio_id),
+            FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+            FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        echo "  ~ tabla producto_stock lista\n";
+
+        // 2. Rescata el stock que hubiera antes de deduplicar, mapeandolo a la
+        //    fila que va a sobrevivir (la de menor id por codigo).
+        if (tiene_columna($pdo, 'productos', 'stock')) {
+            $n = $pdo->exec(
+                "INSERT IGNORE INTO producto_stock (producto_id, negocio_id, stock, stock_minimo)
+                 SELECT (SELECT MIN(q.id) FROM productos q WHERE q.codigo = p.codigo),
+                        p.negocio_id, p.stock, p.stock_minimo
+                   FROM productos p WHERE p.stock <> 0 OR p.stock_minimo IS NOT NULL"
+            );
+            echo "  ~ stock preservado: $n fila(s)\n";
+        }
+
+        // 3. Deduplica: se queda con la fila de menor id de cada codigo.
+        $antes = (int)$pdo->query("SELECT COUNT(*) FROM productos")->fetchColumn();
+        $pdo->exec(
+            "DELETE p FROM productos p
+               JOIN (SELECT codigo, MIN(id) id FROM productos GROUP BY codigo) k
+                 ON k.codigo = p.codigo AND p.id > k.id"
+        );
+        $despues = (int)$pdo->query("SELECT COUNT(*) FROM productos")->fetchColumn();
+        echo "  ~ deduplicado: $antes -> $despues productos\n";
+
+        // 4. Quita negocio_id y sus indices; el codigo pasa a ser unico global.
+        if ($fk = nombre_fk($pdo, 'productos', 'negocio_id')) {
+            $pdo->exec("ALTER TABLE productos DROP FOREIGN KEY `$fk`");
+        }
+        foreach (['uq_producto', 'idx_producto_negocio', 'idx_producto_nombre'] as $idx) {
+            try { $pdo->exec("ALTER TABLE productos DROP INDEX `$idx`"); } catch (Throwable $e) {}
+        }
+        $pdo->exec("ALTER TABLE productos DROP COLUMN negocio_id");
+        $pdo->exec("ALTER TABLE productos ADD UNIQUE KEY uq_producto_codigo (codigo)");
+        $pdo->exec("ALTER TABLE productos ADD INDEX idx_producto_nombre (nombre)");
+        echo "  + productos: catalogo unificado (codigo unico global)\n";
+
+        // 5. El stock sale de productos: ahora vive en producto_stock.
+        foreach (['stock', 'stock_minimo'] as $c) {
+            if (tiene_columna($pdo, 'productos', $c)) {
+                $pdo->exec("ALTER TABLE productos DROP COLUMN $c");
+                echo "  - productos.$c movida a producto_stock\n";
+            }
+        }
+    }
+}
+// La carga de Excel ya no reemplaza el catalogo: informa cuantos entraron
+// nuevos y cuantos se actualizaron.
+agregar_columna($pdo, 'producto_cargas', 'total_nuevos',       "INT NOT NULL DEFAULT 0");
+agregar_columna($pdo, 'producto_cargas', 'total_actualizados', "INT NOT NULL DEFAULT 0");
+// Quien creo y quien edito cada producto (se muestra al editarlo).
+agregar_columna($pdo, 'productos', 'creado_por',      "INT NULL");
+agregar_columna($pdo, 'productos', 'actualizado_por', "INT NULL");
+agregar_columna($pdo, 'productos', 'actualizado_en',
+    "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+echo "\n[Auditoria: referencia generica]\n";
+// Hasta ahora la auditoria solo podia apuntar a un cliente. Con estas dos
+// columnas puede referirse a cualquier cosa (producto, venta, caja...).
+agregar_columna($pdo, 'auditoria', 'referencia_tipo', "VARCHAR(20) NULL");
+agregar_columna($pdo, 'auditoria', 'referencia_id',   "INT NULL");
+try {
+    $pdo->exec("ALTER TABLE auditoria ADD INDEX idx_aud_ref (referencia_tipo, referencia_id)");
+    echo "  + indice idx_aud_ref agregado\n";
+} catch (Throwable $e) { echo "  - indice idx_aud_ref ya existe\n"; }
 
 echo "\nListo. Migraciones aplicadas.\n";

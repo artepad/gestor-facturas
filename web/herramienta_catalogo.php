@@ -22,8 +22,8 @@ $negocioId = (int)($_GET['negocio'] ?? 0);
 if ($negocioId && !puede_ver_negocio($usuario, $negocioId)) $negocioId = 0;
 if (!$negocioId && $negocios) $negocioId = (int)$negocios[0]['id'];
 
-$totalP   = $negocioId ? contar_productos($pdo, $negocioId) : 0;
-$deptos   = $negocioId ? departamentos_de_negocio($pdo, $negocioId) : [];
+$totalP   = contar_productos($pdo);
+$deptos   = departamentos_de_negocio($pdo);
 
 $nombreNegocio = '';
 foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n['nombre'];

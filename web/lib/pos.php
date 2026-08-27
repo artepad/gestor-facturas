@@ -339,28 +339,29 @@ function cerrar_caja(PDO $pdo, array $usuario, int $sesionId,
  * no hay match, por código que empiece igual o por nombre que contenga el
  * término. Devuelve como máximo $limite resultados.
  */
-function buscar_producto_pos(PDO $pdo, int $negocioId, string $termino, int $limite = 20): array
+function buscar_producto_pos(PDO $pdo, string $termino, int $limite = 20): array
 {
     $t = trim($termino);
     if ($t === '') return [];
 
-    $cols = "id, codigo, nombre, precio_venta, precio_costo, departamento, afecto_iva, stock";
+    // El catálogo es compartido por los dos negocios (POS_DISENO.md 7.1), así
+    // que la búsqueda ya no se filtra por negocio.
+    $cols = "id, codigo, nombre, precio_venta, precio_costo, departamento, afecto_iva";
 
     // Código exacto: el caso del escáner. Devuelve uno solo y listo.
     $st = $pdo->prepare(
-        "SELECT $cols FROM productos
-          WHERE negocio_id = ? AND codigo = ? AND activo = 1 LIMIT 1"
+        "SELECT $cols FROM productos WHERE codigo = ? AND activo = 1 LIMIT 1"
     );
-    $st->execute([$negocioId, $t]);
+    $st->execute([$t]);
     if ($fila = $st->fetch()) return [$fila];
 
     $st = $pdo->prepare(
         "SELECT $cols FROM productos
-          WHERE negocio_id = ? AND activo = 1 AND (codigo LIKE ? OR nombre LIKE ?)
+          WHERE activo = 1 AND (codigo LIKE ? OR nombre LIKE ?)
           ORDER BY (codigo LIKE ?) DESC, nombre
           LIMIT " . (int)$limite
     );
-    $st->execute([$negocioId, $t . '%', '%' . $t . '%', $t . '%']);
+    $st->execute([$t . '%', '%' . $t . '%', $t . '%']);
     return $st->fetchAll();
 }
 

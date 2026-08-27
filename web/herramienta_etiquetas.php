@@ -20,8 +20,8 @@ $negocioId = (int)($_GET['negocio'] ?? 0);
 if ($negocioId && !puede_ver_negocio($usuario, $negocioId)) $negocioId = 0;
 if (!$negocioId && $negocios) $negocioId = (int)$negocios[0]['id'];
 
-$totalP = $negocioId ? contar_productos($pdo, $negocioId) : 0;
-$estado = estado_actualizacion(($negocioId ? ultima_carga($pdo, $negocioId) : null)['cargado_en'] ?? null);
+$totalP = contar_productos($pdo);
+$estado = estado_actualizacion(ultima_carga($pdo)['cargado_en'] ?? null);
 
 $FILAS = 14;   // una hoja A4 = 14 etiquetas (2 columnas x 7 filas)
 

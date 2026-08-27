@@ -19,5 +19,5 @@ if (!$negocioId || !puede_ver_negocio($usuario, $negocioId)) {
     responder_json(['error' => 'Negocio no válido'], 403);
 }
 
-$resultados = consultar_catalogo(obtener_pdo(), $negocioId, $q, $departamento, 30);
+$resultados = consultar_catalogo(obtener_pdo(), $q, $departamento, 30);
 responder_json(['productos' => $resultados]);

@@ -203,20 +203,33 @@ function reemplazar_catalogo(PDO $pdo, int $negocioId, array $parse, array $meta
         ]);
         $cargaId = (int)$pdo->lastInsertId();
 
-        $del = $pdo->prepare("DELETE FROM productos WHERE negocio_id = ?");
-        $del->execute([$negocioId]);
+        // UPSERT: actualiza lo que ya existe y agrega lo nuevo. NUNCA borra.
+        // Antes esto hacía DELETE + INSERT del catálogo completo; con el
+        // catálogo compartido eso habría vaciado el de los dos negocios, y
+        // además se llevaría el stock por delante (ver POS_DISENO.md 7.1).
+        $antes = (int)$pdo->query("SELECT COUNT(*) FROM productos")->fetchColumn();
+        $usuarioId = $meta['usuario_id'] ?? null;
 
-        // Inserta por lotes de 500 filas (9 columnas por fila) para que sea rápido.
-        $cols = 9;
+        // Inserta por lotes de 500 filas (10 columnas por fila) para que sea rápido.
+        $cols = 10;
         $porLote = 500;
         foreach (array_chunk($filas, $porLote) as $lote) {
             $marca = implode(',', array_fill(0, count($lote), '(' . implode(',', array_fill(0, $cols, '?')) . ')'));
             $sql = "INSERT INTO productos
-                    (negocio_id, codigo, nombre, precio_costo, precio_venta, precio_mayoreo, departamento, tipo_venta, carga_id)
-                    VALUES $marca";
+                    (codigo, nombre, precio_costo, precio_venta, precio_mayoreo,
+                     departamento, tipo_venta, carga_id, creado_por, actualizado_por)
+                    VALUES $marca
+                    ON DUPLICATE KEY UPDATE
+                      nombre          = VALUES(nombre),
+                      precio_costo    = VALUES(precio_costo),
+                      precio_venta    = VALUES(precio_venta),
+                      precio_mayoreo  = VALUES(precio_mayoreo),
+                      departamento    = VALUES(departamento),
+                      tipo_venta      = VALUES(tipo_venta),
+                      carga_id        = VALUES(carga_id),
+                      actualizado_por = VALUES(actualizado_por)";
             $valores = [];
             foreach ($lote as $f) {
-                $valores[] = $negocioId;
                 $valores[] = $f['codigo'];
                 $valores[] = $f['nombre'];
                 $valores[] = $f['precio_costo'];
@@ -225,9 +238,18 @@ function reemplazar_catalogo(PDO $pdo, int $negocioId, array $parse, array $meta
                 $valores[] = $f['departamento'];
                 $valores[] = $f['tipo_venta'];
                 $valores[] = $cargaId;
+                $valores[] = $usuarioId;    // creado_por (solo si es nuevo)
+                $valores[] = $usuarioId;    // actualizado_por
             }
             $pdo->prepare($sql)->execute($valores);
         }
+
+        // Cuántos entraron nuevos y cuántos se actualizaron (para avisar al usuario).
+        $despues = (int)$pdo->query("SELECT COUNT(*) FROM productos")->fetchColumn();
+        $nuevos = $despues - $antes;
+        $pdo->prepare(
+            "UPDATE producto_cargas SET total_nuevos = ?, total_actualizados = ? WHERE id = ?"
+        )->execute([$nuevos, count($filas) - $nuevos, $cargaId]);
 
         $pdo->commit();
         return $cargaId;
@@ -238,34 +260,31 @@ function reemplazar_catalogo(PDO $pdo, int $negocioId, array $parse, array $meta
 }
 
 /** Vacía el catálogo de un negocio (zona de peligro). Devuelve cuántos borró. */
-function vaciar_catalogo(PDO $pdo, int $negocioId): int
+function vaciar_catalogo(PDO $pdo): int
 {
-    $st = $pdo->prepare("DELETE FROM productos WHERE negocio_id = ?");
-    $st->execute([$negocioId]);
-    return $st->rowCount();
+    // El catalogo es UNO SOLO para los dos negocios: esto los deja sin
+    // productos a ambos. Por eso la UI exige escribir ELIMINAR.
+    return (int)$pdo->exec("DELETE FROM productos");
 }
 
 /** Datos de la última carga de un negocio (o null si nunca cargó). */
-function ultima_carga(PDO $pdo, int $negocioId): ?array
+function ultima_carga(PDO $pdo): ?array
 {
     $st = $pdo->prepare(
         "SELECT c.*, u.nombre AS usuario_nombre
          FROM producto_cargas c
          LEFT JOIN usuarios u ON u.id = c.cargado_por
-         WHERE c.negocio_id = ?
          ORDER BY c.cargado_en DESC, c.id DESC LIMIT 1"
     );
-    $st->execute([$negocioId]);
+    $st->execute();
     $c = $st->fetch();
     return $c ?: null;
 }
 
 /** Cuántos productos tiene cargados un negocio. */
-function contar_productos(PDO $pdo, int $negocioId): int
+function contar_productos(PDO $pdo): int
 {
-    $st = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE negocio_id = ?");
-    $st->execute([$negocioId]);
-    return (int)$st->fetchColumn();
+    return (int)$pdo->query("SELECT COUNT(*) FROM productos")->fetchColumn();
 }
 
 /**
@@ -297,7 +316,7 @@ function estado_actualizacion(?string $cargadoEn): array
  * Busca productos de un negocio por código (prefijo, si la consulta es numérica
  * y larga) o por nombre (LIKE). Devuelve [['codigo','nombre','precio_venta'], ...].
  */
-function buscar_productos(PDO $pdo, int $negocioId, string $q, int $limite = 20): array
+function buscar_productos(PDO $pdo, string $q, int $limite = 20): array
 {
     $q = trim($q);
     if ($q === '') return [];
@@ -307,32 +326,32 @@ function buscar_productos(PDO $pdo, int $negocioId, string $q, int $limite = 20)
     if (ctype_digit($q) && strlen($q) >= 4) {
         $st = $pdo->prepare(
             "SELECT codigo, nombre, precio_venta FROM productos
-             WHERE negocio_id = ? AND codigo LIKE ?
+             WHERE codigo LIKE ?
              ORDER BY (codigo = ?) DESC, codigo LIMIT $limite"
         );
-        $st->execute([$negocioId, $q . '%', $q]);
+        $st->execute([$q . '%', $q]);
         return $st->fetchAll();
     }
 
     // Texto: busca en el nombre (los que empiezan con el término primero).
     $st = $pdo->prepare(
         "SELECT codigo, nombre, precio_venta FROM productos
-         WHERE negocio_id = ? AND nombre LIKE ?
+         WHERE nombre LIKE ?
          ORDER BY (nombre LIKE ?) DESC, nombre LIMIT $limite"
     );
-    $st->execute([$negocioId, '%' . $q . '%', $q . '%']);
+    $st->execute(['%' . $q . '%', $q . '%']);
     return $st->fetchAll();
 }
 
 /** Departamentos distintos del catálogo de un negocio (para el filtro). */
-function departamentos_de_negocio(PDO $pdo, int $negocioId): array
+function departamentos_de_negocio(PDO $pdo): array
 {
     $st = $pdo->prepare(
         "SELECT DISTINCT departamento FROM productos
-         WHERE negocio_id = ? AND departamento IS NOT NULL AND departamento <> ''
+         WHERE departamento IS NOT NULL AND departamento <> ''
          ORDER BY departamento"
     );
-    $st->execute([$negocioId]);
+    $st->execute();
     return $st->fetchAll(PDO::FETCH_COLUMN);
 }
 
@@ -342,7 +361,7 @@ function departamentos_de_negocio(PDO $pdo, int $negocioId): array
  * nombre, y opcionalmente filtra por departamento. Permite consulta vacía cuando
  * hay un departamento elegido (lista ese departamento). Devuelve filas completas.
  */
-function consultar_catalogo(PDO $pdo, int $negocioId, string $q, string $departamento = '', int $limite = 30): array
+function consultar_catalogo(PDO $pdo, string $q, string $departamento = '', int $limite = 30): array
 {
     $q = trim($q);
     $departamento = trim($departamento);
@@ -350,8 +369,8 @@ function consultar_catalogo(PDO $pdo, int $negocioId, string $q, string $departa
     $limite = max(1, min(50, $limite));
 
     $cols = "codigo, nombre, precio_costo, precio_venta, precio_mayoreo, departamento, tipo_venta";
-    $where = ["negocio_id = ?"];
-    $args  = [$negocioId];
+    $where = ["1=1"];
+    $args  = [];
     $orden = "nombre";
 
     if ($q !== '') {

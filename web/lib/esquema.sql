@@ -244,9 +244,12 @@ CREATE TABLE IF NOT EXISTS corte_departamentos (
 
 -- Catalogo de productos por negocio. Lo usa el Gestor de Etiquetas para buscar
 -- por codigo de barra o por nombre. Se reemplaza completo en cada carga de Excel.
+-- CATALOGO COMPARTIDO entre los negocios (ver web/POS_DISENO.md 7.1): agregar
+-- un producto o cambiar un precio se refleja en los dos locales. Mismo criterio
+-- que precios_fv y categorias_gasto. El STOCK no se comparte: vive en
+-- producto_stock, una fila por producto y negocio.
 CREATE TABLE IF NOT EXISTS productos (
   id             INT AUTO_INCREMENT PRIMARY KEY,
-  negocio_id     INT NOT NULL,
   codigo         VARCHAR(40)  NOT NULL,           -- codigo de barra / codigo Eleventa
   nombre         VARCHAR(255) NOT NULL,
   precio_costo   DECIMAL(14,2) NULL,
@@ -255,15 +258,26 @@ CREATE TABLE IF NOT EXISTS productos (
   departamento   VARCHAR(150) NULL,
   tipo_venta     VARCHAR(30)  NULL,
   carga_id       INT NULL,                        -- de que subida vino
-  -- POS: stock/stock_minimo solo se usan si negocios.control_stock = 1 (Etapa 4).
-  stock          DECIMAL(14,3) NOT NULL DEFAULT 0,
-  stock_minimo   DECIMAL(14,3) NULL,
   activo         TINYINT(1)   NOT NULL DEFAULT 1, -- ocultar de la venta sin borrar
   afecto_iva     TINYINT(1)   NOT NULL DEFAULT 1,
-  UNIQUE KEY uq_producto (negocio_id, codigo),    -- 1 codigo por negocio
-  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
-  INDEX idx_producto_negocio (negocio_id),
-  INDEX idx_producto_nombre (negocio_id, nombre)
+  creado_por      INT NULL,
+  actualizado_por INT NULL,
+  actualizado_en  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_producto_codigo (codigo),         -- 1 codigo en todo el sistema
+  INDEX idx_producto_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Existencias por local. "Que es y cuanto vale" es compartido; "cuantos tengo"
+-- es de cada negocio. Se llena recien al activar el inventario (Etapa 4).
+CREATE TABLE IF NOT EXISTS producto_stock (
+  producto_id    INT NOT NULL,
+  negocio_id     INT NOT NULL,
+  stock          DECIMAL(14,3) NOT NULL DEFAULT 0,
+  stock_minimo   DECIMAL(14,3) NULL,
+  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (producto_id, negocio_id),
+  FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+  FOREIGN KEY (negocio_id)  REFERENCES negocios(id)  ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Una carga = una subida de Excel. Da la "ultima actualizacion" y el historial.
@@ -273,6 +287,8 @@ CREATE TABLE IF NOT EXISTS producto_cargas (
   archivo_nombre  VARCHAR(255) NULL,
   total_productos INT NOT NULL DEFAULT 0,
   total_omitidos  INT NOT NULL DEFAULT 0,          -- filas sin codigo/nombre descartadas
+  total_nuevos       INT NOT NULL DEFAULT 0,       -- productos que no existian
+  total_actualizados INT NOT NULL DEFAULT 0,       -- productos que ya estaban
   cargado_por     INT NULL,
   cargado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (negocio_id)  REFERENCES negocios(id)  ON DELETE CASCADE,
