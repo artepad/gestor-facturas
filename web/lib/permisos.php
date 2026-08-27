@@ -15,9 +15,12 @@
 // construye y prueba sin que las vendedoras vean nada. Para habilitarlo cuando
 // esté listo, basta agregar 'ventas' a la fila 'vendedor'; para volver a
 // ocultarlo, quitarlo. Ver web/POS_DISENO.md sección 12.1.
+// 'productos' = crear/editar el catálogo compartido. Lo tienen admin y vendedoras
+// por decisión del usuario: es más ágil y todo cambio queda auditado. Para
+// quitárselo a las vendedoras basta con borrar 'productos' de su fila.
 const PERMISOS = [
-    'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'],
-    'vendedor' => ['facturas', 'fiados', 'precios', 'herramientas'],
+    'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'productos', 'herramientas', 'negocios', 'usuarios'],
+    'vendedor' => ['facturas', 'fiados', 'precios', 'productos', 'herramientas'],
 ];
 
 // Etiquetas legibles de los roles (orden = orden en los formularios).

@@ -1346,3 +1346,16 @@ th.col-num { text-align: right; }
 /* Los selects de los modales igualan a los inputs */
 .pos-modal select { width: 100%; font-size: 17px; padding: 10px 12px;
   border: 1px solid var(--borde); border-radius: 8px; background: #fff; }
+
+/* ===== Formulario de productos del catalogo compartido ===== */
+/* Aviso de que el catalogo lo comparten los dos negocios */
+.aviso-compartido { background: #eaf3fb; border: 1px solid #cfe0f0; }
+.aviso-compartido p { margin: 0; font-size: 13.5px; }
+/* Casillas si/no dentro de un formulario */
+.campo-check label { display: inline-flex; align-items: center; gap: 8px;
+  font-weight: 400; cursor: pointer; }
+.campo-check input[type=checkbox] { width: 17px; height: 17px; }
+/* Firma de quien edito por ultima vez */
+.firma-cambio { margin: 14px 0 0; font-size: 12.5px; }
+/* Producto oculto de la venta: se ve atenuado en el listado */
+.fila-inactiva td { opacity: .55; }

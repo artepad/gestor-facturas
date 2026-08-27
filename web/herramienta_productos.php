@@ -94,6 +94,21 @@ $historial = $pdo->query(
       ORDER BY c.cargado_en DESC, c.id DESC LIMIT 8"
 )->fetchAll();
 
+// Buscador del catalogo (para editar un producto puntual).
+$q = trim($_GET['q'] ?? '');
+$encontrados = [];
+if ($q !== '') {
+    $st = $pdo->prepare(
+        "SELECT p.*, u.nombre AS editor
+           FROM productos p LEFT JOIN usuarios u ON u.id = p.actualizado_por
+          WHERE p.codigo LIKE ? OR p.nombre LIKE ?
+          ORDER BY (p.codigo = ?) DESC, p.nombre LIMIT 40"
+    );
+    $st->execute([$q . '%', '%' . $q . '%', $q]);
+    $encontrados = $st->fetchAll();
+}
+$msg = $_GET['msg'] ?? '';
+
 $nombreNegocio = '';
 foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n['nombre'];
 ?>
@@ -128,6 +143,12 @@ foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n[
         </form>
         <?php endif; ?>
 
+        <?php if ($msg === 'guardado'): ?>
+            <div class="panel exito"><p>Producto guardado. El cambio ya está en los dos negocios.</p></div>
+        <?php elseif ($msg === 'eliminado'): ?>
+            <div class="panel exito"><p>Producto eliminado del catálogo.</p></div>
+        <?php endif; ?>
+
         <!-- Estado de la base de datos -->
         <div class="panel">
             <div class="bd-estado bd-<?= $estado['nivel'] ?>">
@@ -145,6 +166,68 @@ foreach ($negocios as $n) if ((int)$n['id'] === $negocioId) $nombreNegocio = $n[
                     </span>
                 </div>
             </div>
+        </div>
+
+        <!-- Buscar y editar productos del catalogo -->
+        <div class="panel">
+            <div class="cab-acciones">
+                <h2 class="panel-titulo">Buscar y editar productos</h2>
+                <a class="btn verde" href="producto_form.php">+ Nuevo producto</a>
+            </div>
+            <p class="texto-ayuda">
+                El catálogo es <strong>compartido por los dos negocios</strong>: lo que
+                cambies acá se ve en ambos. Cada cambio queda registrado con tu nombre.
+            </p>
+            <form method="get" class="filtros">
+                <div class="campo" style="flex:1 1 260px">
+                    <label>Código o nombre</label>
+                    <input type="text" name="q" value="<?= h($q) ?>" autocomplete="off"
+                           placeholder="Coca Cola o 7801234567890" style="width:100%">
+                </div>
+                <div class="campo">
+                    <label>&nbsp;</label>
+                    <button class="btn" type="submit">Buscar</button>
+                </div>
+            </form>
+            <?php if ($q !== ''): ?>
+                <?php if (!$encontrados): ?>
+                    <p class="vacio">No se encontró ningún producto con "<?= h($q) ?>".</p>
+                <?php else: ?>
+                    <div class="tabla-wrap">
+                        <table>
+                            <thead><tr>
+                                <th>Código</th><th>Producto</th><th>Departamento</th>
+                                <th class="col-num">Costo</th><th class="col-num">Venta</th>
+                                <th>Última edición</th><th></th>
+                            </tr></thead>
+                            <tbody>
+                            <?php foreach ($encontrados as $p): ?>
+                                <tr<?= $p['activo'] ? '' : ' class="fila-inactiva"' ?>>
+                                    <td><?= h($p['codigo']) ?></td>
+                                    <td>
+                                        <?= h($p['nombre']) ?>
+                                        <?php if (!$p['activo']): ?>
+                                            <span class="badge-inactivo">Oculto</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= h($p['departamento'] ?: '—') ?></td>
+                                    <td class="col-num"><?= $p['precio_costo'] !== null ? clp($p['precio_costo']) : '—' ?></td>
+                                    <td class="col-num"><?= clp($p['precio_venta']) ?></td>
+                                    <td class="texto-tenue">
+                                        <?= h($p['editor'] ?: '—') ?>
+                                        <?= $p['actualizado_en'] ? '· ' . h(date('d-m-Y', strtotime($p['actualizado_en']))) : '' ?>
+                                    </td>
+                                    <td><a class="btn sm" href="producto_form.php?id=<?= (int)$p['id'] ?>">Editar</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php if (count($encontrados) >= 40): ?>
+                        <p class="texto-tenue">Se muestran los primeros 40. Afina la búsqueda para ver menos.</p>
+                    <?php endif; ?>
+                <?php endif; ?>
+            <?php endif; ?>
         </div>
 
         <!-- Cargar nuevo Excel -->
