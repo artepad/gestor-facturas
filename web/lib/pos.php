@@ -365,6 +365,24 @@ function buscar_producto_pos(PDO $pdo, string $termino, int $limite = 20): array
     return $st->fetchAll();
 }
 
+/**
+ * Clientes de fiado del negocio, con su deuda actual. Para elegir a quién se le
+ * fía en la pantalla de venta.
+ */
+function clientes_para_pos(PDO $pdo, int $negocioId): array
+{
+    $st = $pdo->prepare(
+        "SELECT c.id, TRIM(CONCAT(c.nombre, ' ', COALESCE(c.apellido,''))) AS nombre,
+                COALESCE((SELECT SUM(f.monto) FROM fiados f WHERE f.cliente_id = c.id),0)
+              - COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.cliente_id = c.id),0) AS saldo
+           FROM clientes c
+          WHERE c.negocio_id = ? AND c.activo = 1
+          ORDER BY nombre"
+    );
+    $st->execute([$negocioId]);
+    return $st->fetchAll();
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {
@@ -388,7 +406,8 @@ function venta_por_uuid(PDO $pdo, string $uuid): ?array
  */
 function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
                          array $items, array $pagos, ?float $pagoCon = null,
-                         string $origen = 'online', string $nota = ''): array
+                         string $origen = 'online', string $nota = '',
+                         ?int $clienteId = null): array
 {
     if ($previa = venta_por_uuid($pdo, $uuid)) {
         return ['venta' => $previa, 'duplicada' => true];
@@ -441,8 +460,35 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
         throw new RuntimeException('Los pagos no suman el total de la venta.');
     }
 
-    $vuelto = ($pagoCon !== null && $pagoCon > $total) ? round($pagoCon - $total, 2) : 0.0;
+    // El vuelto se calcula SOLO sobre la parte pagada en efectivo: si el cliente
+    // paga $10.000 de los cuales $4.000 son tarjeta, entrega $6.000 en billetes
+    // y el vuelto sale de esos $6.000, no del total.
+    $montoEfectivo = 0.0;
+    foreach ($pagos as $p) {
+        if (($p['medio'] ?? '') === 'efectivo') $montoEfectivo += (float)($p['monto'] ?? 0);
+    }
+    $vuelto = ($pagoCon !== null && $pagoCon > $montoEfectivo)
+            ? round($pagoCon - $montoEfectivo, 2) : 0.0;
     $negocioId = (int)$sesion['negocio_id'];
+
+    // Fiado: si algun pago es a credito hay que saber a quien se le fia, y el
+    // cliente debe ser de ESTE negocio (no se confia en lo que manda la caja).
+    $montoCredito = 0.0;
+    foreach ($pagos as $p) {
+        if (($p['medio'] ?? '') === 'credito') $montoCredito += (float)($p['monto'] ?? 0);
+    }
+    if ($montoCredito > 0) {
+        if (!$clienteId) {
+            throw new RuntimeException('Para fiar hay que elegir al cliente.');
+        }
+        $st = $pdo->prepare("SELECT id FROM clientes WHERE id = ? AND negocio_id = ? AND activo = 1");
+        $st->execute([$clienteId, $negocioId]);
+        if (!$st->fetch()) {
+            throw new RuntimeException('Ese cliente no existe en este negocio.');
+        }
+    } else {
+        $clienteId = null;   // sin credito no se guarda cliente
+    }
 
     $propia = !$pdo->inTransaction();
     if ($propia) $pdo->beginTransaction();
@@ -457,12 +503,13 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
             $folio = (int)$st->fetchColumn();
             try {
                 $st = $pdo->prepare(
-                    "INSERT INTO ventas (uuid, negocio_id, caja_sesion_id, usuario_id, folio, fecha,
-                                         subtotal, descuento_total, total, costo_total,
+                    "INSERT INTO ventas (uuid, negocio_id, caja_sesion_id, usuario_id, cliente_id,
+                                         folio, fecha, subtotal, descuento_total, total, costo_total,
                                          pago_con, vuelto, origen, nota)
-                     VALUES (?,?,?,?,?,NOW(),?,?,?,?,?,?,?,?)"
+                     VALUES (?,?,?,?,?,?,NOW(),?,?,?,?,?,?,?,?)"
                 );
-                $st->execute([$uuid, $negocioId, (int)$sesion['id'], $usuario['id'] ?? null, $folio,
+                $st->execute([$uuid, $negocioId, (int)$sesion['id'], $usuario['id'] ?? null,
+                              $clienteId, $folio,
                               round($subtotal, 2), round($descuentos, 2), $total,
                               ($costoTotal > 0 ? round($costoTotal, 2) : null),
                               $pagoCon, $vuelto, $origen, ($nota !== '' ? $nota : null)]);
@@ -502,6 +549,15 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
             }
             $stP->execute([$ventaId, $medio, (float)($p['monto'] ?? 0),
                            ($p['referencia'] ?? '') !== '' ? $p['referencia'] : null]);
+        }
+
+        // La parte fiada se anota como deuda del cliente en el modulo Fiados.
+        // Queda enlazada a la venta (venta_id) para poder revertirla al anular.
+        if ($montoCredito > 0) {
+            $pdo->prepare(
+                "INSERT INTO fiados (cliente_id, fecha, monto, descripcion, venta_id)
+                 VALUES (?, CURDATE(), ?, ?, ?)"
+            )->execute([$clienteId, $montoCredito, 'Venta N° ' . $folio, $ventaId]);
         }
 
         if ($propia) $pdo->commit();

@@ -156,7 +156,39 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
         <button type="button" class="medio activo" data-medio="efectivo">Efectivo</button>
         <button type="button" class="medio" data-medio="tarjeta">Tarjeta</button>
         <button type="button" class="medio" data-medio="transferencia">Transferencia</button>
+        <button type="button" class="medio" data-medio="credito">Fiado</button>
+        <button type="button" class="medio medio-mixto" data-medio="mixto">Mixto</button>
     </div>
+
+    <!-- Pago mixto: un monto por medio; el sistema avisa cuánto falta -->
+    <div class="cobrar-mixto" id="bloqueMixto" hidden>
+        <p class="pos-modal-ayuda">Reparte el total entre los medios que use el cliente.</p>
+        <div class="mixto-fila">
+            <label for="mxEfectivo">Efectivo</label>
+            <input type="text" id="mxEfectivo" class="mx" data-medio="efectivo" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="mixto-fila">
+            <label for="mxTarjeta">Tarjeta</label>
+            <input type="text" id="mxTarjeta" class="mx" data-medio="tarjeta" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="mixto-fila">
+            <label for="mxTransferencia">Transferencia</label>
+            <input type="text" id="mxTransferencia" class="mx" data-medio="transferencia" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="mixto-fila">
+            <label for="mxCredito">Fiado</label>
+            <input type="text" id="mxCredito" class="mx" data-medio="credito" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="mixto-resto" id="mixtoResto"></div>
+    </div>
+
+    <!-- A quién se le fía (obligatorio si hay parte a crédito) -->
+    <div class="cobrar-cliente" id="bloqueCliente" hidden>
+        <label for="clienteFiado">¿A quién se le fía?</label>
+        <select id="clienteFiado"><option value="">— Elige un cliente —</option></select>
+        <div class="cliente-saldo" id="clienteSaldo"></div>
+    </div>
+
     <div class="cobrar-efectivo" id="bloqueEfectivo">
         <label for="pagoCon">Pagó con</label>
         <input type="text" id="pagoCon" inputmode="numeric" autocomplete="off" placeholder="0">
@@ -274,6 +306,7 @@ var sel = -1;              // índice de la línea seleccionada (para Supr)
 var medio = 'efectivo';
 var cobrando = false;      // evita cobrar dos veces con doble clic/tecla
 var ticketNum = 1;         // número del ticket en curso (solo visual, como Eleventa)
+var clientes = null;       // clientes de fiado (se cargan al elegir Fiado o Mixto)
 var espera = <?= json_encode($espera, JSON_UNESCAPED_UNICODE) ?>;
 var ventas = <?= json_encode(array_map(fn($v) => [
         'folio' => (int)$v['folio'], 'total' => (float)$v['total'],
@@ -509,18 +542,88 @@ $('modalFondo').addEventListener('click', cerrarModal);
 // ---------- Cobrar ----------
 function abrirCobrar() {
     if (!carrito.length) { toast('No hay productos en la venta.', true); return; }
-    medio = 'efectivo';
-    Array.prototype.forEach.call(document.querySelectorAll('.medio'), function (b) {
-        b.classList.toggle('activo', b.dataset.medio === 'efectivo');
-    });
-    $('bloqueEfectivo').hidden = false;
+    elegirMedio('efectivo');
     $('cobrarTotal').textContent = clp(totalCarrito());
     $('pagoCon').value = '';
+    $('clienteFiado').value = '';
+    $('clienteSaldo').textContent = '';
+    Array.prototype.forEach.call(document.querySelectorAll('.mx'), function (i) { i.value = ''; });
     $('cobrarErr').hidden = true;
     pintarVuelto();
     pintarRapidos();
     abrirModal('modalCobrar', 'pagoCon');
 }
+
+// Deja visible solo lo que corresponde al medio elegido.
+function elegirMedio(m) {
+    medio = m;
+    Array.prototype.forEach.call(document.querySelectorAll('.medio'), function (b) {
+        b.classList.toggle('activo', b.dataset.medio === m);
+    });
+    $('bloqueEfectivo').hidden = (m !== 'efectivo');
+    $('bloqueMixto').hidden    = (m !== 'mixto');
+    // El cliente hace falta al fiar todo o al repartir con una parte fiada.
+    var necesitaCliente = (m === 'credito' || m === 'mixto');
+    $('bloqueCliente').hidden = !necesitaCliente;
+    if (necesitaCliente) cargarClientes();
+    if (m === 'mixto') { pintarResto(); setTimeout(function () { $('mxEfectivo').focus(); }, 30); }
+    $('cobrarErr').hidden = true;
+}
+
+// ---------- Clientes para fiar ----------
+function cargarClientes() {
+    if (clientes !== null) return;                 // se piden una sola vez
+    api('clientes', null, 'GET').then(function (j) {
+        clientes = j.clientes || [];
+        var sel = $('clienteFiado');
+        clientes.forEach(function (c) {
+            var o = document.createElement('option');
+            o.value = c.id;
+            o.textContent = c.nombre + (Number(c.saldo) > 0 ? '  (debe ' + clp(c.saldo) + ')' : '');
+            sel.appendChild(o);
+        });
+        if (!clientes.length) {
+            $('clienteSaldo').textContent = 'Este negocio todavía no tiene clientes de fiado.';
+        }
+    }).catch(function (e) { toast(e.message, true); });
+}
+$('clienteFiado').addEventListener('change', function () {
+    var c = (clientes || []).filter(function (x) { return String(x.id) === this.value; }.bind(this))[0];
+    $('clienteSaldo').textContent = c && Number(c.saldo) > 0
+        ? 'Deuda actual: ' + clp(c.saldo)
+        : (c ? 'Sin deuda pendiente.' : '');
+});
+
+// ---------- Pago mixto ----------
+function pagosMixtos() {
+    var out = [];
+    Array.prototype.forEach.call(document.querySelectorAll('.mx'), function (i) {
+        var v = num(i.value);
+        if (v !== null && v > 0) out.push({ medio: i.dataset.medio, monto: v });
+    });
+    return out;
+}
+function pintarResto() {
+    var t = totalCarrito(), suma = 0;
+    pagosMixtos().forEach(function (p) { suma += p.monto; });
+    var resto = Math.round(t - suma), el = $('mixtoResto');
+    if (resto > 0) {
+        el.className = 'mixto-resto falta';
+        el.textContent = 'Faltan ' + clp(resto);
+    } else if (resto < 0) {
+        el.className = 'mixto-resto sobra';
+        el.textContent = 'Te pasaste por ' + clp(-resto);
+    } else {
+        el.className = 'mixto-resto listo';
+        el.textContent = suma > 0 ? 'Cuadra ✓' : '';
+    }
+}
+Array.prototype.forEach.call(document.querySelectorAll('.mx'), function (i) {
+    i.addEventListener('input', pintarResto);
+    i.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); cobrar(); }
+    });
+});
 
 // Botones de billetes: el exacto y los billetes chilenos que alcanzan.
 function pintarRapidos() {
@@ -556,27 +659,50 @@ function pintarVuelto() {
 $('pagoCon').addEventListener('input', pintarVuelto);
 
 Array.prototype.forEach.call(document.querySelectorAll('.medio'), function (b) {
-    b.addEventListener('click', function () {
-        medio = b.dataset.medio;
-        Array.prototype.forEach.call(document.querySelectorAll('.medio'), function (o) {
-            o.classList.toggle('activo', o === b);
-        });
-        $('bloqueEfectivo').hidden = (medio !== 'efectivo');
-    });
+    b.addEventListener('click', function () { elegirMedio(b.dataset.medio); });
 });
+
+function errCobro(msg) {
+    $('cobrarErr').textContent = msg;
+    $('cobrarErr').hidden = false;
+}
 
 function cobrar() {
     if (cobrando || !carrito.length) return;
     var t = totalCarrito();
-    var pago = (medio === 'efectivo') ? num($('pagoCon').value) : null;
-    if (medio === 'efectivo' && pago !== null && pago + 1 < t) {
-        $('cobrarErr').textContent = 'El monto recibido es menor que el total.';
-        $('cobrarErr').hidden = false;
-        return;
+    var pagos, pago = null, cliente = null;
+
+    if (medio === 'mixto') {
+        pagos = pagosMixtos();
+        if (!pagos.length) return errCobro('Escribe cuánto paga con cada medio.');
+        var suma = 0;
+        pagos.forEach(function (p) { suma += p.monto; });
+        var resto = Math.round(t - suma);
+        if (resto > 0)  return errCobro('Faltan ' + clp(resto) + ' por cubrir.');
+        if (resto < 0)  return errCobro('Los pagos superan el total en ' + clp(-resto) + '.');
+        var ef = pagos.filter(function (p) { return p.medio === 'efectivo'; })[0];
+        if (ef) pago = ef.monto;
+    } else {
+        pagos = [{ medio: medio, monto: t }];
+        if (medio === 'efectivo') {
+            pago = num($('pagoCon').value);
+            if (pago !== null && pago + 1 < t) {
+                return errCobro('El monto recibido es menor que el total.');
+            }
+        }
     }
+
+    // Si alguna parte va fiada hay que decir a quién.
+    var hayFiado = pagos.some(function (p) { return p.medio === 'credito'; });
+    if (hayFiado) {
+        cliente = $('clienteFiado').value;
+        if (!cliente) return errCobro('Elige a quién se le fía.');
+    }
+
     cobrando = true;
     $('btnCobrarOk').disabled = true;
-    api('cobrar', { uuid: uuid4(), items: carrito, medio: medio, pago_con: pago })
+    api('cobrar', { uuid: uuid4(), items: carrito, pagos: pagos,
+                    pago_con: pago, cliente_id: cliente })
         .then(function (j) {
             var v = j.venta;
             $('uTotal').textContent = clp(v.total);
@@ -584,12 +710,14 @@ function cobrar() {
             $('uVuelto').textContent = clp(v.vuelto || 0);
             $('uTitulo').textContent = 'Última venta · N° ' + v.folio + ':';
             ventas.unshift({ folio: v.folio, total: v.total, hora: new Date().toTimeString().slice(0, 5),
-                             n: carrito.length, medios: medio });
+                             n: carrito.length,
+                             medios: (v.medios || medio) });
             ticketNum++;                 // el siguiente cliente parte con un ticket nuevo
             vaciar();
             cerrarModal();
             toast('Venta N° ' + v.folio + ' cobrada' +
-                  (v.vuelto > 0 ? ' · Cambio ' + clp(v.vuelto) : ''));
+                  (v.vuelto > 0 ? ' · Cambio ' + clp(v.vuelto) : '') +
+                  (v.fiado > 0 ? ' · Fiado ' + clp(v.fiado) : ''));
         })
         .catch(function (e) {
             $('cobrarErr').textContent = e.message;

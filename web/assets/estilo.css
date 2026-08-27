@@ -1379,3 +1379,23 @@ th.col-num { text-align: right; }
   justify-content: center; margin-top: 16px; flex-wrap: wrap; }
 /* Grupo de botones a la derecha de una cabecera */
 .cab-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== Cobro: pago mixto y venta fiado (Etapa 2A) ===== */
+.cobrar-medios .medio { flex: 1 1 92px; }
+.cobrar-medios .medio-mixto.activo { border-color: var(--azul); background: #eaf3fb; color: var(--azul); }
+/* Reparto del total entre varios medios */
+.cobrar-mixto { margin-top: 12px; border-top: 1px solid var(--borde); padding-top: 10px; }
+.mixto-fila { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+.mixto-fila label { flex: 0 0 118px; margin: 0; font-size: 13.5px; color: var(--texto); }
+.mixto-fila input { flex: 1; font-size: 16px; padding: 8px 10px;
+  border: 1px solid var(--borde); border-radius: 7px; text-align: right; }
+/* Cuanto falta o sobra al repartir */
+.mixto-resto { margin-top: 8px; text-align: right; font-weight: 700; font-size: 15px; min-height: 20px; }
+.mixto-resto.falta { color: var(--rojo); }
+.mixto-resto.sobra { color: #e67e22; }
+.mixto-resto.listo { color: var(--verde-ok); }
+/* A quien se le fia */
+.cobrar-cliente { margin-top: 12px; border-top: 1px solid var(--borde); padding-top: 10px; }
+.cobrar-cliente select { width: 100%; font-size: 16px; padding: 9px 10px;
+  border: 1px solid var(--borde); border-radius: 8px; background: #fff; }
+.cliente-saldo { margin-top: 6px; font-size: 12.5px; color: var(--texto-sec); min-height: 17px; }

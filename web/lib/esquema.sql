@@ -113,9 +113,11 @@ CREATE TABLE IF NOT EXISTS fiados (
   fecha       DATE NOT NULL,
   monto       DECIMAL(14,2) NOT NULL,
   descripcion VARCHAR(255) NULL,
+  venta_id    INT NULL,                            -- si nacio de una venta del POS
   creado_en   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
-  INDEX idx_fiado_cliente (cliente_id)
+  INDEX idx_fiado_cliente (cliente_id),
+  INDEX idx_fiado_venta (venta_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Abonos: pagos que disminuyen la deuda del cliente (cuenta corriente).

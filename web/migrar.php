@@ -590,6 +590,19 @@ agregar_columna($pdo, 'productos', 'actualizado_por', "INT NULL");
 agregar_columna($pdo, 'productos', 'actualizado_en',
     "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
+echo "
+[Venta fiado]
+";
+// Enlaza el fiado con la venta que lo genero. Asi anular una venta puede
+// revertir su fiado sin adivinar cual era (Etapa 2C).
+agregar_columna($pdo, 'fiados', 'venta_id', "INT NULL");
+try {
+    $pdo->exec("ALTER TABLE fiados ADD INDEX idx_fiado_venta (venta_id)");
+    echo "  + indice idx_fiado_venta agregado
+";
+} catch (Throwable $e) { echo "  - indice idx_fiado_venta ya existe
+"; }
+
 echo "\n[Auditoria: referencia generica]\n";
 // Hasta ahora la auditoria solo podia apuntar a un cliente. Con estas dos
 // columnas puede referirse a cualquier cosa (producto, venta, caja...).

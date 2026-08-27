@@ -69,6 +69,11 @@ try {
         ]);
     }
 
+    // ---------- Clientes para fiar ----------
+    if ($accion === 'clientes') {
+        responder_json(['ok' => true, 'clientes' => clientes_para_pos($pdo, $negocioId)]);
+    }
+
     if (!$esPost) {
         responder_json(['error' => 'Método no permitido.'], 405);
     }
@@ -80,31 +85,71 @@ try {
         if ($uuid === '') responder_json(['error' => 'Falta el identificador de la venta.'], 400);
 
         $items = $datos['items'] ?? [];
-        $medio = (string)($datos['medio'] ?? 'efectivo');
-        if (!in_array($medio, ['efectivo', 'tarjeta', 'transferencia'], true)) {
-            // 'credito' (fiado) y el pago mixto llegan en la Etapa 2.
-            responder_json(['error' => 'Medio de pago no disponible todavía.'], 400);
-        }
+        $MEDIOS = ['efectivo', 'tarjeta', 'transferencia', 'credito'];
 
-        // El total se recalcula en registrar_venta(); acá solo armamos el pago.
+        // El total se recalcula en registrar_venta(); acá solo armamos los pagos.
         $total = 0.0;
         foreach ($items as $it) {
             $total += ((float)($it['cantidad'] ?? 0)) * ((float)($it['precio_unitario'] ?? 0))
                     - (float)($it['descuento'] ?? 0);
         }
         $total = round($total, 2);
-        $pagoCon = isset($datos['pago_con']) && $datos['pago_con'] !== ''
-                 ? (float)$datos['pago_con'] : null;
-        if ($medio === 'efectivo' && $pagoCon !== null && $pagoCon + 1 < $total) {
-            responder_json(['error' => 'El monto recibido es menor que el total.'], 400);
+
+        // Acepta un medio único (forma simple) o varios (pago mixto).
+        $pagos = [];
+        if (!empty($datos['pagos']) && is_array($datos['pagos'])) {
+            foreach ($datos['pagos'] as $p) {
+                $m = (string)($p['medio'] ?? '');
+                $mo = round((float)($p['monto'] ?? 0), 2);
+                if (!in_array($m, $MEDIOS, true)) {
+                    responder_json(['error' => 'Medio de pago desconocido: ' . $m], 400);
+                }
+                if ($mo <= 0) continue;          // los medios en cero se ignoran
+                $pagos[] = ['medio' => $m, 'monto' => $mo,
+                            'referencia' => trim((string)($p['referencia'] ?? ''))];
+            }
+        } else {
+            $medio = (string)($datos['medio'] ?? 'efectivo');
+            if (!in_array($medio, $MEDIOS, true)) {
+                responder_json(['error' => 'Medio de pago desconocido: ' . $medio], 400);
+            }
+            $pagos = [['medio' => $medio, 'monto' => $total]];
+        }
+        if (!$pagos) responder_json(['error' => 'Indica cómo paga el cliente.'], 400);
+
+        $sumaPagos = 0.0;
+        $efectivo = 0.0;
+        foreach ($pagos as $p) {
+            $sumaPagos += $p['monto'];
+            if ($p['medio'] === 'efectivo') $efectivo += $p['monto'];
+        }
+        if (abs($sumaPagos - $total) > 1) {
+            $falta = $total - $sumaPagos;
+            responder_json(['error' => $falta > 0
+                ? 'Faltan ' . clp($falta) . ' por cubrir.'
+                : 'Los pagos superan el total en ' . clp(-$falta) . '.'], 400);
         }
 
-        $r = registrar_venta($pdo, $usuario, $sesion, $uuid, $items,
-                             [['medio' => $medio, 'monto' => $total]], $pagoCon);
+        $pagoCon = isset($datos['pago_con']) && $datos['pago_con'] !== ''
+                 ? (float)$datos['pago_con'] : null;
+        // El vuelto solo se calcula sobre la parte en efectivo.
+        if ($pagoCon !== null && $efectivo > 0 && $pagoCon + 1 < $efectivo) {
+            responder_json(['error' => 'El efectivo recibido es menor que la parte en efectivo.'], 400);
+        }
+        if ($efectivo <= 0) $pagoCon = null;
+
+        $clienteId = isset($datos['cliente_id']) && $datos['cliente_id']
+                   ? (int)$datos['cliente_id'] : null;
+
+        $r = registrar_venta($pdo, $usuario, $sesion, $uuid, $items, $pagos,
+                             $pagoCon, 'online', '', $clienteId);
         $v = $r['venta'];
         if (!$r['duplicada']) {
-            registrar_auditoria($pdo, $usuario, 'ventas', 'venta', null,
-                'Venta N° ' . $v['folio'] . ' por ' . clp($v['total']) . ' (' . $medio . ')');
+            $desc = [];
+            foreach ($pagos as $p) $desc[] = $p['medio'] . ' ' . clp($p['monto']);
+            registrar_auditoria($pdo, $usuario, 'ventas', 'venta', $clienteId,
+                'Venta N° ' . $v['folio'] . ' por ' . clp($v['total']) .
+                ' (' . implode(' + ', $desc) . ')', null, 'venta', (int)$v['id']);
         }
         responder_json([
             'ok' => true,
@@ -114,6 +159,9 @@ try {
                 'total' => (float)$v['total'],
                 'pago_con' => $v['pago_con'] !== null ? (float)$v['pago_con'] : null,
                 'vuelto' => (float)$v['vuelto'],
+                'fiado'  => array_sum(array_map(
+                    fn($p) => $p['medio'] === 'credito' ? $p['monto'] : 0, $pagos)),
+                'medios' => implode('+', array_map(fn($p) => $p['medio'], $pagos)),
             ],
         ]);
     }
