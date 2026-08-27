@@ -631,6 +631,14 @@ echo "  ~ tabla promociones lista\n";
 // por que una linea salio mas barata).
 agregar_columna($pdo, 'venta_items', 'promocion_id', "INT NULL");
 
+echo "
+[PIN de la caja]
+";
+// PIN corto para desbloquear la caja en el propio equipo, util cuando el PC
+// arranca sin internet. NO reemplaza la contrasena: es un cerrojo local para
+// que otra persona no use la caja que quedo abierta. Ver POS_DISENO.md 3D.
+agregar_columna($pdo, 'usuarios', 'pin_hash', "VARCHAR(64) NULL");
+
 echo "\n[Auditoria: referencia generica]\n";
 // Hasta ahora la auditoria solo podia apuntar a un cliente. Con estas dos
 // columnas puede referirse a cualquier cosa (producto, venta, caja...).

@@ -553,6 +553,23 @@ function catalogo_para_pos(PDO $pdo): array
     return $out;
 }
 
+/**
+ * Huella del PIN de la caja.
+ *
+ * OJO CON EL ALCANCE: esto NO es seguridad fuerte. Es un cerrojo local para
+ * que, si la caja quedó abierta, otra persona no la use — el mismo rol que
+ * tiene el bloqueo de pantalla de un celular. Quien ya tiene la sesión del
+ * navegador puede saltárselo. La seguridad real la dan la contraseña y los
+ * permisos del servidor.
+ *
+ * Se calcula igual en PHP y en el navegador (SHA-256 de "pin:usuario_id"),
+ * para que la caja pueda validarlo SIN INTERNET.
+ */
+function huella_pin(string $pin, int $usuarioId): string
+{
+    return hash('sha256', $pin . ':' . $usuarioId);
+}
+
 /** Venta ya registrada con ese uuid, o null. Base de la idempotencia. */
 function venta_por_uuid(PDO $pdo, string $uuid): ?array
 {

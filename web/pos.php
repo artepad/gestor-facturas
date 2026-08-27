@@ -32,6 +32,13 @@ if (!puede_ver_negocio($usuario, (int)$sesion['negocio_id'])) {
     exit;
 }
 
+// Cerrojo local de la caja: si el usuario tiene PIN, la pantalla arranca
+// bloqueada. La huella viaja al navegador para poder validarla SIN INTERNET
+// (ver huella_pin() en lib/pos.php, que explica el alcance real de esto).
+$stPin = $pdo->prepare("SELECT pin_hash FROM usuarios WHERE id = ?");
+$stPin->execute([(int)$usuario['id']]);
+$pinHash = (string)($stPin->fetchColumn() ?: '');
+
 $espera  = listar_espera($pdo, (int)$sesion['id']);
 $ultima  = ultima_venta_del_turno($pdo, (int)$sesion['id']);
 $ventas  = ventas_del_turno($pdo, (int)$sesion['id'], 50);
@@ -52,6 +59,25 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
 </head>
 <body class="pos-body">
 
+<!-- Cerrojo de la caja: tapa todo hasta que se escriba el PIN -->
+<div class="pos-cerrojo" id="cerrojo" hidden>
+    <div class="cerrojo-caja">
+        <div class="cerrojo-icono"><?= icono('caja') ?></div>
+        <h2>Caja bloqueada</h2>
+        <p><?= h($sesion['negocio_nombre']) ?> · <?= h($sesion['caja'] ?: 'Caja') ?></p>
+        <p class="cerrojo-quien"><?= h($usuario['nombre'] ?? '') ?></p>
+        <input type="password" id="cerrojoPin" inputmode="numeric" maxlength="6"
+               autocomplete="off" placeholder="PIN">
+        <div class="cerrojo-err" id="cerrojoErr" hidden></div>
+        <button type="button" class="btn verde grande" id="btnDesbloquear">Entrar</button>
+        <p class="cerrojo-ayuda">
+            ¿Olvidaste el PIN? Cierra sesión y vuelve a entrar con tu contraseña
+            (necesita internet).
+        </p>
+        <a class="cerrojo-salir" href="home.php">Salir de la caja</a>
+    </div>
+</div>
+
 <!-- ===================== Barra superior ===================== -->
 <header class="pos-top">
     <div class="pos-top-izq">
@@ -63,6 +89,9 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
         <span class="pos-conexion" id="posConexion" hidden>Sin conexión</span>
         <button type="button" class="pos-pendientes" id="posPendientes" hidden></button>
         <span class="pos-cajero">Le atiende: <b><?= h($usuario['nombre'] ?? '') ?></b></span>
+        <?php if ($pinHash !== ''): ?>
+            <button type="button" class="pos-btn-top" id="btnBloquear">Bloquear</button>
+        <?php endif; ?>
         <a class="pos-btn-top" href="caja.php"><?= icono('caja') ?> Caja</a>
         <a class="pos-btn-top" href="home.php"><?= icono('salir') ?> Salir</a>
     </div>
@@ -1487,6 +1516,58 @@ Array.prototype.forEach.call(document.querySelectorAll('a.pos-btn-top'), functio
         }
     });
 });
+
+// ================= Cerrojo de la caja =================
+// Valida el PIN en el propio equipo (SHA-256 de "pin:usuario_id"), igual que
+// lo calcula PHP, para que funcione SIN INTERNET. Es un cerrojo local — el
+// equivalente al bloqueo de pantalla del celular — no seguridad fuerte.
+
+var PIN_HASH = <?= json_encode($pinHash) ?>;
+var USUARIO_ID = <?= (int)$usuario['id'] ?>;
+
+function huellaPin(pin) {
+    var datos = new TextEncoder().encode(pin + ':' + USUARIO_ID);
+    return crypto.subtle.digest('SHA-256', datos).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+            return b.toString(16).padStart(2, '0');
+        }).join('');
+    });
+}
+
+function bloquear() {
+    if (!PIN_HASH) return;
+    $('cerrojo').hidden = false;
+    $('cerrojoPin').value = '';
+    $('cerrojoErr').hidden = true;
+    setTimeout(function () { $('cerrojoPin').focus(); }, 50);
+}
+
+function desbloquear() {
+    var pin = $('cerrojoPin').value.trim();
+    if (!pin) return;
+    huellaPin(pin).then(function (h) {
+        if (h === PIN_HASH) {
+            $('cerrojo').hidden = true;
+            $('codigo').focus();
+        } else {
+            $('cerrojoErr').textContent = 'PIN incorrecto.';
+            $('cerrojoErr').hidden = false;
+            $('cerrojoPin').value = '';
+            $('cerrojoPin').focus();
+        }
+    }).catch(function () {
+        // Si el navegador no puede calcular la huella, no se deja a la
+        // vendedora encerrada: se abre la caja igual.
+        $('cerrojo').hidden = true;
+    });
+}
+
+$('btnDesbloquear').addEventListener('click', desbloquear);
+$('cerrojoPin').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); desbloquear(); }
+});
+if ($('btnBloquear')) $('btnBloquear').addEventListener('click', bloquear);
+if (PIN_HASH) bloquear();      // arranca bloqueada
 
 // ---------- Instalable y aviso de conexión ----------
 // El service worker guarda la pantalla y el CSS para que la caja abra aunque

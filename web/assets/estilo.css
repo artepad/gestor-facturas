@@ -1436,3 +1436,24 @@ th.col-num { text-align: right; }
 /* Venta guardada que todavia no llega al servidor */
 .espera-fila.fila-pendiente { background: #fdf3e3; }
 .espera-fila.fila-pendiente .espera-info b { color: #8a5a10; }
+
+/* ===== Cerrojo de la caja (Etapa 3D) ===== */
+.pos-cerrojo { position: fixed; inset: 0; z-index: 90; background: #22313f;
+  display: flex; align-items: center; justify-content: center; padding: 20px; }
+.cerrojo-caja { background: #fff; border-radius: 14px; padding: 34px 30px;
+  width: min(360px, 92vw); text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+.cerrojo-icono { width: 60px; height: 60px; margin: 0 auto 14px; border-radius: 14px;
+  background: #0d9488; color: #fff; display: flex; align-items: center; justify-content: center; }
+.cerrojo-icono .ic { width: 30px; height: 30px; }
+.cerrojo-caja h2 { margin: 0 0 6px; font-size: 21px; }
+.cerrojo-caja p { margin: 0 0 4px; font-size: 13px; color: var(--texto-sec); }
+.cerrojo-quien { font-weight: 700; color: var(--texto) !important; margin-bottom: 18px !important; }
+#cerrojoPin { width: 100%; font-size: 30px; text-align: center; letter-spacing: 12px;
+  padding: 12px; border: 2px solid var(--borde); border-radius: 10px; }
+#cerrojoPin:focus { outline: none; border-color: var(--azul); }
+.cerrojo-err { margin-top: 10px; background: #fdecea; color: #a93226;
+  padding: 8px; border-radius: 7px; font-size: 13.5px; }
+.cerrojo-caja .btn { width: 100%; margin-top: 14px; }
+.cerrojo-ayuda { margin-top: 16px !important; font-size: 12px !important; }
+.cerrojo-salir { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--texto-sec); }

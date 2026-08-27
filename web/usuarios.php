@@ -6,6 +6,7 @@
 
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/ui.php';
+require __DIR__ . '/lib/pos.php';   // huella_pin() del cerrojo de la caja
 
 $usuario = exigir_permiso('usuarios');
 
@@ -56,6 +57,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $pdo->prepare("INSERT INTO usuarios (email, nombre, rol, password_hash) VALUES (?,?,?,?)")
                         ->execute([$email, $nombre, $rol, password_hash($clave, PASSWORD_DEFAULT)]);
                     $uid = (int)$pdo->lastInsertId();
+                }
+                // PIN de la caja: cerrojo local del terminal, no una contraseña.
+                // Vacío = no se toca; "0" borra el PIN existente.
+                $pin = preg_replace('/\D/', '', $_POST['pin'] ?? '');
+                if ($pin !== '') {
+                    $pdo->prepare("UPDATE usuarios SET pin_hash = ? WHERE id = ?")
+                        ->execute([huella_pin($pin, $uid), $uid]);
                 }
                 // Reasignar negocios (los roles no-admin trabajan solo sus negocios)
                 $pdo->prepare("DELETE FROM usuario_negocio WHERE usuario_id=?")->execute([$uid]);
@@ -142,6 +150,15 @@ $modoFormulario = ($editar !== null || isset($_GET['editar']));
                 <div class="campo">
                     <label>Contraseña <?= $e['id'] ? '(dejar vacío para no cambiarla)' : '(mín. 6)' ?></label>
                     <input type="password" name="clave" <?= $e['id'] ? '' : 'required' ?> autocomplete="new-password">
+                </div>
+                <div class="campo">
+                    <label>PIN de la caja (4 a 6 números)</label>
+                    <input type="text" name="pin" inputmode="numeric" maxlength="6"
+                           autocomplete="off" placeholder="<?= $e['id'] && !empty($e['pin_hash']) ? 'Ya tiene PIN — escribe uno nuevo para cambiarlo' : 'Opcional' ?>">
+                    <small class="texto-tenue">
+                        Sirve para desbloquear la caja en el PC, incluso sin internet.
+                        Es un cerrojo local: no reemplaza la contraseña.
+                    </small>
                 </div>
                 <div class="campo">
                     <label>Rol</label>

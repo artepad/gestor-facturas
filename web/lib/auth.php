@@ -12,10 +12,18 @@ function iniciar_sesion(): void
         // En HTTPS (produccion) la cookie va marcada Secure para que nunca viaje
         // por HTTP. En local (XAMPP por http) queda en false para no romper el login.
         $https = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off');
+        // Sesion larga (30 dias): la caja de un almacen no puede pedir
+        // contrasena cada manana, y menos si ese dia no hay internet. El
+        // cerrojo de la caja es el PIN (ver POS_DISENO.md 3D), no el cierre
+        // de sesion.
+        $dias = 30 * 24 * 60 * 60;
+        ini_set('session.gc_maxlifetime', (string)$dias);
         session_start([
             'cookie_httponly' => true,
             'cookie_samesite' => 'Lax',
             'cookie_secure'   => $https,
+            'cookie_lifetime' => $dias,
+            'gc_maxlifetime'  => $dias,
         ]);
     }
 }

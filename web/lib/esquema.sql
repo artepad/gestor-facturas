@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   password_hash VARCHAR(255) NOT NULL,
   nombre        VARCHAR(150),
   rol           VARCHAR(20) NOT NULL DEFAULT 'vendedor',   -- ver lib/permisos.php
+  pin_hash      VARCHAR(64) NULL,                          -- cerrojo local de la caja
   creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
