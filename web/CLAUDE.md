@@ -55,10 +55,25 @@ web/
 │   ├── eleventa.php     parser del correo de corte de Eleventa + registrar_corte()
 │   ├── productos.php    carga del catálogo Excel de Eleventa + estado + búsqueda de productos
 │   ├── gastos.php       helpers del módulo Gastos (categorías, totales, generar fijos del mes)
+│   ├── pos.php          TODA la lógica del POS: caja, ventas, promociones,
+│   │                    recaudación de convenios, inventario y compras
+│   ├── auditoria.php    registrar_auditoria() + cambios_json() (antes/después)
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
 │   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver CONTRATO.md
+│
+├── pos.php              PUNTO DE VENTA: la pantalla de caja (ver POS_DISENO.md)
+├── pos_api.php          endpoints JSON del POS (buscar, cobrar, anular, espera…)
+├── caja.php             abrir/cerrar turno, entradas y salidas, arqueo
+├── sw.js                service worker: la caja abre y vende sin internet
+├── manifest.webmanifest hace la caja instalable como aplicación
+├── inventario.php       existencias, ajustes, mermas, alertas y kardex (opcional)
+├── compras.php          mercadería recibida (suma stock) y proveedores
+├── promociones.php      ofertas que el POS aplica solo ("4 x $1.000")
+├── producto_form.php    crear/editar un producto del catálogo compartido
+├── historial_productos.php  quién creó o editó cada producto (solo admin)
+├── servicios.php        saldo, recargas y comisiones de Klap y otros convenios
 │
 ├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos)
 ├── negocio_panel.php    panel de análisis de un negocio (clic en "Estado por negocio")
@@ -270,13 +285,76 @@ es la librería `@zxing/library` vendorizada (un asset estático, sin Composer/n
 El botón "Crear etiqueta" de cada resultado abre `herramienta_etiquetas.php?nombre=&precio=`
 con la primera fila precargada.
 
+**Módulo Ventas / POS** (web-nativo; reemplaza a Eleventa). **El diseño completo,
+las decisiones y el plan por etapas están en `web/POS_DISENO.md`: leerlo antes de
+tocar nada del POS.** Guías operativas: `INSTALAR_POS.md` (instalación en un PC,
+incluido el modo kiosco) y `MIGRACION_POS.md` (el cambio desde Eleventa).
+
+- **`pos.php`** es una pantalla "de trabajo": documento propio, sin el layout del
+  dashboard, pensada para operarse **solo con el teclado** (el flujo real del
+  usuario en Eleventa era `escanear → F12 → F2`). Atajos: `Ctrl+P` producto común,
+  `F10` buscar, `F7`/`F8` efectivo, `F9` pago de cuenta, `Supr` borrar línea,
+  `F6` pendiente, `F12` (o `+` del numérico) cobrar. `F12` y `F1` los reserva el
+  navegador: por eso la caja se abre en **modo kiosco**.
+- **`ventas` / `venta_items` / `venta_pagos`** — una venta con sus líneas y sus
+  pagos. Varias filas en `venta_pagos` = **pago mixto**. `uuid` es la clave de
+  idempotencia (mismo patrón que `facturas.uuid_local`) y el `folio` correlativo
+  **lo asigna el servidor**, no la caja.
+- **`ventas_espera`** — tickets aparcados (F6). No son ventas: no tienen folio ni
+  aparecen en reportes. Bloquean el cierre de caja.
+- **`caja_sesiones` / `caja_movimientos`** — el turno y el efectivo que entra o
+  sale. **Un turno abierto por usuario**: dos cajas simultáneas son dos personas.
+- **Al cerrar caja se genera un `corte`** reutilizando `registrar_corte()` de
+  `lib/eleventa.php`, así el módulo Ingresos y los reportes siguen igual pero con
+  datos propios. `cortes` ganó `recaudado_efectivo` y `diferencia` (los cortes que
+  llegan por correo las dejan NULL).
+- **`promociones`** — ofertas que el POS aplica **solo** al vender: `pack`
+  ("4 x $1.000"), `nxm`, `precio` y `porcentaje`, a un producto o a un
+  departamento. El navegador las calcula para mostrarlas al instante, pero **el
+  servidor las recalcula al cobrar** e ignora lo que mande la caja.
+- **Anular** solo se puede en una caja **todavía abierta**: cerrada, su corte ya
+  está en Ingresos y anular reescribiría historia (además de ser la vía clásica de
+  robo hormiga). Anular revierte el fiado y devuelve el stock.
+
+**Recaudación de convenios** (`convenios`, `servicio_operaciones`) — **crítico para
+que el balance sea real** (ver POS_DISENO.md 7.7): la plata que el cliente paga por
+su cuenta de luz **NO es venta** (es de la empresa de servicios) y recargar saldo
+**NO es un gasto** (es plata propia cambiando de bolsillo). El único ingreso real
+es la **comisión**. El efectivo sí entra al cajón, así que el arqueo lo suma: sin
+eso mostraría un sobrante todos los días. Soporta convenios **prepago** (Klap, con
+saldo que se descuenta) y **postpago** (deuda que se liquida).
+
+**Catálogo compartido** — `productos` **no tiene `negocio_id`**: es un solo catálogo
+para los dos negocios (igual que `precios_fv`). Agregar un producto o cambiar un
+precio se refleja en ambos. **El stock NO se comparte**: vive en `producto_stock`,
+una fila por producto y negocio. La carga de Excel hace **upsert** (jamás borra) y
+basta subirla una vez.
+
+**Inventario opcional** (`negocios.control_stock`, `inventario_movimientos`) — nace
+**apagado** en los dos negocios y el POS entonces ni menciona el stock. Encendido,
+las ventas descuentan y las compras suman, con el kardex explicando cada cambio.
+**Nunca se bloquea una venta por falta de stock**: si el producto está en la mano se
+vende, y el saldo negativo se marca para revisar.
+
+**Sin internet** (Etapa 3) — la caja guarda el catálogo en el PC (IndexedDB), así
+que escanear es instantáneo y funciona sin conexión. Al cobrar sin internet la venta
+va a una **cola local** y sube sola al reconectar; el `uuid` impide duplicados. El
+carrito se guarda en cada cambio, así que sobrevive a un corte de luz. El **PIN**
+(`usuarios.pin_hash`) desbloquea la caja localmente: es un cerrojo de terminal, **no
+seguridad fuerte** — está anotado así en `huella_pin()`.
+
 ## Roles y permisos (en `lib/permisos.php` + `lib/auth.php`)
 
 - **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
   los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `gastos`,
-  `precios`, `herramientas`, `negocios`, `usuarios`). Roles actuales: **`admin`**
-  (todos los módulos) y **`vendedor`** (`facturas`, `fiados`, `precios`,
-  `herramientas`). `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere
+  `precios`, `productos`, `ventas`, `herramientas`, `negocios`, `usuarios`). Roles
+  actuales: **`admin`** (todos los módulos) y **`vendedor`** (`facturas`, `fiados`,
+  `precios`, `productos`, `herramientas`).
+  **`ventas` está SOLO en admin a propósito**: el POS se construyó y se prueba sin
+  que las vendedoras vean nada. Habilitarlo es agregar `'ventas'` a su fila;
+  ocultarlo de nuevo, quitarlo (ver `MIGRACION_POS.md` paso 5).
+  **`productos`** (crear/editar catálogo y promociones) lo tienen ambos por decisión
+  del usuario: es más ágil y todo cambio queda auditado y consultable. `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere
   `ALTER`). Los módulos `ingresos` y `gastos` son solo admin (información financiera
   del dueño); `precios` (Frutas y Verduras) lo usan admin y vendedores.
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
@@ -295,6 +373,9 @@ con la primera fila precargada.
 
 ## Convenciones importantes
 
+- **Sesión de 30 días**: la caja de un almacén no puede pedir contraseña cada
+  mañana, y menos sin internet. Por eso el cerrojo del terminal es el **PIN**, no
+  el cierre de sesión.
 - **Seguridad primero**: todo input va por prepared statements. Todo output a HTML
   pasa por `htmlspecialchars()` (hay un helper `h()` en algunas páginas). Sesiones
   con `httponly` + `samesite=Lax` + `session_regenerate_id` al login.

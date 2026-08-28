@@ -196,3 +196,94 @@ Riesgo bajo (se parte de cero). Si algo sale mal: restaura el volcado de la base
   producción, activa la extensión `imap` en PHP, configura Eleventa para enviar el
   cierre a su alias e instala el cron de `procesar_cortes.php` cada 10 minutos:
   `*/10 * * * * /usr/local/bin/ea-php84 /home/migue492/admin.minimark.cl/procesar_cortes.php`.
+
+---
+
+# Anexo — Publicar el módulo de Ventas (POS)
+
+Este anexo cubre la subida del **POS** sobre una instalación que ya está
+funcionando. El plan completo del cambio desde Eleventa está en
+`MIGRACION_POS.md`; acá va solo la parte técnica.
+
+## 0. Respaldo (obligatorio)
+
+cPanel → **Copias de seguridad** → descargar la copia de la base de datos.
+**Sin respaldo no se sube nada.**
+
+## 1. Subir estos archivos
+
+Rutas relativas a `web/`. Respetar las carpetas (`assets/`, `lib/`).
+
+```
+.htaccess
+assets/estilo.css
+assets/pos-icono.svg
+caja.php
+catalogo_buscar.php
+compras.php
+corte.php
+herramienta_catalogo.php
+herramienta_etiquetas.php
+herramienta_productos.php
+historial_productos.php
+inventario.php
+lib/auditoria.php
+lib/auth.php
+lib/eleventa.php
+lib/esquema.sql
+lib/permisos.php
+lib/pos.php
+lib/productos.php
+lib/ui.php
+manifest.webmanifest
+migrar.php
+pos.php
+pos_api.php
+producto_form.php
+productos_buscar.php
+promociones.php
+servicios.php
+sw.js
+usuarios.php
+```
+
+**NO subir**: `config.php` (tiene las claves) ni ningún `.md`.
+
+## 2. Correr las migraciones
+
+Entrar a `https://admin.minimark.cl/migrar.php` como administrador.
+
+Es **aditivo**: crea las tablas y columnas que falten y **no borra datos**. La
+única parte que no es aditiva —unificar el catálogo entre los dos negocios—
+**comprueba primero** que los productos sean idénticos en ambos y **aborta sin
+cambiar nada** si encuentra diferencias, listando los códigos en conflicto.
+
+Al terminar, **borrar `migrar.php` del servidor**.
+
+## 3. Comprobar que quedó bien
+
+1. Entrar como **administrador**: debe aparecer **Ventas** y **Servicios** en el
+   menú.
+2. Entrar como **vendedora**: **no** debe ver ninguno de los dos (el POS sigue
+   oculto hasta el paso 5 de `MIGRACION_POS.md`).
+3. Abrir caja, hacer una venta de prueba y cerrarla: el corte debe aparecer en
+   **Ingresos**.
+4. Revisar que **Facturas, Fiados, Gastos y Frutas y Verduras** sigan igual.
+
+## 4. Si algo sale mal
+
+| Situación | Solución |
+|-----------|----------|
+| Una pantalla nueva falla | Borrar ese archivo del servidor |
+| El menú o los permisos molestan | Subir la versión anterior de `lib/permisos.php` o `lib/ui.php` |
+| Las tablas nuevas estorban | Son inertes mientras nadie use el POS |
+| Hay que volver todo atrás | Restaurar el respaldo del paso 0 y volver a subir los archivos de `main` |
+
+## Notas
+
+- El POS necesita **HTTPS** para funcionar sin internet y para usar la cámara como
+  lector. `admin.minimark.cl` ya lo tiene.
+- La **sesión pasa a durar 30 días** (antes moría al cerrar el navegador). Es
+  necesario para que la caja no pida contraseña cada mañana; el cerrojo del
+  terminal es el **PIN** de cada usuario.
+- `sw.js` y `manifest.webmanifest` van en la **raíz** del sitio, no en `assets/`.

@@ -742,6 +742,17 @@ de caja/corte funciona exactamente igual.
 
 Cada etapa es **usable por sí sola** (no hay que esperar al final para vender).
 
+> **Estado (ago-2026): etapas 1 a 5 construidas y verificadas en desarrollo.**
+> Lo que queda es del usuario: subir a producción (`DESPLIEGUE.md`, anexo del POS),
+> hacer el cambio desde Eleventa (`MIGRACION_POS.md`) y confirmar en su propio
+> Chrome las dos cosas que no se pudieron probar acá: el **modo kiosco** (que
+> libera F12) y **vender con el wifi realmente desconectado**.
+>
+> Cambios sobre el plan original, todos por preguntarle al usuario antes de
+> construir: el **2D (descuentos manuales) se descartó** —no los usa, resuelve las
+> frutas con Producto Común— y se reemplazó por **promociones automáticas**, que
+> era su necesidad real.
+
 - **Etapa 1 — Vender de verdad (mínimo usable), SIN inventario**
   - `negocios.control_stock` (nace **apagado** en ambos negocios) → el POS no habla de
     stock en ninguna parte. Esto simplifica bastante esta etapa.
