@@ -42,6 +42,46 @@ function sesion_abierta_de(PDO $pdo, int $usuarioId): ?array
     return $st->fetch() ?: null;
 }
 
+/**
+ * Horas que lleva abierto un turno.
+ *
+ * Un turno representa una jornada: se abre en la mañana y se cierra al
+ * terminar. Si lleva mucho más que eso, casi siempre es que se olvidaron de
+ * cerrarlo — y una caja sin cerrar arrastra las ventas del día siguiente al
+ * arqueo anterior, que es como se pierde la trazabilidad del efectivo.
+ */
+function horas_abierta(array $sesion): float
+{
+    $desde = strtotime((string)($sesion['abierto_en'] ?? ''));
+    if (!$desde) {
+        return 0.0;
+    }
+    return max(0.0, (time() - $desde) / 3600);
+}
+
+/** A partir de cuántas horas se avisa que la caja lleva demasiado abierta. */
+const CAJA_HORAS_AVISO = 16;
+
+/**
+ * Texto del aviso si el turno lleva demasiado abierto, o null si va bien.
+ * 16 horas porque la jornada más larga de un almacén no llega a eso: pasado
+ * ese punto el turno ya cruzó al día siguiente.
+ */
+function aviso_caja_larga(array $sesion): ?string
+{
+    $horas = horas_abierta($sesion);
+    if ($horas < CAJA_HORAS_AVISO) {
+        return null;
+    }
+    $dias = floor($horas / 24);
+    if ($dias >= 1) {
+        return 'Esta caja lleva ' . $dias . ($dias == 1 ? ' día' : ' días')
+             . ' abierta. Conviene cerrarla para cuadrar el efectivo.';
+    }
+    return 'Esta caja lleva ' . floor($horas)
+         . ' horas abierta. Conviene cerrarla para cuadrar el efectivo.';
+}
+
 /** Turnos abiertos de los negocios dados (vista de administración). */
 function sesiones_abiertas(PDO $pdo, array $idsNegocios): array
 {

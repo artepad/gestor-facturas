@@ -86,6 +86,11 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
             · <?= h($sesion['caja'] ?: 'Caja') ?></span>
     </div>
     <div class="pos-top-der">
+        <?php if ($avisoLarga = aviso_caja_larga($sesion)): ?>
+            <a class="pos-aviso-larga" href="caja.php" title="<?= h($avisoLarga) ?>">
+                <?= icono('reloj') ?> Caja sin cerrar
+            </a>
+        <?php endif; ?>
         <span class="pos-conexion" id="posConexion" hidden>Sin conexión</span>
         <button type="button" class="pos-pendientes" id="posPendientes" hidden></button>
         <span class="pos-cajero">Le atiende: <b><?= h($usuario['nombre'] ?? '') ?></b></span>
@@ -293,16 +298,32 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
             <option value="<?= h($s) ?>"><?= h($s) ?></option>
         <?php endforeach; ?>
     </select>
-    <label for="ctaMonto">Monto que pagó el cliente</label>
-    <input type="text" id="ctaMonto" inputmode="numeric" autocomplete="off" placeholder="30.000">
     <label for="ctaMedio">Con qué pagó</label>
     <select id="ctaMedio">
         <option value="efectivo">Efectivo (entra al cajón)</option>
         <option value="tarjeta">Tarjeta (no entra al cajón)</option>
         <option value="transferencia">Transferencia (no entra al cajón)</option>
     </select>
+    <!-- El monto va destacado en verde: es el dato que de verdad importa y el
+         único que, mal escrito, descuadra la caja. -->
+    <label for="ctaMonto">Monto de la cuenta</label>
+    <div class="campo-peso campo-peso-destacado">
+        <span class="campo-peso-signo">$</span>
+        <input type="text" id="ctaMonto" inputmode="numeric" autocomplete="off">
+    </div>
+    <!-- Calculadora de vuelto: NO se guarda ni afecta la caja. El vuelto sale
+         de la misma plata que acaba de entrar, así que el cajón queda con el
+         neto. Esto es solo para no equivocarse al devolver. -->
+    <div id="ctaVueltoCaja">
+        <label for="ctaPagoCon">Con cuánto pagó (opcional)</label>
+        <div class="campo-peso">
+            <span class="campo-peso-signo">$</span>
+            <input type="text" id="ctaPagoCon" inputmode="numeric" autocomplete="off">
+        </div>
+        <p class="cta-vuelto" id="ctaVuelto" hidden></p>
+    </div>
     <label for="ctaRef">N° de comprobante (opcional)</label>
-    <input type="text" id="ctaRef" autocomplete="off" placeholder="Del comprobante de la máquina">
+    <input type="text" id="ctaRef" autocomplete="off">
     <div class="pos-modal-err" id="ctaErr" hidden></div>
     <div class="pos-modal-btns">
         <button type="button" class="btn verde" id="btnCuentaOk">Registrar pago</button>
@@ -314,9 +335,12 @@ $resumen = resumen_caja($pdo, (int)$sesion['id']);
 <section class="pos-modal" id="modalMov" hidden aria-label="Movimiento de efectivo">
     <h2 id="movTitulo">Salida de efectivo</h2>
     <label for="movMonto">Monto</label>
-    <input type="text" id="movMonto" inputmode="numeric" autocomplete="off" placeholder="5.000">
+    <div class="campo-peso">
+        <span class="campo-peso-signo">$</span>
+        <input type="text" id="movMonto" inputmode="numeric" autocomplete="off">
+    </div>
     <label for="movMotivo" id="movMotivoLbl">Motivo *</label>
-    <input type="text" id="movMotivo" autocomplete="off" placeholder="Pago pan proveedor">
+    <input type="text" id="movMotivo" autocomplete="off">
     <div class="pos-modal-err" id="movErr" hidden></div>
     <div class="pos-modal-btns">
         <button type="button" class="btn verde" id="btnMovOk">Registrar</button>
@@ -379,6 +403,31 @@ var ventas = <?= json_encode(array_map(fn($v) => [
 var $ = function (id) { return document.getElementById(id); };
 
 // ---------- Formato chileno ----------
+// ---------- Campos de dinero: solo números ----------
+// El servidor ya rechaza montos <= 0, pero conviene que ni siquiera se puedan
+// escribir: una vendedora apurada no debería llegar al mensaje de error.
+// Se aplica a TODO input marcado como numérico, así los campos que se agreguen
+// en el futuro quedan protegidos sin acordarse de esto.
+//   numeric -> solo dígitos y el punto de los miles ("16.500")
+//   decimal -> además la coma, para cantidades por peso ("8,5" kilos)
+// El signo menos nunca pasa: en una caja no existen los montos negativos.
+function limpiarNumerico(el) {
+    var permitido = el.inputMode === 'decimal' ? /[^0-9.,]/g : /[^0-9.]/g;
+    var antes = el.value, pos = el.selectionStart;
+    var luego = antes.replace(permitido, '');
+    if (luego === antes) return;
+    el.value = luego;
+    // Se recoloca el cursor donde estaba, descontando lo que se quitó.
+    try { el.setSelectionRange(pos - (antes.length - luego.length), pos - (antes.length - luego.length)); } catch (_) {}
+}
+Array.prototype.forEach.call(
+    document.querySelectorAll('input[inputmode=numeric], input[inputmode=decimal]'),
+    function (el) {
+        if (el.id === 'cerrojoPin') return;      // el PIN tiene su propia validación
+        el.addEventListener('input', function () { limpiarNumerico(el); });
+    }
+);
+
 function clp(n) {
     n = Math.round(Number(n) || 0);
     return '$' + n.toLocaleString('es-CL');
@@ -1286,11 +1335,38 @@ $('pendEtiqueta').addEventListener('keydown', function (e) {
 // No toca el carrito: es una operación aparte de la venta. El efectivo entra
 // al cajón para que el arqueo cuadre, pero NO cuenta como venta del negocio.
 function abrirCuenta() {
-    $('ctaMonto').value = ''; $('ctaRef').value = '';
+    $('ctaMonto').value = ''; $('ctaRef').value = ''; $('ctaPagoCon').value = '';
     $('ctaMedio').value = 'efectivo';
     $('ctaErr').hidden = true;
+    pintarVueltoCuenta();
     abrirModal('modalCuenta', 'ctaMonto');
 }
+
+// Vuelto de un pago de cuenta. Es SOLO una calculadora: no se guarda ni entra
+// al arqueo. El vuelto sale de la misma plata que acaba de recibir, así que en
+// el cajón queda el neto (cuenta $16.500, paga con $20.000, devuelve $3.500 →
+// quedan $16.500, justo lo registrado).
+function pintarVueltoCuenta() {
+    var efectivo = $('ctaMedio').value === 'efectivo';
+    $('ctaVueltoCaja').hidden = !efectivo;      // con tarjeta no hay vuelto
+    var cuenta = num($('ctaMonto').value),
+        pago   = num($('ctaPagoCon').value),
+        caja   = $('ctaVuelto');
+    if (!efectivo || cuenta === null || pago === null) { caja.hidden = true; return; }
+    var v = pago - cuenta;
+    caja.hidden = false;
+    if (v < 0) {
+        caja.className = 'cta-vuelto falta';
+        caja.textContent = 'Faltan ' + clp(-v);
+    } else {
+        caja.className = 'cta-vuelto';
+        caja.textContent = 'Vuelto: ' + clp(v);
+    }
+}
+['ctaMonto', 'ctaPagoCon'].forEach(function (id) {
+    $(id).addEventListener('input', pintarVueltoCuenta);
+});
+$('ctaMedio').addEventListener('change', pintarVueltoCuenta);
 function guardarCuenta() {
     var b = $('btnCuentaOk');
     if (b.disabled) return;
@@ -1318,7 +1394,7 @@ function guardarCuenta() {
     }).then(function () { b.disabled = false; });
 }
 $('btnCuentaOk').addEventListener('click', guardarCuenta);
-['ctaMonto', 'ctaRef'].forEach(function (id) {
+['ctaMonto', 'ctaRef', 'ctaPagoCon'].forEach(function (id) {
     $(id).addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); guardarCuenta(); }
     });

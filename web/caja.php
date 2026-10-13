@@ -175,6 +175,9 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                     <?= h($sesion['negocio_nombre']) ?>
                 </h2>
                 <p class="ec-intro">Abierta desde <?= h($sesion['abierto_en']) ?>.</p>
+                <?php if ($avisoLarga = aviso_caja_larga($sesion)): ?>
+                    <p class="aviso-caja-larga"><?= icono('reloj') ?> <?= h($avisoLarga) ?></p>
+                <?php endif; ?>
 
                 <div class="ingresos-stats stats-compactas">
                     <div class="stat-card">
@@ -229,12 +232,15 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                     </div>
                     <div class="campo">
                         <label>Monto</label>
-                        <input type="text" name="monto" placeholder="5.000" inputmode="numeric" required>
+                        <div class="campo-peso">
+                            <span class="campo-peso-signo">$</span>
+                            <input type="text" name="monto" inputmode="numeric" required>
+                        </div>
                     </div>
                     <div class="campo" style="flex:1 1 220px">
                         <label id="movMotivoLbl">Motivo *</label>
                         <input type="text" name="motivo" id="movMotivo" required
-                               placeholder="Pago pan proveedor" style="width:100%">
+                               style="width:100%">
                     </div>
                     <div class="campo">
                         <label>&nbsp;</label>
@@ -253,7 +259,6 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
                         var salida = tipo.value === 'salida';
                         campo.required = salida;
                         lbl.textContent = salida ? 'Motivo *' : 'Motivo (opcional)';
-                        campo.placeholder = salida ? 'Pago pan proveedor' : 'Abono de fiado en efectivo';
                     });
                 })();
                 </script>
@@ -424,4 +429,18 @@ $historial   = sesiones_cerradas($pdo, $idsVisibles, 15);
             <?php endif; ?>
         </div>
     </div>
+    <script>
+    // Campos de dinero: solo números (dígitos y el punto de los miles). Va al
+    // final y fuera de todo if, para que alcance tanto al fondo de apertura
+    // como al monto contado del cierre. El backend igual rechaza montos <= 0.
+    Array.prototype.forEach.call(
+        document.querySelectorAll('input[inputmode=numeric]'),
+        function (el) {
+            el.addEventListener('input', function () {
+                var v = el.value.replace(/[^0-9.]/g, '');
+                if (v !== el.value) el.value = v;
+            });
+        }
+    );
+    </script>
     <?php pie_dashboard(); ?>

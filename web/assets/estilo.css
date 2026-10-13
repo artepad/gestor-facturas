@@ -278,6 +278,11 @@ body { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
 .btn.gris:hover { background: #5a6268; }
 
 /* Tabla */
+/* Un formulario de filtros seguido de su tabla necesita aire: sin esto los
+   campos quedan pegados al encabezado oscuro y se leen como una sola pieza. */
+.filtros + .tabla-wrap,
+.filtros + script + .tabla-wrap { margin-top: 18px; }
+
 .tabla-wrap { background: #fff; border: 1px solid var(--borde);
   border-radius: 8px; overflow: hidden; }
 table { width: 100%; border-collapse: collapse; }
@@ -554,6 +559,11 @@ tr:hover td { background: #eef5ff; }
 
 /* Capa del escáner (cámara a pantalla completa) */
 .scanner { position: fixed; inset: 0; z-index: 1000; background: #000; display: flex; flex-direction: column; }
+/* El atributo hidden SIEMPRE oculta. Sin esto, cualquier elemento con
+   display:flex/grid se sigue viendo aunque lleve hidden (fue el bug del
+   cerrojo de la caja: la pantalla de PIN no se cerraba nunca). */
+[hidden] { display: none !important; }
+
 .scanner[hidden] { display: none; }   /* el atributo hidden gana a display:flex */
 .scanner-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   color: #fff; padding: 14px 18px; font-size: 15px; }
@@ -1472,3 +1482,63 @@ th.col-num { text-align: right; }
 /* Las tarjetas del resumen que son enlaces no deben verse como texto azul */
 a.stat-card { text-decoration: none; color: inherit; transition: box-shadow .15s, transform .15s; }
 a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translateY(-1px); }
+
+/* ---------- Aviso: la caja lleva demasiado tiempo abierta ----------
+   Un turno sin cerrar arrastra las ventas del día siguiente al arqueo
+   anterior. Se avisa, pero NO se bloquea nada: la vendedora sigue
+   vendiendo y quien decide cerrar es el dueño. */
+.aviso-caja-larga {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 0 20px; padding: 11px 14px;
+  background: #fff6e5; border: 1px solid #f0c674; border-left-width: 4px;
+  border-radius: 8px; color: #8a5a00; font-weight: 600; font-size: 14px;
+}
+.aviso-caja-larga svg { width: 18px; height: 18px; flex: none; }
+
+.pos-aviso-larga {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  background: #f0c674; color: #5c3d00;
+  font-weight: 700; font-size: 13px; text-decoration: none;
+}
+.pos-aviso-larga:hover { background: #e8b84f; }
+.pos-aviso-larga svg { width: 15px; height: 15px; }
+
+/* ---------- Campo de monto con el signo $ adentro ----------
+   Reemplaza a los textos de ejemplo ("30.000"), que en gris claro parecían un
+   valor ya escrito y hacían dudar a la vendedora. El $ dice qué va sin
+   simular contenido. */
+.campo-peso { position: relative; display: block; }
+.campo-peso .campo-peso-signo {
+  position: absolute; left: 0; top: 1px; bottom: 1px; width: 34px;
+  display: flex; align-items: center; justify-content: center;
+  color: #7b8794; font-weight: 700; pointer-events: none;
+  /* Franja propia: sin la línea divisoria el $ se leía pegado al número. */
+  background: #f2f4f7; border-right: 1px solid var(--borde);
+  border-radius: 7px 0 0 7px;
+}
+/* input[type=text] y no solo `input`: los modales del POS definen
+   `.pos-modal input[type=text] { padding: 10px 12px }`, que por tener más
+   peso pisaba el espacio reservado al $ y tapaba los primeros dígitos. */
+.campo-peso input,
+.campo-peso input[type=text] { width: 100%; padding-left: 46px; }
+
+/* El monto es el dato crítico del formulario: se destaca en verde y con
+   número grande para que la vendedora lo revise antes de registrar. */
+.campo-peso-destacado input,
+.campo-peso-destacado input[type=text] {
+  border-color: #2f9e63; background: #f2fbf6;
+  font-size: 20px; font-weight: 700; color: #14603c;
+  padding: 9px 12px 9px 46px;
+}
+.campo-peso-destacado input:focus { border-color: #1b7a4b; outline-color: #1b7a4b; }
+.campo-peso-destacado .campo-peso-signo {
+  background: #2f9e63; color: #fff; border-right-color: #2f9e63; font-size: 18px;
+}
+
+/* Vuelto del pago de cuenta: solo informativo, no toca la caja. */
+.cta-vuelto {
+  margin: 8px 0 0; padding: 8px 12px; border-radius: 8px;
+  background: #eafaf1; color: #1b7a4b; font-weight: 700;
+}
+.cta-vuelto.falta { background: #fdecea; color: #b3261e; }
