@@ -42,16 +42,24 @@ sigue funcionando exactamente igual mientras se arma la base nueva al lado.
 
 ## Fase 6 · Migración del POS, pantalla por pantalla
 
-Orden sugerido (de menor a mayor riesgo):
+**Decisión tomada en el corte 1** (ver más abajo): los Modelos nuevos son
+envoltorios sobre las funciones de `lib/pos.php`, no una reescritura de su
+lógica. Mover 1.500 líneas de golpe era justo el riesgo grande que este plan
+quiere evitar; el SQL se traslada recién cuando cada pantalla se retira de
+verdad (paso **f** de la ficha de corte). Por eso el orden ya no separa
+"`lib/pos.php`" como un paso aparte — se va extrayendo pantalla por pantalla.
 
-1. `lib/pos.php` → se separa en Modelos (`Venta`, `CajaSesion`, `Promocion`,
-   `Convenio`, `Stock`, `Compra`) — es la base de todo lo demás.
-2. `caja.php` (abrir/cerrar turno, arqueo).
-3. `pos.php` + `pos_api.php` (la pantalla de venta — la más usada, se migra con más
-   cuidado y más pruebas).
-4. `inventario.php`, `compras.php`, `promociones.php` (módulos opcionales, menor
+Orden (de menor a mayor riesgo):
+
+1. ✅ **`caja.php`** (abrir/cerrar turno, arqueo) — corte 1, terminado y probado
+   (2026-11-07). `App\Models\CajaSesion`, `App\Controllers\CajaController`,
+   vista en `/public/caja/`. CSRF agregado en sus 3 formularios (H3, para esta
+   pantalla). `caja.php` sigue intacto y es el que atiende producción.
+2. ⏳ `pos.php` + `pos_api.php` (la pantalla de venta — la más usada, se migra
+   con más cuidado y más pruebas; es el siguiente corte).
+3. `inventario.php`, `compras.php`, `promociones.php` (módulos opcionales, menor
    riesgo porque hoy inventario está apagado).
-5. `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de
+4. `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de
    Klap, ya que de todas formas se reescribe esa pantalla.
 
 ## Fase 7 en adelante
