@@ -30,6 +30,7 @@ use App\Controllers\InventarioController;
 use App\Controllers\PosApiController;
 use App\Controllers\PosController;
 use App\Controllers\PromocionesController;
+use App\Controllers\ServiciosController;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\Router;
@@ -77,6 +78,10 @@ $router->get('/compras/', [ComprasController::class, 'index']);
 $router->post('/compras/', [ComprasController::class, 'index']);
 $router->get('/promociones/', [PromocionesController::class, 'index']);
 $router->post('/promociones/', [PromocionesController::class, 'index']);
+
+// --- Corte de la Fase 6: servicios (recaudacion de convenios, Klap -> Mercado Pago) ---
+$router->get('/servicios/', [ServiciosController::class, 'index']);
+$router->post('/servicios/', [ServiciosController::class, 'index']);
 
 if (!$router->despachar(Request::metodo(), $ruta)) {
     http_response_code(404);

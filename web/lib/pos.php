@@ -1272,9 +1272,15 @@ function convenios_de(PDO $pdo, int $negocioId): array
 
 /**
  * Convenio con el que registrar un pago. Si el negocio todavía no tiene
- * ninguno, crea "Klap" (prepago) para que el vendedor no tenga que configurar
- * nada antes de cobrar la primera cuenta. La gestión de convenios llega en la
- * Etapa 2; esto solo evita que el paso 1D quede bloqueado.
+ * ninguno, crea "Mercado Pago" (prepago) para que el vendedor no tenga que
+ * configurar nada antes de cobrar la primera cuenta. La gestión de convenios
+ * llega en la Etapa 2; esto solo evita que el paso 1D quede bloqueado.
+ *
+ * Nota (migración de arquitectura, Fase 6): el negocio dejó Klap por Mercado
+ * Pago (ver web/docs/01-plan-migracion.md). Esto solo cambia el nombre que se
+ * crea por defecto cuando un negocio no tiene NINGÚN convenio todavía — los
+ * negocios que ya tienen uno (aunque se siga llamando "Klap") no se tocan
+ * solos; el dueño lo desactiva y crea el nuevo desde Servicios cuando quiera.
  */
 function convenio_por_defecto(PDO $pdo, int $negocioId): array
 {
@@ -1282,7 +1288,7 @@ function convenio_por_defecto(PDO $pdo, int $negocioId): array
     if ($lista) return $lista[0];
 
     $pdo->prepare(
-        "INSERT IGNORE INTO convenios (negocio_id, nombre, modalidad) VALUES (?, 'Klap', 'prepago')"
+        "INSERT IGNORE INTO convenios (negocio_id, nombre, modalidad) VALUES (?, 'Mercado Pago', 'prepago')"
     )->execute([$negocioId]);
     $lista = convenios_de($pdo, $negocioId);
     if (!$lista) throw new RuntimeException('No se pudo preparar el convenio de recaudación.');

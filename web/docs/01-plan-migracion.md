@@ -86,8 +86,36 @@ Orden (de menor a mayor riesgo):
    antes/después; `web/inventario.php`, `web/compras.php` y
    `web/promociones.php` siguen intactos y son los que de verdad atienden
    admin.minimark.cl.
-4. ⏳ `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de
-   Klap, ya que de todas formas se reescribe esa pantalla.
+4. ✅ **`servicios.php`** (2026-11-07). `App\Models\Convenio` ampliado
+   (conSaldo, crear, operaciones, registrarOperacion, ajustarSaldo);
+   controlador y vista en `/public/servicios/`. CSRF agregado en sus 3
+   formularios (H3 cerrado para esta pantalla).
+
+   **Hallazgo sobre "integrar Mercado Pago"**: revisando todo el código no
+   hay ninguna integración técnica con Klap (sin API, sin credenciales) —
+   "Klap" es solo el nombre que el dueño escribió al crear el convenio; el
+   sistema de convenios ya es genérico para cualquier proveedor desde que se
+   diseñó. Lo único literalmente escrito en el código era el nombre por
+   defecto que se autocrea si un negocio no tiene ningún convenio
+   (`lib/pos.php::convenio_por_defecto`) — se cambió de "Klap" a "Mercado
+   Pago". El cambio real (crear el convenio "Mercado Pago" y desactivar
+   "Klap") es una acción del dueño desde la pantalla de Servicios, no un
+   cambio de código; se le explicaron los pasos.
+
+   Probado con el convenio REAL de El Maitén (que ya tiene pagos de cuentas
+   reales de agosto 2026): el saldo que muestra la pantalla nueva es
+   IDÉNTICO, carácter por carácter, al que muestra `servicios.php` — sin
+   escribir nada, solo lectura. Aparte, con un convenio de prueba
+   desechable: crear, registrar liquidación/comisión, cuadrar con el portal
+   y el cálculo del saldo, todo verificado contra la fórmula original.
+   Probado que un vendedor no puede entrar (es panel solo-admin, como
+   Ingresos). Todos los datos de prueba se borraron, confirmado con
+   conteos antes/después — el convenio real "Klap" y sus 2 recaudaciones de
+   agosto quedaron intactos. `web/servicios.php` sigue intacto y es el que
+   de verdad atiende admin.minimark.cl.
+
+Con esto termina la Fase 6: las 7 pantallas del POS ya tienen su versión en
+la arquitectura nueva, conviviendo con el sitio viejo sin tocarlo.
 
 ## Fase 7 en adelante
 
