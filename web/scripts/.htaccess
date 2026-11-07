@@ -1,0 +1,4 @@
+# Scripts de consola (ej. smoke.php). No estan pensados para abrirse por el
+# navegador (smoke.php ya se niega solo si PHP_SAPI no es 'cli'), pero esta
+# es la defensa de verdad: ni siquiera llega a ejecutarse.
+Require all denied
