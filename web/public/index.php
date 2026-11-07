@@ -25,6 +25,7 @@ define('RUTA_PUBLICA', __DIR__);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
 use App\Controllers\CajaController;
+use App\Controllers\PosController;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\Router;
@@ -55,6 +56,9 @@ $router->get('/caja/', [CajaController::class, 'index']);
 $router->post('/caja/abrir', [CajaController::class, 'abrir']);
 $router->post('/caja/movimiento', [CajaController::class, 'movimiento']);
 $router->post('/caja/cerrar', [CajaController::class, 'cerrar']);
+
+// --- Corte 2a de la Fase 6: pantalla de venta (pos_api.php sigue sin migrar) ---
+$router->get('/pos/', [PosController::class, 'index']);
 
 if (!$router->despachar(Request::metodo(), $ruta)) {
     http_response_code(404);

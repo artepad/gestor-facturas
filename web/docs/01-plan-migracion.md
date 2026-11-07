@@ -55,8 +55,15 @@ Orden (de menor a mayor riesgo):
    (2026-11-07). `App\Models\CajaSesion`, `App\Controllers\CajaController`,
    vista en `/public/caja/`. CSRF agregado en sus 3 formularios (H3, para esta
    pantalla). `caja.php` sigue intacto y es el que atiende producción.
-2. ⏳ `pos.php` + `pos_api.php` (la pantalla de venta — la más usada, se migra
-   con más cuidado y más pruebas; es el siguiente corte).
+2. `pos.php` + `pos_api.php` (la pantalla de venta), dividido en dos sub-cortes
+   por su tamaño (1.700 líneas de JS ya afinado + 320 de API):
+   - ✅ **2a — la pantalla** (2026-11-07). `App\Models\Venta` (parcial) y
+     `Promocion`, `App\Controllers\PosController`, vista en `/public/pos/`.
+     `pos_api.php` **sigue sin tocar**: la vista nueva le sigue hablando en su
+     ubicación de siempre — nada del motor de cobro cambió.
+   - ⏳ **2b — `pos_api.php`** (cobrar, anular, espera, movimiento,
+     recaudación). El corte más delicado de toda la migración: cada acción se
+     prueba una por una antes de seguir. Es el siguiente paso.
 3. `inventario.php`, `compras.php`, `promociones.php` (módulos opcionales, menor
    riesgo porque hoy inventario está apagado).
 4. `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de
