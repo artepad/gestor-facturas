@@ -14,3 +14,6 @@ web/config.php
 web/almacen_pdf/*
 !web/almacen_pdf/.htaccess
 config.yaml
+
+# Servidor web: registro de errores del esqueleto nuevo (app/bootstrap.php)
+web/logs_app.log

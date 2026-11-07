@@ -1,0 +1,2 @@
+# Igual que lib/.htaccess: codigo interno, nunca se accede por la web directamente.
+Require all denied

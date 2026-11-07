@@ -1,0 +1,54 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Punto de entrada de la arquitectura NUEVA (Fase 4 de la migracion).
+ *
+ * Hoy esto NO es lo que sirve admin.minimark.cl — eso lo sigue siendo la
+ * raiz de web/ (login.php, pos.php, etc.), sin ningun cambio. Este archivo
+ * convive al lado, para ir probando el esqueleto antes de mover trafico
+ * real. El cambio de "que carpeta ve el navegador" es la Fase 9, y se avisa
+ * y se aprueba aparte.
+ *
+ * Unica ruta por ahora: "/" -> confirma que el autoload, la config, la base
+ * de datos y la sesion del esqueleto nuevo funcionan. Cada pantalla real se
+ * agrega recien cuando le toca su corte (Fase 6).
+ *
+ * La ruta se calcula relativa a donde vive ESTE archivo (SCRIPT_NAME), no al
+ * dominio completo: asi funciona igual en local (XAMPP sirve esto en
+ * /minimark/public/) y en produccion (Fase 9: el hosting apuntara el
+ * dominio directo a esta carpeta, sin prefijo). Ningun cambio de ruta real
+ * cuando eso pase.
+ */
+
+define('RUTA_PUBLICA', __DIR__);
+require dirname(__DIR__) . '/app/bootstrap.php';
+
+use App\Core\Database;
+use App\Core\Request;
+use App\Core\Router;
+
+$base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
+$ruta = Request::ruta();
+if ($base !== '' && str_starts_with($ruta, $base)) {
+    $ruta = substr($ruta, strlen($base));
+}
+if ($ruta === '' || $ruta === '/index.php') {
+    $ruta = '/';
+}
+
+$router = new Router();
+
+$router->get('/', function (): void {
+    header('Content-Type: text/plain; charset=utf-8');
+    $negocios = (int)Database::valor('SELECT COUNT(*) FROM negocios');
+    echo "Esqueleto nuevo OK\n";
+    echo "Base de datos OK (negocios registrados: $negocios)\n";
+    echo "Sesion OK (token CSRF: " . substr(\App\Core\Session::tokenCsrf(), 0, 8) . "...)\n";
+});
+
+if (!$router->despachar(Request::metodo(), $ruta)) {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "404 - no encontrado (esqueleto nuevo, sin esa ruta todavia)";
+}
