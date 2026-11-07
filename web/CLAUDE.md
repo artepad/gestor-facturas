@@ -6,6 +6,12 @@ repositorio que la app de escritorio de Python. **Lee también `web/CONTRATO.md`
 ahí está el "puente" que conecta la web con el cliente Python; ninguno de los dos
 lados puede romperlo sin coordinar con el otro.
 
+> **Migración de arquitectura en curso (rama `migracion-arquitectura`).** El
+> estándar de destino (capas, seguridad, estructura de carpetas, plan por fases)
+> está en `web/docs/prompt-migracion-arquitectura.md`. Mientras dure la migración,
+> este archivo describe el estado **actual** (PHP plano); no asumir que ya se
+> aplicó el estándar nuevo salvo que la bitácora de la migración lo confirme.
+
 ## Contexto
 
 `admin.minimark.cl` es el **dashboard web** que centraliza las facturas de todos
