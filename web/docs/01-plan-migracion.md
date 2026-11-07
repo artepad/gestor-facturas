@@ -23,18 +23,22 @@ sigue funcionando exactamente igual mientras se arma la base nueva al lado.
 
 ## Fase 5 · Arreglos rápidos y transversales (los hallazgos de la auditoría)
 
-En este orden, cada uno con su prueba:
+**Estado: 5 de 7 terminados y probados (2026-11-07).**
 
-1. H1 — Bloqueo de intentos de login.
-2. H2 — Validar formato UUID en la subida de PDFs.
-3. H4 — Fijar `display_errors` + página de error genérica.
-4. H6 — Las dos consultas sin preparar (bajo esfuerzo, se hace de paso).
-5. H3 — CSRF en los formularios (el que más archivos toca; se hace al final de esta
-   fase porque conviene hacerlo a la vez que cada pantalla se migra en la Fase 6, no
-   dos veces).
-6. H5 — Mover los utilitarios de un solo uso fuera de la carpeta pública.
-7. H7 — Respaldo automático de `almacen_pdf/` (esto es un cambio de cron en el
-   servidor, no de código; se coordina aparte).
+1. ✅ H1 — Bloqueo de intentos de login (5 fallos / 15 min, por correo y por IP).
+2. ✅ H2 — Formato de `uuid_local` validado antes de usarlo como nombre de archivo.
+3. ✅ H4 — `display_errors` fijo + página de error genérica (sin detalle técnico en
+   producción).
+4. ✅ H6 — Las dos consultas sin preparar, ya con prepared statements.
+5. ⏳ H3 — CSRF en los formularios. **Pendiente a propósito**: se hace a la vez que
+   cada pantalla se migra en la Fase 6, no dos veces.
+6. ⏳ H5 — Mover los utilitarios de un solo uso fuera de la carpeta pública.
+   **Pendiente a propósito**: hoy siguen siendo la única forma de administrar el
+   servidor (`migrar.php`, etc.); se mueven en la Fase 9, cuando el dominio pase a
+   apuntar a `public/`.
+7. ✅ H7 — Respaldo automático de `almacen_pdf/` (`scripts/respaldo_pdfs.php`,
+   conserva los últimos 14). **Falta un paso del dueño, no de código**: agregar el
+   cron job en cPanel (mismo lugar donde ya está `procesar_cortes.php`).
 
 ## Fase 6 · Migración del POS, pantalla por pantalla
 
