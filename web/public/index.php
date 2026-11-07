@@ -25,6 +25,7 @@ define('RUTA_PUBLICA', __DIR__);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
 use App\Controllers\CajaController;
+use App\Controllers\PosApiController;
 use App\Controllers\PosController;
 use App\Core\Database;
 use App\Core\Request;
@@ -59,6 +60,11 @@ $router->post('/caja/cerrar', [CajaController::class, 'cerrar']);
 
 // --- Corte 2a de la Fase 6: pantalla de venta (pos_api.php sigue sin migrar) ---
 $router->get('/pos/', [PosController::class, 'index']);
+
+// --- Corte 2b: motor de cobro. La vista NO le habla todavia a esto (sigue
+// llamando a pos_api.php tal cual) hasta que se verifiquen las 13 acciones. ---
+$router->get('/pos/api', [PosApiController::class, 'index']);
+$router->post('/pos/api', [PosApiController::class, 'index']);
 
 if (!$router->despachar(Request::metodo(), $ruta)) {
     http_response_code(404);

@@ -37,4 +37,63 @@ final class Venta
         self::cargar();
         return \ventas_del_turno(Database::pdo(), $sesionId, $limite);
     }
+
+    // ---------- Corte 2b: lo que necesita pos_api.php ----------
+
+    public static function firmaCatalogo(): string
+    {
+        self::cargar();
+        return \firma_catalogo(Database::pdo());
+    }
+
+    public static function catalogoParaPos(): array
+    {
+        self::cargar();
+        return \catalogo_para_pos(Database::pdo());
+    }
+
+    public static function buscarProducto(string $termino, int $limite = 20): array
+    {
+        self::cargar();
+        return \buscar_producto_pos(Database::pdo(), $termino, $limite);
+    }
+
+    public static function clientesParaFiar(int $negocioId): array
+    {
+        self::cargar();
+        return \clientes_para_pos(Database::pdo(), $negocioId);
+    }
+
+    public static function registrar(
+        array $usuario, array $sesion, string $uuid, array $items, array $pagos,
+        ?float $pagoCon, string $origen, string $nota, ?int $clienteId
+    ): array {
+        self::cargar();
+        return \registrar_venta(Database::pdo(), $usuario, $sesion, $uuid, $items, $pagos,
+            $pagoCon, $origen, $nota, $clienteId);
+    }
+
+    public static function anular(array $usuario, int $ventaId, string $motivo): array
+    {
+        self::cargar();
+        return \anular_venta(Database::pdo(), $usuario, $ventaId, $motivo);
+    }
+
+    public static function guardarEspera(array $usuario, array $sesion, array $items, string $etiqueta, float $total): array
+    {
+        self::cargar();
+        return \guardar_espera(Database::pdo(), $usuario, $sesion, $items, $etiqueta, $total);
+    }
+
+    public static function tomarEspera(int $sesionId, int $esperaId): array
+    {
+        self::cargar();
+        return \tomar_espera(Database::pdo(), $sesionId, $esperaId);
+    }
+
+    public static function descartarEspera(int $sesionId, int $esperaId): string
+    {
+        self::cargar();
+        return \descartar_espera(Database::pdo(), $sesionId, $esperaId);
+    }
 }

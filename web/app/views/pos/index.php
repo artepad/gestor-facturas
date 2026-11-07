@@ -894,9 +894,15 @@ function api(accion, datos, metodo) {
     // OJO: `accion` puede traer parametros ya codificados (ej. "buscar&q=..."),
     // asi que NO se vuelve a codificar entera: eso convertiria el & y el = en
     // texto y el servidor no reconoceria la accion.
-    var url = BASE_ANTIGUO + '/pos_api.php?accion=' + accion;
+    var url = BASE_NUEVO + '/pos/api?accion=' + accion;
     var op = { method: metodo || 'POST', headers: { 'Content-Type': 'application/json' } };
-    if (op.method === 'POST') op.body = JSON.stringify(datos || {});
+    if (op.method === 'POST') {
+        // _token: CSRF (corte 2b). El endpoint viejo lo ignoraba sin problema;
+        // el nuevo lo exige en toda escritura (H3 de la auditoria).
+        var cuerpo = datos || {};
+        cuerpo._token = CSRF_TOKEN;
+        op.body = JSON.stringify(cuerpo);
+    }
     return fetch(url, op).then(function (r) {
         return r.json().catch(function () { return { error: 'Respuesta inesperada del servidor.' }; })
             .then(function (j) {
@@ -1580,7 +1586,13 @@ Array.prototype.forEach.call(document.querySelectorAll('a.pos-btn-top'), functio
 
 var PIN_HASH = <?= json_encode($pinHash) ?>;
 var USUARIO_ID = <?= (int)$usuario['id'] ?>;
-var BASE_ANTIGUO = <?= json_encode($baseAntiguo) ?>;   // pos_api.php vive ahi (corte 2b todavia no lo migra)
+var BASE_ANTIGUO = <?= json_encode($baseAntiguo) ?>;   // assets, caja.php, home.php, sw.js siguen ahi
+// Corte 2b: el motor de cobro ya se migro (App\Controllers\PosApiController,
+// probadas las 13 acciones una por una contra pos_api.php antes de apuntar
+// aca). BASE_NUEVO es donde vive ESTA pantalla nueva ("/minimark/public" en
+// local; la raiz del dominio recien en la Fase 9).
+var BASE_NUEVO = <?= json_encode($baseNuevo) ?>;
+var CSRF_TOKEN = <?= json_encode($csrfToken) ?>;
 
 function huellaPin(pin) {
     var datos = new TextEncoder().encode(pin + ':' + USUARIO_ID);

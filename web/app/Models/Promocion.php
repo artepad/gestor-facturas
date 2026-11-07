@@ -23,4 +23,15 @@ final class Promocion
         self::cargar();
         return \promociones_vigentes(Database::pdo(), $negocioId);
     }
+
+    /**
+     * Total de un carrito YA con las promociones aplicadas. El servidor
+     * SIEMPRE lo recalcula al cobrar: nunca se confía en el total que
+     * manda el navegador (podría venir manipulado o desactualizado).
+     */
+    public static function totalDelCarrito(int $negocioId, array $items): float
+    {
+        self::cargar();
+        return \total_con_promociones(Database::pdo(), $negocioId, $items);
+    }
 }

@@ -61,9 +61,15 @@ Orden (de menor a mayor riesgo):
      `Promocion`, `App\Controllers\PosController`, vista en `/public/pos/`.
      `pos_api.php` **sigue sin tocar**: la vista nueva le sigue hablando en su
      ubicación de siempre — nada del motor de cobro cambió.
-   - ⏳ **2b — `pos_api.php`** (cobrar, anular, espera, movimiento,
-     recaudación). El corte más delicado de toda la migración: cada acción se
-     prueba una por una antes de seguir. Es el siguiente paso.
+   - ✅ **2b — `pos_api.php`** (2026-11-07). `App\Controllers\PosApiController`
+     + Modelos `Convenio` y el resto de `Venta`/`Promocion`. Las 13 acciones
+     probadas una por una contra el original (varias cruzadas: una crea con
+     el código viejo, la otra la reconoce como duplicada — prueba que
+     comparten la misma base). La vista de `/public/pos/` ya le habla a este
+     motor nuevo, con CSRF agregado (H3 cerrado para esta pantalla). Probado
+     también con clics reales en el navegador: cobro completo de punta a
+     punta. `web/pos.php` + `web/pos_api.php` siguen intactos y son los que
+     de verdad atienden producción.
 3. `inventario.php`, `compras.php`, `promociones.php` (módulos opcionales, menor
    riesgo porque hoy inventario está apagado).
 4. `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de

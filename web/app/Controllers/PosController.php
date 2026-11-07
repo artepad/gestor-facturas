@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Core\Database;
 use App\Core\Request;
+use App\Core\Session;
 use App\Core\View;
 use App\Models\CajaSesion;
 use App\Models\Promocion;
@@ -43,10 +44,12 @@ final class PosController extends BaseController
         $resumen  = CajaSesion::resumen((int)$sesion['id']);
         $avisoLarga = CajaSesion::avisoSiLlevaMuchoAbierta($sesion);
         $promos   = Promocion::vigentes((int)$sesion['negocio_id']);
+        $baseNuevo = Request::base();
+        $csrfToken = Session::tokenCsrf();
 
         View::render('pos/index', compact(
             'usuario', 'sesion', 'pinHash', 'espera', 'ultima', 'ventas', 'resumen',
-            'avisoLarga', 'baseAntiguo', 'promos'
+            'avisoLarga', 'baseAntiguo', 'promos', 'baseNuevo', 'csrfToken'
         ));
     }
 }
