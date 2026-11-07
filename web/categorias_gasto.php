@@ -37,9 +37,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif ($accion === 'toggle') {
         $pdo->prepare("UPDATE categorias_gasto SET activo = 1 - activo WHERE id = ?")->execute([$cid]);
     } elseif ($accion === 'eliminar') {
-        // Solo si no tiene gastos ni plantillas asociadas
-        $usos  = (int)$pdo->query("SELECT COUNT(*) FROM gastos WHERE categoria_id = " . $cid)->fetchColumn();
-        $usos += (int)$pdo->query("SELECT COUNT(*) FROM gastos_fijos WHERE categoria_id = " . $cid)->fetchColumn();
+        // Solo si no tiene gastos ni plantillas asociadas (H6 de la auditoria:
+        // antes concatenaban $cid directo; prepared statement, misma logica)
+        $stUsos1 = $pdo->prepare("SELECT COUNT(*) FROM gastos WHERE categoria_id = ?");
+        $stUsos1->execute([$cid]);
+        $stUsos2 = $pdo->prepare("SELECT COUNT(*) FROM gastos_fijos WHERE categoria_id = ?");
+        $stUsos2->execute([$cid]);
+        $usos = (int)$stUsos1->fetchColumn() + (int)$stUsos2->fetchColumn();
         if ($usos > 0) {
             $error = 'Esa categoría tiene gastos asociados; desactívala en lugar de borrarla.';
         } else {

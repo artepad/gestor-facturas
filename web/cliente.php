@@ -122,8 +122,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 // --- Datos para mostrar ---
-$totalFiado = (float)$pdo->query("SELECT COALESCE(SUM(monto),0) FROM fiados WHERE cliente_id=" . (int)$id)->fetchColumn();
-$totalAbono = (float)$pdo->query("SELECT COALESCE(SUM(monto),0) FROM abonos WHERE cliente_id=" . (int)$id)->fetchColumn();
+// H6 de la auditoria: antes concatenaban (int)$id directo en el SQL. No era
+// explotable (ya venia casteado a entero mas arriba), pero rompia la
+// convencion del proyecto de usar siempre prepared statements.
+$stTotalFiado = $pdo->prepare("SELECT COALESCE(SUM(monto),0) FROM fiados WHERE cliente_id = ?");
+$stTotalFiado->execute([$id]);
+$totalFiado = (float)$stTotalFiado->fetchColumn();
+
+$stTotalAbono = $pdo->prepare("SELECT COALESCE(SUM(monto),0) FROM abonos WHERE cliente_id = ?");
+$stTotalAbono->execute([$id]);
+$totalAbono = (float)$stTotalAbono->fetchColumn();
 $saldo = $totalFiado - $totalAbono;
 
 $stf = $pdo->prepare("SELECT * FROM fiados WHERE cliente_id=? ORDER BY fecha DESC, id DESC");
