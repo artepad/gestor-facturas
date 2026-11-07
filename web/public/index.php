@@ -24,11 +24,14 @@ declare(strict_types=1);
 define('RUTA_PUBLICA', __DIR__);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
+use App\Controllers\CajaController;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\Router;
 
 $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
+Request::fijarBase($base);   // para que las vistas armen sus propios links/forms
+
 $ruta = Request::ruta();
 if ($base !== '' && str_starts_with($ruta, $base)) {
     $ruta = substr($ruta, strlen($base));
@@ -46,6 +49,12 @@ $router->get('/', function (): void {
     echo "Base de datos OK (negocios registrados: $negocios)\n";
     echo "Sesion OK (token CSRF: " . substr(\App\Core\Session::tokenCsrf(), 0, 8) . "...)\n";
 });
+
+// --- Corte 1 de la Fase 6: Caja (ver web/docs/01-plan-migracion.md) ---
+$router->get('/caja/', [CajaController::class, 'index']);
+$router->post('/caja/abrir', [CajaController::class, 'abrir']);
+$router->post('/caja/movimiento', [CajaController::class, 'movimiento']);
+$router->post('/caja/cerrar', [CajaController::class, 'cerrar']);
 
 if (!$router->despachar(Request::metodo(), $ruta)) {
     http_response_code(404);

@@ -10,6 +10,24 @@ namespace App\Core;
  */
 final class Request
 {
+    private static string $base = '';
+
+    /**
+     * Fija la base donde vive public/index.php (la calcula index.php una
+     * sola vez, al arrancar). Local: "/minimark/public". Produccion, cuando
+     * el dominio apunte directo a public/ (Fase 9): "". Las vistas la usan
+     * para armar los href/action de los links y formularios.
+     */
+    public static function fijarBase(string $base): void
+    {
+        self::$base = $base;
+    }
+
+    public static function base(): string
+    {
+        return self::$base;
+    }
+
     public static function metodo(): string
     {
         return strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
