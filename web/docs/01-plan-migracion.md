@@ -70,9 +70,23 @@ Orden (de menor a mayor riesgo):
      también con clics reales en el navegador: cobro completo de punta a
      punta. `web/pos.php` + `web/pos_api.php` siguen intactos y son los que
      de verdad atienden producción.
-3. `inventario.php`, `compras.php`, `promociones.php` (módulos opcionales, menor
-   riesgo porque hoy inventario está apagado).
-4. `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de
+3. ✅ **`inventario.php` + `compras.php` + `promociones.php`** (2026-11-07).
+   `App\Models\Inventario`, `Compra` y el CRUD de `Promocion` (envoltorios
+   sobre `lib/pos.php`, mismo criterio que el resto); controladores y vistas
+   en `/public/inventario/`, `/public/compras/`, `/public/promociones/`.
+   CSRF agregado en los 6 formularios de las 3 pantallas (H3 cerrado para
+   ellas). Probado de punta a punta con el mismo producto real: encender
+   inventario → ajuste → mínimo → conteo → compra (verificado que el stock
+   queda exactamente igual que haciendo las mismas operaciones a mano) →
+   proveedor → promoción (crear/editar/eliminar, con el texto de la oferta
+   igual al original). Probado también que un vendedor sin ser admin no
+   puede encender/apagar el inventario ni forjando el POST directamente
+   (el permiso se valida en el servidor, no solo se oculta el botón). Todos
+   los datos de prueba se crearon y se borraron, confirmado con conteos
+   antes/después; `web/inventario.php`, `web/compras.php` y
+   `web/promociones.php` siguen intactos y son los que de verdad atienden
+   admin.minimark.cl.
+4. ⏳ `servicios.php` — se aprovecha este corte para integrar Mercado Pago en vez de
    Klap, ya que de todas formas se reescribe esa pantalla.
 
 ## Fase 7 en adelante

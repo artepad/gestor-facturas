@@ -25,8 +25,11 @@ define('RUTA_PUBLICA', __DIR__);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
 use App\Controllers\CajaController;
+use App\Controllers\ComprasController;
+use App\Controllers\InventarioController;
 use App\Controllers\PosApiController;
 use App\Controllers\PosController;
+use App\Controllers\PromocionesController;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\Router;
@@ -65,6 +68,15 @@ $router->get('/pos/', [PosController::class, 'index']);
 // llamando a pos_api.php tal cual) hasta que se verifiquen las 13 acciones. ---
 $router->get('/pos/api', [PosApiController::class, 'index']);
 $router->post('/pos/api', [PosApiController::class, 'index']);
+
+// --- Corte de la Fase 6: inventario/compras/promociones (menor riesgo,
+// inventario nace apagado) ---
+$router->get('/inventario/', [InventarioController::class, 'index']);
+$router->post('/inventario/', [InventarioController::class, 'index']);
+$router->get('/compras/', [ComprasController::class, 'index']);
+$router->post('/compras/', [ComprasController::class, 'index']);
+$router->get('/promociones/', [PromocionesController::class, 'index']);
+$router->post('/promociones/', [PromocionesController::class, 'index']);
 
 if (!$router->despachar(Request::metodo(), $ruta)) {
     http_response_code(404);
