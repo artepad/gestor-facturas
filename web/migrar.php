@@ -725,4 +725,18 @@ try {
     echo "  + indice idx_aud_ref agregado\n";
 } catch (Throwable $e) { echo "  - indice idx_aud_ref ya existe\n"; }
 
+echo "\n[Fase 5 migracion: bloqueo de intentos de login]\n";
+// Hallazgo H1 de la auditoria (web/docs/00-auditoria.md): sin esto, nada
+// impedia probar contraseñas sin limite. Ver lib/auth.php.
+$pdo->exec("CREATE TABLE IF NOT EXISTS intentos_login (
+    id        INT AUTO_INCREMENT PRIMARY KEY,
+    email     VARCHAR(150) NOT NULL,
+    ip_hash   CHAR(64) NOT NULL,
+    exitoso   TINYINT(1) NOT NULL DEFAULT 0,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_intentos_email (email, creado_en),
+    INDEX idx_intentos_ip (ip_hash, creado_en)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla intentos_login lista\n";
+
 echo "\nListo. Migraciones aplicadas.\n";

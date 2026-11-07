@@ -33,11 +33,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         setcookie($COOKIE_RECORDAR, '', time() - 3600, '/', '', $https, true);
     }
 
-    if (login($email, $clave)) {
+    if ($motivo = motivo_bloqueo_login($email)) {
+        $error = $motivo;
+    } elseif (login($email, $clave)) {
         header('Location: home.php');
         exit;
+    } else {
+        $error = 'Correo o contraseña incorrectos.';
     }
-    $error = 'Correo o contraseña incorrectos.';
     $emailPrefill = $email;
 }
 

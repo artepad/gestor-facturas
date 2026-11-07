@@ -28,6 +28,61 @@ function iniciar_sesion(): void
     }
 }
 
+// --- Bloqueo de intentos de login (Fase 5, hallazgo H1 de la auditoria) ---
+// Sin esto, nada impedia probar contraseñas sin limite. Se cuentan los
+// fallidos recientes por correo O por IP, asi que cambiar de correo o de
+// conexion no sirve para saltarse el bloqueo.
+const LOGIN_MAX_INTENTOS    = 5;
+const LOGIN_VENTANA_MINUTOS = 15;
+
+/** Hash de la IP (nunca se guarda en claro) con la clave de instalacion como sal. */
+function ip_hash(): string
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $sal = cargar_config()['setup_key'] ?? 'minimark';   // ya es un secreto del proyecto, se reusa
+    return hash('sha256', $ip . '|' . $sal);
+}
+
+/** Registra cada intento (exitoso o no). Nunca debe tumbar el login si falla. */
+function registrar_intento_login(string $email, bool $exitoso): void
+{
+    try {
+        obtener_pdo()->prepare(
+            "INSERT INTO intentos_login (email, ip_hash, exitoso) VALUES (?, ?, ?)"
+        )->execute([mb_substr(trim($email), 0, 150), ip_hash(), $exitoso ? 1 : 0]);
+    } catch (Throwable $e) {
+        error_log('No se pudo registrar intento de login: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Si hay demasiados intentos fallidos recientes (por correo o por IP),
+ * devuelve el mensaje para mostrar. Si no, null (puede intentar login()).
+ * Se llama ANTES de login(), para no gastar un password_verify() de mas.
+ *
+ * Si la tabla intentos_login todavia no existe (se subio este codigo antes
+ * de correr migrar.php en el servidor), NUNCA debe tumbar el login: se
+ * trata como "no bloqueado" — se pierde el freno de fuerza bruta por un
+ * rato, pero el negocio sigue pudiendo entrar a vender.
+ */
+function motivo_bloqueo_login(string $email): ?string
+{
+    try {
+        $st = obtener_pdo()->prepare(
+            "SELECT COUNT(*) FROM intentos_login
+             WHERE exitoso = 0 AND creado_en > (NOW() - INTERVAL ? MINUTE)
+               AND (email = ? OR ip_hash = ?)"
+        );
+        $st->execute([LOGIN_VENTANA_MINUTOS, mb_substr(trim($email), 0, 150), ip_hash()]);
+        if ((int)$st->fetchColumn() >= LOGIN_MAX_INTENTOS) {
+            return 'Demasiados intentos. Espera ' . LOGIN_VENTANA_MINUTOS . ' minutos e inténtalo de nuevo.';
+        }
+    } catch (Throwable $e) {
+        error_log('motivo_bloqueo_login: ' . $e->getMessage());
+    }
+    return null;
+}
+
 /** Intenta autenticar. Devuelve true si el login fue correcto. */
 function login(string $email, string $clave): bool
 {
@@ -36,7 +91,9 @@ function login(string $email, string $clave): bool
     $st = $pdo->prepare("SELECT id, password_hash, nombre, rol FROM usuarios WHERE email = ?");
     $st->execute([trim($email)]);
     $u = $st->fetch();
-    if (!$u || !password_verify($clave, $u['password_hash'])) {
+    $ok = $u && password_verify($clave, $u['password_hash']);
+    registrar_intento_login($email, $ok);
+    if (!$ok) {
         return false;
     }
     session_regenerate_id(true);

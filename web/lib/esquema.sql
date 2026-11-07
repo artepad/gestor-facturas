@@ -26,6 +26,20 @@ CREATE TABLE IF NOT EXISTS usuarios (
   creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Intentos de login (Fase 5 de la migracion, hallazgo H1 de la auditoria):
+-- sin esto, nada impedia probar contraseñas sin limite. Se cuentan los
+-- fallidos recientes por correo O por IP (ver lib/auth.php,
+-- motivo_bloqueo_login()); la IP nunca se guarda en claro, solo su hash.
+CREATE TABLE IF NOT EXISTS intentos_login (
+  id        INT AUTO_INCREMENT PRIMARY KEY,
+  email     VARCHAR(150) NOT NULL,
+  ip_hash   CHAR(64) NOT NULL,
+  exitoso   TINYINT(1) NOT NULL DEFAULT 0,
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_intentos_email (email, creado_en),
+  INDEX idx_intentos_ip (ip_hash, creado_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS usuario_negocio (
   usuario_id INT NOT NULL,
   negocio_id INT NOT NULL,
