@@ -100,7 +100,7 @@ listados. Payload mínimo:
 |--------|-------------|--------------------|
 | `200`  | OK (`{"ok":true,"accion":"insert"\|"update"\|"eliminar"}`) | borrar item de la cola |
 | `401`  | Token inválido / falta Bearer | NO reintentar a ciegas: revisar config |
-| `400`  | JSON inválido o falta `uuid_local` | error de payload (bug del cliente) |
+| `400`  | JSON inválido, falta `uuid_local`, o no tiene forma de UUID | error de payload (bug del cliente) |
 | `405`  | No es POST | bug del cliente |
 | `406`  | WAF bloqueó (User-Agent) | revisar headers |
 | `500`  | Error del servidor | reintentar con backoff |

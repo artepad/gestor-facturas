@@ -49,6 +49,15 @@ $uuid = trim($datos['uuid_local'] ?? '');
 if ($uuid === '') {
     responder_json(['error' => 'Falta uuid_local.'], 400);
 }
+// H2 de la auditoria: uuid se usa mas abajo como nombre del PDF
+// ($uuid . '.pdf'). Sin validar el formato, una maquina con un token valido
+// podria mandar algo como "../../otra-carpeta/x" e intentar escribir fuera
+// de carpeta_pdf. El cliente Python siempre manda un UUID real
+// (str(uuid.uuid4()), ver src/db.py); si no tiene esa forma, se rechaza
+// antes de tocar el disco.
+if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uuid)) {
+    responder_json(['error' => 'uuid_local con formato invalido.'], 400);
+}
 
 // --- Eliminación (soft-delete): marca eliminada_en, no borra fisicamente ---
 if (!empty($datos['eliminar'])) {
