@@ -6,11 +6,16 @@ repositorio que la app de escritorio de Python. **Lee también `web/CONTRATO.md`
 ahí está el "puente" que conecta la web con el cliente Python; ninguno de los dos
 lados puede romperlo sin coordinar con el otro.
 
-> **Migración de arquitectura en curso (rama `migracion-arquitectura`).** El
-> estándar de destino (capas, seguridad, estructura de carpetas, plan por fases)
-> está en `web/docs/prompt-migracion-arquitectura.md`. Mientras dure la migración,
-> este archivo describe el estado **actual** (PHP plano); no asumir que ya se
-> aplicó el estándar nuevo salvo que la bitácora de la migración lo confirme.
+> **Arquitectura mixta, a propósito.** Las 7 pantallas del POS (`pos.php`,
+> `pos_api.php`, `caja.php`, `inventario.php`, `compras.php`, `promociones.php`,
+> `servicios.php`) se migraron a capas (Router → Controlador → Modelo → Vista, en
+> `app/`) y así están en producción desde el 2026-11-08. **El resto del panel**
+> (facturas, fiados, ingresos, gastos, precios, herramientas, negocios, usuarios)
+> sigue siendo PHP plano tradicional — no es una migración a medias sin terminar,
+> fue lo que se acordó migrar ("vamos a migrar nuestro sistema POS"). Ver
+> «Arquitectura del POS (capas)» más abajo para cómo trabajar ahí, y
+> `web/docs/01-plan-migracion.md` para la bitácora completa fase por fase. El
+> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -61,25 +66,46 @@ web/
 │   ├── eleventa.php     parser del correo de corte de Eleventa + registrar_corte()
 │   ├── productos.php    carga del catálogo Excel de Eleventa + estado + búsqueda de productos
 │   ├── gastos.php       helpers del módulo Gastos (categorías, totales, generar fijos del mes)
-│   ├── pos.php          TODA la lógica del POS: caja, ventas, promociones,
-│   │                    recaudación de convenios, inventario y compras
+│   ├── pos.php          TODA la lógica de negocio del POS: caja, ventas, promociones,
+│   │                    recaudación de convenios, inventario y compras — sigue siendo la
+│   │                    única fuente de verdad del SQL del POS; los Modelos de app/ son
+│   │                    envoltorios sobre estas funciones, no una reescritura (ver abajo)
 │   ├── auditoria.php    registrar_auditoria() + cambios_json() (antes/después)
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
 │   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver CONTRATO.md
 │
-├── pos.php              PUNTO DE VENTA: la pantalla de caja (ver POS_DISENO.md)
-├── pos_api.php          endpoints JSON del POS (buscar, cobrar, anular, espera…)
-├── caja.php             abrir/cerrar turno, entradas y salidas, arqueo
+├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
+│   ├── bootstrap.php      arranque: autoload, errores, sesión
+│   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
+│   ├── Controllers/       un Controlador por pantalla del POS
+│   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
+│   │                      Inventario, Compra)
+│   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
+│                          promociones/, servicios/)
+├── public/
+│   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
+│                          producción — las pantallas del POS son archivos puente (ver abajo)
+│
+├── pos.php              PUNTO DE VENTA (ver POS_DISENO.md) — archivo puente a
+│                        App\Controllers\PosController
+├── pos_api.php          motor de cobro JSON (buscar, cobrar, anular, espera…) — puente a
+│                        App\Controllers\PosApiController
+├── caja.php             abrir/cerrar turno, entradas y salidas, arqueo — puente a
+│                        App\Controllers\CajaController
 ├── sw.js                service worker: la caja abre y vende sin internet
 ├── manifest.webmanifest hace la caja instalable como aplicación
-├── inventario.php       existencias, ajustes, mermas, alertas y kardex (opcional)
-├── compras.php          mercadería recibida (suma stock) y proveedores
-├── promociones.php      ofertas que el POS aplica solo ("4 x $1.000")
+├── inventario.php       existencias, ajustes, mermas, alertas y kardex (opcional) — puente a
+│                        App\Controllers\InventarioController
+├── compras.php          mercadería recibida (suma stock) y proveedores — puente a
+│                        App\Controllers\ComprasController
+├── promociones.php      ofertas que el POS aplica solo ("4 x $1.000") — puente a
+│                        App\Controllers\PromocionesController
 ├── producto_form.php    crear/editar un producto del catálogo compartido
 ├── historial_productos.php  quién creó o editó cada producto (solo admin)
-├── servicios.php        saldo, recargas y comisiones de Klap y otros convenios
+├── servicios.php        saldo, recargas y comisiones de convenios (Mercado Pago y otros) —
+│                        puente a App\Controllers\ServiciosController
 │
 ├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos)
 ├── negocio_panel.php    panel de análisis de un negocio (clic en "Estado por negocio")
@@ -124,14 +150,77 @@ web/
 ├── usuarios.php         CRUD de usuarios + asignación de negocios (solo admin)
 │
 ├── almacen_pdf/         PDFs sincronizados, organizados en subcarpetas por negocio_id. Bloqueado por .htaccess
+├── respaldos_pdf/       zips de respaldo de almacen_pdf/ (scripts/respaldo_pdfs.php). Bloqueado por .htaccess
 │
-└── utilitarios de un solo uso (BORRAR del servidor después de usar):
+├── docs/                 bitácora y estándar de la migración de arquitectura del POS
+│   ├── 00-auditoria.md             auditoría de seguridad previa a migrar
+│   ├── 01-plan-migracion.md        plan y bitácora fase por fase (la fuente de verdad del historial)
+│   ├── 02-linea-base.md            comportamiento "antes" para comparar durante la migración
+│   └── prompt-migracion-arquitectura.md   el estándar general que se siguió
+│
+├── scripts/              utilidades de consola (guardadas con PHP_SAPI !== 'cli')
+│   ├── smoke.php                   prueba de humo: recorre las rutas clave y compara
+│   └── respaldo_pdfs.php           respalda almacen_pdf/ a respaldos_pdf/ (cron diario)
+│
+└── utilitarios de un solo uso (BORRAR del servidor después de usar, salvo migrar.php):
     ├── setup.php             crea tablas + primer negocio + token (correr 1 vez)
     ├── crear_admin.php       crea usuarios por URL
     ├── crear_admin_form.php  crea usuarios por formulario (evita problemas de caracteres en URL)
-    ├── migrar.php            aplica cambios de esquema a una BD existente
+    ├── migrar.php            aplica cambios de esquema a una BD existente — a diferencia de los
+    │                         demás, SÍ conviene dejarlo: es idempotente (solo aplica lo que
+    │                         falta) y se vuelve a necesitar cada vez que el esquema cambia
     └── reset_facturas.php    borra facturas para pruebas
 ```
+
+## Arquitectura del POS (capas)
+
+Las 7 pantallas del POS son las únicas de todo `web/` que siguen el patrón
+Router → Controlador → Modelo → Vista (estándar completo en
+`web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
+patrón — ver el contexto en el banner del principio de este archivo.
+
+**Una visita a `pos.php` (o cualquiera de las otras 6):**
+`pos.php` (archivo puente en la raíz, mismo nombre de siempre) → `app/bootstrap.php`
+(autoload + sesión) → `new PosController()` → `index()` lee la sesión/permiso,
+llama a los Modelos, elige la Vista → `View::render('pos/index', [...])` → HTML
+con `h()`/`e()` en cada salida.
+
+- **Los archivos puente son deliberadamente chicos** (10-20 líneas): no tienen
+  lógica, solo instancian el Controlador. `caja.php` es la excepción — tiene un
+  `match()` de una línea por `accion` del `$_POST`, porque `CajaController` separa
+  `abrir()`/`movimiento()`/`cerrar()` en vez de una sola función. Si algo se ve
+  raro en una pantalla, el archivo puente casi nunca es el problema: mirar el
+  Controlador.
+- **Los Modelos son envoltorios sobre `lib/pos.php`, no una reescritura**
+  (decisión tomada en el corte de Caja, Fase 6): `App\Models\Venta::registrar()`
+  por dentro llama a `\registrar_venta()` de `lib/pos.php`. Esto fue intencional
+  para no mover 1.500 líneas de golpe; significa que **el SQL real del POS sigue
+  viviendo en `lib/pos.php`** — para entender o cambiar una regla de negocio del
+  POS (cómo se calcula el vuelto, cómo se aplica una promoción, cómo se liquida
+  un convenio), hay que mirar ahí, no en `app/Models/`.
+- **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
+  POST vía `BaseController::verificarCsrf()`) existe **solo en estas 7
+  pantallas** — es el hallazgo H3 de la auditoría, cerrado pantalla por pantalla
+  durante la migración. El resto del panel todavía no lo tiene.
+- **`app/views/pos/index.php` y `app/views/pos_api` no existen como tal** —
+  `pos_api.php` no tiene Vista (responde JSON). Las otras 5 vistas usan
+  `cabecera_dashboard()`/`pie_dashboard()` de `lib/ui.php`, igual que cualquier
+  página del panel viejo; `pos.php` NO (pantalla "de trabajo" en modo kiosco, sin
+  sidebar — ver más abajo).
+- **`public/index.php` ya no es una vista previa de nada**: durante la migración
+  (Fases 4-8) sirvió para probar cada pantalla nueva en paralelo bajo
+  `/public/...` sin tocar lo que atendía producción. Una vez verificado, cada
+  pantalla pasó a su archivo puente (Fase 9) y esas rutas se retiraron. Hoy
+  `public/index.php` solo confirma que el autoload/BD/sesión arrancan bien —
+  útil como diagnóstico rápido, o como base si algún día se migra otra pantalla
+  del panel.
+
+**Para agregar una acción nueva a una pantalla del POS ya migrada**: agregar el
+método al Modelo (envolviendo una función de `lib/pos.php`, o agregándola ahí
+primero si no existe), el método o rama `accion` al Controlador, y el formulario
+con `campo_csrf()` a la Vista. **Para migrar una pantalla nueva del panel**
+(ninguna está planeada hoy): seguir el mismo patrón de estos 7 cortes, descrito
+en detalle en `web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 
@@ -327,8 +416,11 @@ que el balance sea real** (ver POS_DISENO.md 7.7): la plata que el cliente paga 
 su cuenta de luz **NO es venta** (es de la empresa de servicios) y recargar saldo
 **NO es un gasto** (es plata propia cambiando de bolsillo). El único ingreso real
 es la **comisión**. El efectivo sí entra al cajón, así que el arqueo lo suma: sin
-eso mostraría un sobrante todos los días. Soporta convenios **prepago** (Klap, con
-saldo que se descuenta) y **postpago** (deuda que se liquida).
+eso mostraría un sobrante todos los días. Soporta convenios **prepago** (Mercado
+Pago, con saldo que se descuenta — el negocio dejó Klap, ver `servicios.php`) y
+**postpago** (deuda que se liquida). El nombre del convenio es libre (lo crea el
+usuario en Servicios): no hay ninguna integración técnica real con ningún
+proveedor, el sistema es genérico desde su diseño.
 
 **Catálogo compartido** — `productos` **no tiene `negocio_id`**: es un solo catálogo
 para los dos negocios (igual que `precios_fv`). Agregar un producto o cambiar un

@@ -273,10 +273,17 @@ pérdida de stock porque el inventario nunca estuvo encendido en producción).
 Verificado por el dueño después de subir: catálogo, Caja y Venta funcionando
 con datos reales.
 
-## Fase 10 en adelante
+## Fase 10 · Cierre
 
-Cierre (revisión final, documentación, guía de mantenimiento) — según el
-estándar general, una vez confirmada la subida a producción.
+**Estado: terminada (2026-11-08).** Revisión final contra la lista de
+seguridad del estándar, pendientes explícitos, lecciones aprendidas y guía de
+mantenimiento — todo en `docs/03-cierre.md`. `web/CLAUDE.md` actualizado para
+describir la arquitectura real (mixta: POS en capas, resto del panel plano) en
+vez de seguir diciendo "PHP plano" sin matices.
+
+**Con esto se cierra la migración de arquitectura del POS.** Quedan
+pendientes de bajo riesgo anotados en `03-cierre.md` (ninguno bloquea nada) y
+la decisión, aparte y futura, de si alguna vez se migra el resto del panel.
 
 ---
 
