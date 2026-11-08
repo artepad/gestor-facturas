@@ -201,7 +201,7 @@ y el Excel del catálogo (`herramienta_productos.php`).
 
 ## Fase 9 · Despliegue
 
-**Estado: hecho en local, pendiente la subida real (2026-11-07).**
+**Estado: terminada — subido y verificado en producción (2026-11-08).**
 
 **Hallazgo importante antes de empezar**: el estándar de migración da por
 sentado que, al llegar a esta fase, *todo* el sitio ya está en la
@@ -259,12 +259,19 @@ migra otra pantalla del panel.
   procesa cada acción — y se borró al terminar (conteos antes/después).
 - `pos_api.php` respondiendo JSON correctamente a través del puente.
 
-**Qué falta — la subida real a producción**: esto todavía no se subió a
-`admin.minimark.cl`. El despliegue real necesita que el dueño suba los
-archivos por cPanel (no hay acceso de servidor desde acá). Antes de pedir esa
-subida: aprobación explícita del dueño, lista exacta de archivos a
-reemplazar, y un horario de poco tráfico. Se detalla en el mensaje de cierre
-de este corte.
+**Subida real a producción (2026-11-08)**: como nunca se había subido nada de
+esta migración al servidor (ni siquiera el POS), la subida real no fueron
+solo los archivos de este corte sino **los 115 archivos que `web/` tiene
+hoy** (todo lo acumulado desde la Fase 4: el POS completo + el endurecimiento
+de seguridad de las Fases 5, 7 y 8). Se armó una carpeta limpia (export de
+git, sin `config.php` ni datos locales) y el dueño la subió con FileZilla a
+`/home1/migue492/admin.minimark.cl`, con respaldo de la base de datos hecho
+antes por phpMyAdmin. Después corrió `migrar.php` en el servidor — aplicó,
+entre otras cosas, la unificación del catálogo compartido entre negocios
+(bajó de 6.158 a 3.079 productos al juntar los duplicados por negocio; sin
+pérdida de stock porque el inventario nunca estuvo encendido en producción).
+Verificado por el dueño después de subir: catálogo, Caja y Venta funcionando
+con datos reales.
 
 ## Fase 10 en adelante
 
