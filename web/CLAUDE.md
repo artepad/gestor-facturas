@@ -9,14 +9,16 @@ lados puede romperlo sin coordinar con el otro.
 > **Arquitectura mixta, a propósito.** Las pantallas del POS (`pos.php`,
 > `pos_api.php`, `caja.php`, `inventario.php`, `compras.php`, `promociones.php`,
 > `servicios.php`, `precios_fv.php`) siguen capas (Router → Controlador → Modelo →
-> Vista, en `app/`) y así están en producción desde el 2026-11-08. **El resto del
-> panel** (facturas, fiados, ingresos, gastos, herramientas, negocios, usuarios)
-> sigue siendo PHP plano tradicional — no es una migración a medias sin terminar,
-> fue lo que se acordó migrar ("vamos a migrar nuestro sistema POS"); Frutas y
-> Verduras se sumó después al mudarse adentro de Ventas. Ver «Arquitectura del
-> POS (capas)» más abajo para cómo trabajar ahí, y `web/docs/01-plan-migracion.md`
-> para la bitácora de la migración original. El estándar general que se siguió
-> está en `web/docs/prompt-migracion-arquitectura.md`.
+> Vista, en `app/`) y así están en producción desde el 2026-11-08. **Fiados**
+> (`fiados.php`, `cliente.php`, `cliente_form.php`, `estado_cuenta_imprimir.php`)
+> se sumó después (2026-11-08) como el primer módulo fuera del POS en migrarse —
+> mismo patrón, su propio Controlador y Modelo. **El resto del panel** (facturas,
+> ingresos, gastos, herramientas, negocios, usuarios) sigue siendo PHP plano
+> tradicional — se van migrando módulo por módulo, no todos de una. Ver
+> «Arquitectura del POS (capas)» más abajo para cómo trabajar ahí (el patrón es
+> el mismo para cualquier pantalla ya migrada, sea del POS o no), y
+> `web/docs/01-plan-migracion.md` para la bitácora de la migración original. El
+> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -80,12 +82,12 @@ web/
 ├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
-│   ├── Controllers/       un Controlador por pantalla del POS
+│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
-│   │                      Inventario, Compra) + PrecioFV (SQL propio, no envuelve nada viejo —
-│   │                      ver «Arquitectura del POS» más abajo)
+│   │                      Inventario, Compra) + PrecioFV y Cliente (SQL propio, no envuelven
+│   │                      nada viejo — ver «Arquitectura del POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
-│                          promociones/, servicios/, precios_fv/imprimir.php)
+│                          promociones/, servicios/, precios_fv/imprimir.php, fiados/)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
 │                          producción — las pantallas del POS son archivos puente (ver abajo)
@@ -123,9 +125,10 @@ web/
 ├── factura.php          detalle de una factura (cabecera + productos + botón Ver PDF)
 ├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio
 │
-├── fiados.php           listado de clientes con su saldo (módulo Fiados)
-├── cliente_form.php     crear/editar un cliente de fiados
-├── cliente.php          ficha del cliente: saldo + registrar fiados/abonos + historial
+├── fiados.php           listado de clientes con su saldo — puente a App\Controllers\FiadosController
+├── cliente_form.php     crear/editar un cliente de fiados — puente al mismo Controlador
+├── cliente.php          ficha del cliente: saldo + registrar fiados/abonos + historial — puente al mismo Controlador
+├── estado_cuenta_imprimir.php  estado de cuenta del cliente en PDF — puente al mismo Controlador
 │
 ├── ingresos.php         dashboard del módulo Ingresos (cortes de caja de Eleventa)
 ├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original)
@@ -179,10 +182,12 @@ web/
 
 ## Arquitectura del POS (capas)
 
-Las pantallas del POS son las únicas de todo `web/` que siguen el patrón
-Router → Controlador → Modelo → Vista (estándar completo en
-`web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
-patrón — ver el contexto en el banner del principio de este archivo.
+Las pantallas del POS y, desde el 2026-11-08, las de Fiados son las únicas de
+todo `web/` que siguen el patrón Router → Controlador → Modelo → Vista
+(estándar completo en `web/docs/prompt-migracion-arquitectura.md`). El resto
+del panel NO sigue este patrón todavía — ver el contexto en el banner del
+principio de este archivo. El nombre de la sección quedó de cuando solo era el
+POS; el patrón que describe aplica igual a cualquier pantalla migrada.
 
 **Una visita a `pos.php` (o cualquiera de las otras):**
 `pos.php` (archivo puente en la raíz, mismo nombre de siempre) → `app/bootstrap.php`
@@ -203,13 +208,15 @@ con `h()`/`e()` en cada salida.
   viviendo en `lib/pos.php`** — para entender o cambiar una regla de negocio del
   POS (cómo se calcula el vuelto, cómo se aplica una promoción, cómo se liquida
   un convenio), hay que mirar ahí, no en `app/Models/`. **Excepción:**
-  `App\Models\PrecioFV` (Frutas y Verduras) tiene su SQL propio — no envuelve
-  nada de `lib/pos.php` porque no existía código viejo de POS para esa
-  pantalla (venía de su propio módulo, reescrito desde cero a pedido del
-  dueño).
+  `App\Models\PrecioFV` (Frutas y Verduras) y `App\Models\Cliente` (Fiados)
+  tienen su SQL propio — no envuelven nada de `lib/pos.php` porque no existía
+  código viejo de POS para esas pantallas (Frutas y Verduras venía de su
+  propio módulo, reescrito desde cero a pedido del dueño; Fiados nunca tuvo
+  equivalente en el POS).
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
-  POST) existe **solo en estas pantallas** — es el hallazgo H3 de la
-  auditoría, cerrado pantalla por pantalla durante la migración. El resto del
+  POST) existe **solo en las pantallas migradas** (POS + Fiados) — es el
+  hallazgo H3 de la auditoría, cerrado pantalla por pantalla durante la
+  migración original y extendido a Fiados en su propio corte. El resto del
   panel todavía no lo tiene. La mayoría lo valida vía
   `BaseController::verificarCsrf()`; `pos_api.php` y `precios_fv.php` no
   extienden `BaseController` (responden JSON/multipart, no redirigen) y
@@ -230,12 +237,14 @@ con `h()`/`e()` en cada salida.
   útil como diagnóstico rápido, o como base si algún día se migra otra pantalla
   del panel.
 
-**Para agregar una acción nueva a una pantalla del POS ya migrada**: agregar el
-método al Modelo (envolviendo una función de `lib/pos.php`, o agregándola ahí
-primero si no existe), el método o rama `accion` al Controlador, y el formulario
-con `campo_csrf()` a la Vista. **Para migrar una pantalla nueva del panel**
-(ninguna está planeada hoy): seguir el mismo patrón de estos 7 cortes, descrito
-en detalle en `web/docs/01-plan-migracion.md`.
+**Para agregar una acción nueva a una pantalla ya migrada**: agregar el método
+al Modelo (envolviendo una función de `lib/pos.php` si es del POS, o SQL propio
+si es de un módulo como Fiados o Frutas y Verduras), el método o rama `accion`
+al Controlador, y el formulario con `campo_csrf()` a la Vista. **Para migrar
+una pantalla nueva del panel** (el próximo candidato, a decidir con el dueño:
+Ingresos, Gastos, Negocios, Productos/Herramientas, Facturas, Usuarios o
+Sistema): seguir el mismo patrón de estos cortes, descrito en detalle en
+`web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 
@@ -259,7 +268,12 @@ Definición canónica en `lib/esquema.sql`. Tablas:
 - **`sync_log`** — bitácora de cada operación de sincronización (auditoría).
 
 **Módulo Fiados** (web-nativo, NO participa de la sincronización; la web es la
-fuente de verdad):
+fuente de verdad). Primer módulo fuera del POS migrado a capas (2026-11-08):
+`fiados.php`/`cliente.php`/`cliente_form.php`/`estado_cuenta_imprimir.php` son
+puentes a `App\Controllers\FiadosController` (métodos `listado()`, `ficha()`,
+`formulario()`, `estadoCuenta()`), con `App\Models\Cliente` (SQL propio, mismo
+criterio que `PrecioFV` — ver «Arquitectura del POS» más arriba) y las vistas
+en `app/views/fiados/`:
 - **`clientes`** — clientes a crédito de cada negocio (`negocio_id`, `nombre`,
   `apellido`, `telefono`, `direccion`, `correo`, `activo`). `negocio_id` vive solo
   aquí; fiados/abonos llegan al negocio a través del cliente.

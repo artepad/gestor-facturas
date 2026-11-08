@@ -285,6 +285,32 @@ vez de seguir diciendo "PHP plano" sin matices.
 pendientes de bajo riesgo anotados en `03-cierre.md` (ninguno bloquea nada) y
 la decisión, aparte y futura, de si alguna vez se migra el resto del panel.
 
+## Fase 11 · Fiados (primer módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-08), pendiente de subir a producción.**
+
+La decisión futura de la Fase 10 se tomó: se migra el resto del panel
+módulo por módulo, no todo de una. Fiados fue el primero por ser chico y
+autocontenido (4 pantallas: `fiados.php`, `cliente.php`, `cliente_form.php`,
+`estado_cuenta_imprimir.php` — los archivos `corte*.php` que sonaban
+parecidos en realidad son del módulo Ingresos, no de Fiados).
+
+Mismo patrón que el POS: `App\Controllers\FiadosController` (métodos
+`listado()`, `ficha()`, `formulario()`, `estadoCuenta()`), `App\Models\Cliente`
+con SQL propio (sin equivalente previo en `lib/pos.php` — mismo criterio que
+`PrecioFV`), vistas en `app/views/fiados/`, archivos puente con el mismo
+nombre de siempre. Se agregó CSRF a los formularios (el código viejo no lo
+tenía en este módulo). Probado con `scripts/smoke.php` (32/32) y un script de
+pruebas funcionales dedicado (CRUD de cliente/fiado/abono, edición con
+precarga, estado de cuenta con y sin rango, rechazo de CSRF, permisos de
+vendedor vs. admin, verificación de que no quedan huérfanos en `fiados`/
+`abonos` tras eliminar), más verificación visual en el navegador.
+
+No se tocó `lib/pos.php`: el POS sigue escribiendo directo en `fiados`/
+`abonos`/`clientes` al cobrar una venta a crédito (`registrar_venta`) y
+leyendo el saldo para el selector "Fiado" — eso es responsabilidad del
+Modelo `Venta`/`PosApiController`, no de `FiadosController`.
+
 ---
 
 ## Lo que NO cambia en ningún momento
