@@ -162,13 +162,12 @@ web/
 │   ├── smoke.php                   prueba de humo: recorre las rutas clave y compara
 │   └── respaldo_pdfs.php           respalda almacen_pdf/ a respaldos_pdf/ (cron diario)
 │
-└── utilitarios de un solo uso (BORRAR del servidor después de usar, salvo migrar.php):
-    ├── crear_admin_form.php  crea usuarios por formulario (evita problemas de caracteres en URL)
-    ├── migrar.php            aplica cambios de esquema a una BD existente — a diferencia de los
-    │                         demás, SÍ conviene dejarlo: es idempotente (solo aplica lo que
-    │                         falta) y se vuelve a necesitar cada vez que el esquema cambia
-    └── reset_facturas.php    borra facturas para pruebas
-    (setup.php y crear_admin.php ya se borraron, del repo y del servidor — 2026-11-08)
+└── migrar.php            único utilitario que queda en el servidor — aplica cambios de
+                          esquema a una BD existente. A diferencia de los demás (todos ya
+                          borrados, del repo y del servidor — 2026-11-08: setup.php,
+                          crear_admin.php, crear_admin_form.php, reset_facturas.php), SÍ
+                          conviene dejarlo: es idempotente (solo aplica lo que falta) y se
+                          vuelve a necesitar cada vez que el esquema cambia
 ```
 
 ## Arquitectura del POS (capas)
@@ -488,11 +487,13 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
 - **Formato chileno**: `clp($v)` formatea pesos (`119990` → `$119.990`).
   `fecha_dmy($iso)` pasa `YYYY-MM-DD` → `DD-MM-YYYY` para mostrar. En la BD las
   fechas se guardan como `DATE` (YYYY-MM-DD) y los montos como `DECIMAL(14,2)`.
-- **Archivos de un solo uso**: `crear_admin_form.php`, `migrar.php`,
-  `reset_facturas.php` son utilitarios peligrosos protegidos por `setup_key`
-  (salvo `migrar.php`, pensado para reusarse). El usuario debe **borrarlos del
-  servidor** después de usarlos. No dependas de ellos en runtime. (`setup.php` y
-  `crear_admin.php` ya se borraron, del repo y del servidor.)
+- **Archivos de un solo uso**: ya no queda ninguno en el repo ni en el servidor
+  salvo `migrar.php` (pensado para reusarse, es idempotente). `setup.php`,
+  `crear_admin.php`, `crear_admin_form.php` y `reset_facturas.php` ya se
+  borraron (2026-11-08). **Ojo**: sin `crear_admin_form.php` ya no hay forma de
+  crear/resetear un admin sin tener sesión iniciada — si algún día hace falta
+  (ej. se pierde el acceso a todos los admins), se recupera el archivo del
+  historial de git.
 - **El usuario no es desarrollador**: explicá decisiones en términos prácticos.
   Cuando un cambio requiera tocar la BD del servidor o subir archivos, dale pasos
   concretos de cPanel, no jerga.

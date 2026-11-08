@@ -22,7 +22,7 @@ detalle) ya eran del sitio completo desde la Fase 5 y se heredan sin cambios.
 | 6 | Contraseñas | ✅ | Ya existía sitewide (`password_hash`/`password_verify`) |
 | 7 | Fuerza bruta | ✅ | H1 (Fase 5), sitewide — `intentos_login`, bloqueo 5 fallos/15 min |
 | 8 | "Mantener sesión" | N/A | El proyecto no usa ese patrón: sesión de 30 días + PIN local (decisión de diseño documentada en POS_DISENO.md) |
-| 9 | Recuperación de contraseña | N/A | No hay autoservicio; el admin resetea a mano con `crear_admin_form.php` |
+| 9 | Recuperación de contraseña | N/A | No hay autoservicio. `crear_admin_form.php` (la vía de emergencia sin sesión) se borró el 2026-11-08; ahora los admins se gestionan desde Usuarios (requiere sesión) |
 | 10 | Subidas de archivos | ✅ | Fase 8: el PDF de facturas valida cabecera real + tope de tamaño; el Excel del catálogo ya estaba bien |
 | 11 | Datos manipulados por el cliente | ✅ | El servidor siempre recalcula totales, promociones y precios |
 | 12 | Spam en formularios públicos | N/A | No hay formularios sin sesión |
@@ -32,7 +32,7 @@ detalle) ya eran del sitio completo desde la Fase 5 y se heredan sin cambios.
 | 16 | Cabeceras HTTP | ⏳ **[R] pendiente** | No se agregaron `X-Content-Type-Options`/`X-Frame-Options`/`Referrer-Policy`. Solo se tocó `.htaccess` para el tipo MIME del manifest |
 | 17 | CSP y HSTS | ⏳ **[R] pendiente** | No implementado — el estándar lo marca opcional |
 | 18 | Archivos sensibles expuestos | ✅ | `.htaccess` deniega ocultos; `almacen_pdf/`, `respaldos_pdf/` bloqueados |
-| 19 | Instalador web temporal | ✅ parcial / ⏳ resto | `setup.php` y `crear_admin.php` ya se borraron (2026-11-08). Quedan `crear_admin_form.php` y `reset_facturas.php` en el servidor — borrarlos cuando el dueño lo decida |
+| 19 | Instalador web temporal | ✅ | `setup.php`, `crear_admin.php`, `crear_admin_form.php` y `reset_facturas.php` ya se borraron, del repo y del servidor (2026-11-08). No queda ninguno |
 | 20 | Datos personales | ✅ | IP siempre hasheada (`ip_hash`), nunca en claro |
 | 21 | Archivos privados | ✅ | PDFs fuera de acceso directo, servidos solo por `ver_pdf.php` con control de negocio |
 | 22 | Respaldos | ⏳ **pendiente del dueño** | El script de respaldo de PDFs existe (`scripts/respaldo_pdfs.php`) pero falta agregar el cron en cPanel; el respaldo de la base de datos es manual (phpMyAdmin), no automático |
@@ -107,10 +107,9 @@ del estándar).
 de bajo riesgo, no bloquean nada):
 - Cabeceras de seguridad HTTP (`X-Content-Type-Options`, etc.) — ítem 16 de la
   tabla.
-- Borrar del servidor los utilitarios de un solo uso que quedan
-  (`crear_admin_form.php`, `reset_facturas.php`) — decisión y acción del
-  dueño. (`setup.php` y `crear_admin.php` ya se borraron, del repo y del
-  servidor, 2026-11-08.)
+- ~~Borrar del servidor los utilitarios de un solo uso~~ — hecho (2026-11-08):
+  `setup.php`, `crear_admin.php`, `crear_admin_form.php` y `reset_facturas.php`
+  ya no están, ni en el repo ni en el servidor.
 - Agregar el cron de `scripts/respaldo_pdfs.php` en cPanel — decisión y acción
   del dueño.
 - Limpieza de PDFs huérfanos de facturas eliminadas — pendiente de que el
