@@ -124,7 +124,6 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
           <?php if (puede($usuario, 'gastos')): ?><?= $item('gastos', 'Gastos', 'gastos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'fiados')): ?><?= $item('fiados', 'Fiados', 'fiados.php') ?><?php endif; ?>
-          <?php if (puede($usuario, 'precios')): ?><?= $item('precios', 'Frutas y verduras', 'precios.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'herramientas')): ?><?= $item('herramientas', 'Herramientas', 'herramientas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'negocios') || puede($usuario, 'usuarios')): ?>
             <div class="nav-grupo <?= $adminAbierto ? 'abierto' : '' ?>" id="grupoAdmin">

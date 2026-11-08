@@ -9,18 +9,21 @@
  */
 
 // Matriz rol -> módulos a los que tiene acceso.
-// Módulos: 'ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'herramientas', 'negocios', 'usuarios'.
+// Módulos: 'ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'productos', 'herramientas', 'negocios', 'usuarios'.
 //
-// NOTA POS (Etapa 1): 'ventas' está SOLO en admin a propósito. El módulo se
-// construye y prueba sin que las vendedoras vean nada. Para habilitarlo cuando
-// esté listo, basta agregar 'ventas' a la fila 'vendedor'; para volver a
-// ocultarlo, quitarlo. Ver web/POS_DISENO.md sección 12.1.
-// 'productos' = crear/editar el catálogo compartido. Lo tienen admin y vendedoras
-// por decisión del usuario: es más ágil y todo cambio queda auditado. Para
-// quitárselo a las vendedoras basta con borrar 'productos' de su fila.
+// 'ventas' ya se habilitó para vendedoras (2026-11-08): el POS quedó probado
+// y en producción. Fue también el momento de mudar Frutas y Verduras adentro
+// de la pantalla de Venta (el módulo 'precios' de antes se retiró — esa
+// pantalla vivía sola en el menú, ahora es un botón dentro de Ventas, y por
+// eso ya no necesita su propio permiso: lo gatilla 'ventas'. Ver
+// web/CLAUDE.md).
+// 'productos' = crear/editar el catálogo compartido. Lo tienen admin y
+// vendedoras por decisión del usuario: es más ágil y todo cambio queda
+// auditado. Para quitárselo a las vendedoras basta con borrar 'productos' de
+// su fila.
 const PERMISOS = [
-    'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'precios', 'productos', 'herramientas', 'negocios', 'usuarios'],
-    'vendedor' => ['facturas', 'fiados', 'precios', 'productos', 'herramientas'],
+    'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'productos', 'herramientas', 'negocios', 'usuarios'],
+    'vendedor' => ['ventas', 'facturas', 'fiados', 'productos', 'herramientas'],
 ];
 
 // Etiquetas legibles de los roles (orden = orden en los formularios).

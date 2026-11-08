@@ -6,16 +6,17 @@ repositorio que la app de escritorio de Python. **Lee también `web/CONTRATO.md`
 ahí está el "puente" que conecta la web con el cliente Python; ninguno de los dos
 lados puede romperlo sin coordinar con el otro.
 
-> **Arquitectura mixta, a propósito.** Las 7 pantallas del POS (`pos.php`,
+> **Arquitectura mixta, a propósito.** Las pantallas del POS (`pos.php`,
 > `pos_api.php`, `caja.php`, `inventario.php`, `compras.php`, `promociones.php`,
-> `servicios.php`) se migraron a capas (Router → Controlador → Modelo → Vista, en
-> `app/`) y así están en producción desde el 2026-11-08. **El resto del panel**
-> (facturas, fiados, ingresos, gastos, precios, herramientas, negocios, usuarios)
+> `servicios.php`, `precios_fv.php`) siguen capas (Router → Controlador → Modelo →
+> Vista, en `app/`) y así están en producción desde el 2026-11-08. **El resto del
+> panel** (facturas, fiados, ingresos, gastos, herramientas, negocios, usuarios)
 > sigue siendo PHP plano tradicional — no es una migración a medias sin terminar,
-> fue lo que se acordó migrar ("vamos a migrar nuestro sistema POS"). Ver
-> «Arquitectura del POS (capas)» más abajo para cómo trabajar ahí, y
-> `web/docs/01-plan-migracion.md` para la bitácora completa fase por fase. El
-> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
+> fue lo que se acordó migrar ("vamos a migrar nuestro sistema POS"); Frutas y
+> Verduras se sumó después al mudarse adentro de Ventas. Ver «Arquitectura del
+> POS (capas)» más abajo para cómo trabajar ahí, y `web/docs/01-plan-migracion.md`
+> para la bitácora de la migración original. El estándar general que se siguió
+> está en `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -81,9 +82,10 @@ web/
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
 │   ├── Controllers/       un Controlador por pantalla del POS
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
-│   │                      Inventario, Compra)
+│   │                      Inventario, Compra) + PrecioFV (SQL propio, no envuelve nada viejo —
+│   │                      ver «Arquitectura del POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
-│                          promociones/, servicios/)
+│                          promociones/, servicios/, precios_fv/imprimir.php)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
 │                          producción — las pantallas del POS son archivos puente (ver abajo)
@@ -106,6 +108,14 @@ web/
 ├── historial_productos.php  quién creó o editó cada producto (solo admin)
 ├── servicios.php        saldo, recargas y comisiones de convenios (Mercado Pago y otros) —
 │                        puente a App\Controllers\ServiciosController
+├── precios_fv.php       Frutas y Verduras (JSON): listar/guardar/eliminar — ya NO es su
+│                        propia pantalla, es un popup dentro de pos.php (botón junto a
+│                        Caja/Salir) — puente a App\Controllers\PreciosFvController
+├── precios_fv_imprimir.php  hoja imprimible con la lista completa — puente al mismo Controlador
+│
+├── uploads/
+│   └── precios_fv/        fotos de Frutas y Verduras (WebP, nombre aleatorio). Servido
+│                          directo pero sin poder ejecutar nada (uploads/.htaccess)
 │
 ├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos)
 ├── negocio_panel.php    panel de análisis de un negocio (clic en "Estado por negocio")
@@ -126,9 +136,6 @@ web/
 ├── gasto_form.php       crear/editar/eliminar un gasto
 ├── categorias_gasto.php CRUD de categorías de gasto (editables)
 ├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes)
-│
-├── precios.php          Frutas y Verduras: lista de precios compartida (consulta + buscador)
-├── precio_form.php      crear/editar/eliminar un producto de la lista de precios
 │
 ├── herramientas.php           tablero del módulo Herramientas (tarjetas)
 ├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso)
@@ -172,12 +179,12 @@ web/
 
 ## Arquitectura del POS (capas)
 
-Las 7 pantallas del POS son las únicas de todo `web/` que siguen el patrón
+Las pantallas del POS son las únicas de todo `web/` que siguen el patrón
 Router → Controlador → Modelo → Vista (estándar completo en
 `web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
 patrón — ver el contexto en el banner del principio de este archivo.
 
-**Una visita a `pos.php` (o cualquiera de las otras 6):**
+**Una visita a `pos.php` (o cualquiera de las otras):**
 `pos.php` (archivo puente en la raíz, mismo nombre de siempre) → `app/bootstrap.php`
 (autoload + sesión) → `new PosController()` → `index()` lee la sesión/permiso,
 llama a los Modelos, elige la Vista → `View::render('pos/index', [...])` → HTML
@@ -195,16 +202,26 @@ con `h()`/`e()` en cada salida.
   para no mover 1.500 líneas de golpe; significa que **el SQL real del POS sigue
   viviendo en `lib/pos.php`** — para entender o cambiar una regla de negocio del
   POS (cómo se calcula el vuelto, cómo se aplica una promoción, cómo se liquida
-  un convenio), hay que mirar ahí, no en `app/Models/`.
+  un convenio), hay que mirar ahí, no en `app/Models/`. **Excepción:**
+  `App\Models\PrecioFV` (Frutas y Verduras) tiene su SQL propio — no envuelve
+  nada de `lib/pos.php` porque no existía código viejo de POS para esa
+  pantalla (venía de su propio módulo, reescrito desde cero a pedido del
+  dueño).
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
-  POST vía `BaseController::verificarCsrf()`) existe **solo en estas 7
-  pantallas** — es el hallazgo H3 de la auditoría, cerrado pantalla por pantalla
-  durante la migración. El resto del panel todavía no lo tiene.
+  POST) existe **solo en estas pantallas** — es el hallazgo H3 de la
+  auditoría, cerrado pantalla por pantalla durante la migración. El resto del
+  panel todavía no lo tiene. La mayoría lo valida vía
+  `BaseController::verificarCsrf()`; `pos_api.php` y `precios_fv.php` no
+  extienden `BaseController` (responden JSON/multipart, no redirigen) y
+  llaman `Session::csrfValido()` directo.
 - **`app/views/pos/index.php` y `app/views/pos_api` no existen como tal** —
-  `pos_api.php` no tiene Vista (responde JSON). Las otras 5 vistas usan
-  `cabecera_dashboard()`/`pie_dashboard()` de `lib/ui.php`, igual que cualquier
-  página del panel viejo; `pos.php` NO (pantalla "de trabajo" en modo kiosco, sin
-  sidebar — ver más abajo).
+  `pos_api.php` no tiene Vista (responde JSON); `precios_fv.php` tampoco
+  (responde JSON), salvo `precios_fv_imprimir.php` que sí (`precios_fv/imprimir.php`).
+  El resto de las vistas usan `cabecera_dashboard()`/`pie_dashboard()` de
+  `lib/ui.php`, igual que cualquier página del panel viejo; `pos.php` NO
+  (pantalla "de trabajo" en modo kiosco, sin sidebar — ver más abajo). El
+  popup de Frutas y Verduras vive adentro de `app/views/pos/index.php`, no en
+  una vista propia: es parte de la pantalla de Venta, no una pantalla aparte.
 - **`public/index.php` ya no es una vista previa de nada**: durante la migración
   (Fases 4-8) sirvió para probar cada pantalla nueva en paralelo bajo
   `/public/...` sin tocar lo que atendía producción. Una vez verificado, cada
@@ -330,17 +347,30 @@ la grilla "Estado por negocio". El dashboard de Gastos compara ventas (de `corte
 vs. gastos del período (balance).
 
 **Módulo Frutas y Verduras** (web-nativo; lista de precios **compartida** entre
-todos los negocios — la compra la hace una sola persona para ambos). **Editan admin
-y vendedores** (`'precios'` en `PERMISOS` para los dos roles); todas las vendedoras
-consultan. Pensado para el celular: `precios.php` muestra tarjetas grandes (nombre,
-precio + unidad, fecha de actualización, observación) con buscador por nombre;
-`precio_form.php` crea/edita/elimina (nombre, precio en texto chileno con
-`parsear_monto`, `unidad` de un set fijo, observación, `activo`).
+todos los negocios — la compra la hace una sola persona para ambos). **Se mudó
+adentro de la pantalla de Venta** (2026-11-08): ya no es su propio ítem de
+menú — es el botón "Frutas y verduras" en `pos.php`, junto a Caja/Salir, que
+abre un popup (`App\Controllers\PreciosFvController` vía `precios_fv.php`,
+JSON). Por eso gatilla con el permiso `'ventas'` (no uno propio: el módulo
+`'precios'` de antes se retiró). Editan y consultan admin y vendedoras, igual
+que antes. A diferencia del resto de los Modelos del POS, `App\Models\PrecioFV`
+**no envuelve `lib/pos.php`**: se reescribió desde cero (decisión del dueño,
+no existía código viejo que mereciera conservarse).
 - **`precios_fv`** — `nombre`, `precio DECIMAL(14,2)`, `unidad` (kilo/unidad/
-  bandeja…), `observacion`, `activo`, `actualizado_por` (FK→usuarios),
-  `actualizado_en TIMESTAMP ... ON UPDATE CURRENT_TIMESTAMP` (fecha vigente
-  automática). **Sin `negocio_id`**: es una sola lista para todos (como
-  `categorias_gasto`). Identidad visual: verde (`modulo-verde`).
+  bandeja…), `imagen` (ruta relativa en `uploads/precios_fv/`, opcional),
+  `observacion`, `activo`, `actualizado_por` (FK→usuarios), `actualizado_en
+  TIMESTAMP ... ON UPDATE CURRENT_TIMESTAMP` (fecha vigente automática,
+  mostrada junto al nombre de quién hizo el último cambio). **Sin
+  `negocio_id`**: es una sola lista para todos (como `categorias_gasto`).
+- **Fotos**: subida opcional al crear/editar. Nunca se confía en lo que diga
+  el navegador — mismo criterio que el PDF de facturas (Fase 8): se valida el
+  tipo real con `getimagesize()`, se vuelve a generar con GD (lo que haya
+  escondido el archivo no sobrevive), se reduce si pesa más de 1000px de
+  ancho, se guarda como WebP con nombre aleatorio. Tope 5 MB. Al reemplazar o
+  quitar una foto, el archivo viejo se borra del disco.
+- **Imprimir**: `precios_fv_imprimir.php` arma una hoja A4 con la lista
+  completa (para pegar en el local), no etiquetas individuales — esas ya
+  existen en Herramientas → Etiquetas, son cosas distintas.
 
 **Base de Datos de Productos** (catálogo por negocio que alimenta el gestor de
 etiquetas):
@@ -443,16 +473,19 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
 
 - **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
   los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `gastos`,
-  `precios`, `productos`, `ventas`, `herramientas`, `negocios`, `usuarios`). Roles
-  actuales: **`admin`** (todos los módulos) y **`vendedor`** (`facturas`, `fiados`,
-  `precios`, `productos`, `herramientas`).
-  **`ventas` está SOLO en admin a propósito**: el POS se construyó y se prueba sin
-  que las vendedoras vean nada. Habilitarlo es agregar `'ventas'` a su fila;
-  ocultarlo de nuevo, quitarlo (ver `MIGRACION_POS.md` paso 5).
+  `productos`, `ventas`, `herramientas`, `negocios`, `usuarios`). Roles
+  actuales: **`admin`** (todos los módulos) y **`vendedor`** (`ventas`, `facturas`,
+  `fiados`, `productos`, `herramientas`).
+  **`ventas` se habilitó para vendedoras el 2026-11-08** (antes era solo admin,
+  mientras el POS se construía y probaba sin que las vendedoras vieran nada —
+  ver `MIGRACION_POS.md` paso 5. Ya se probó en producción, así que se
+  habilitó). Da acceso a `pos.php` y `caja.php`: las vendedoras ya pueden
+  vender y abrir/cerrar su propio turno.
   **`productos`** (crear/editar catálogo y promociones) lo tienen ambos por decisión
   del usuario: es más ágil y todo cambio queda auditado y consultable. `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere
   `ALTER`). Los módulos `ingresos` y `gastos` son solo admin (información financiera
-  del dueño); `precios` (Frutas y Verduras) lo usan admin y vendedores.
+  del dueño). El módulo `precios` (Frutas y Verduras) ya no existe: esa pantalla
+  vive dentro de `ventas` (ver «Arquitectura del POS»).
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
   módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
   en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.

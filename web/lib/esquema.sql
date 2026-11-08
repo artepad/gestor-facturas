@@ -378,6 +378,7 @@ CREATE TABLE IF NOT EXISTS precios_fv (
   nombre          VARCHAR(120) NOT NULL,
   precio          DECIMAL(14,2) NOT NULL,
   unidad          VARCHAR(20) NOT NULL DEFAULT 'kilo',   -- kilo, unidad, bandeja...
+  imagen          VARCHAR(255) NULL,                     -- ruta relativa en uploads/precios_fv/
   observacion     VARCHAR(255) NULL,
   activo          TINYINT(1) NOT NULL DEFAULT 1,
   actualizado_por INT NULL,

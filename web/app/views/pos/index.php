@@ -69,6 +69,7 @@ $rutaWeb = dirname(__DIR__, 3);
         <?php if ($pinHash !== ''): ?>
             <button type="button" class="pos-btn-top" id="btnBloquear">Bloquear</button>
         <?php endif; ?>
+        <button type="button" class="pos-btn-top" id="btnFV"><?= icono('precios') ?> Frutas y verduras</button>
         <a class="pos-btn-top" href="caja.php"><?= icono('caja') ?> Caja</a>
         <a class="pos-btn-top" href="home.php"><?= icono('salir') ?> Salir</a>
     </div>
@@ -344,6 +345,60 @@ $rutaWeb = dirname(__DIR__, 3);
     <div class="espera-lista" id="ventasLista"></div>
     <div class="pos-modal-btns">
         <button type="button" class="btn gris" data-cerrar>Cerrar (Esc)</button>
+    </div>
+</section>
+
+<!-- Frutas y Verduras: listado con foto -->
+<section class="pos-modal pos-modal-ancho" id="modalFV" hidden aria-label="Frutas y verduras">
+    <div class="fv-cab">
+        <h2>Frutas y verduras</h2>
+        <div class="pos-modal-btns" style="margin:0">
+            <button type="button" class="btn sm verde" id="btnFVNuevo">+ Nuevo producto</button>
+            <a class="btn sm gris" href="precios_fv_imprimir.php" target="_blank" rel="noopener">Imprimir lista</a>
+        </div>
+    </div>
+    <input type="text" id="fvBuscar" autocomplete="off" placeholder="Buscar por nombre…" style="margin-top:10px">
+    <div class="fv-grid" id="fvGrid"></div>
+    <div class="pos-modal-btns">
+        <button type="button" class="btn gris" data-cerrar>Cerrar (Esc)</button>
+    </div>
+</section>
+
+<!-- Frutas y Verduras: crear / editar -->
+<section class="pos-modal" id="modalFVForm" hidden aria-label="Producto de frutas y verduras">
+    <h2 id="fvFormTitulo">Nuevo producto</h2>
+    <form id="fvForm">
+        <input type="hidden" id="fvId" value="">
+        <label for="fvNombre">Producto *</label>
+        <input type="text" id="fvNombre" autocomplete="off" placeholder="Ej: Tomate" required>
+        <label for="fvPrecio">Precio *</label>
+        <input type="text" id="fvPrecio" inputmode="numeric" placeholder="Ej: 1.200" required>
+        <label for="fvUnidad">Unidad</label>
+        <select id="fvUnidad">
+            <?php foreach (['kilo', '½ kilo', 'unidad', 'bandeja', 'malla', 'atado', 'docena', 'caja', 'paquete'] as $u): ?>
+                <option value="<?= h($u) ?>"><?= h($u) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <label for="fvObservacion">Observación</label>
+        <input type="text" id="fvObservacion" autocomplete="off" placeholder="Ej: de la feria (opcional)">
+        <label>Foto (opcional)</label>
+        <div class="fv-form-imagen">
+            <img id="fvPreview" class="fv-form-preview" alt="" hidden>
+            <div id="fvPreviewVacia" class="fv-form-preview fv-img-vacia"><?= icono('precios', 'ic') ?></div>
+            <input type="file" id="fvImagen" accept="image/jpeg,image/png,image/webp">
+        </div>
+        <label class="check-inline" style="margin-top:12px">
+            <input type="checkbox" id="fvQuitarImagen"> Quitar la foto actual
+        </label>
+        <label class="check-inline">
+            <input type="checkbox" id="fvActivo" checked> Visible en la lista
+        </label>
+    </form>
+    <div class="pos-modal-err" id="fvFormErr" hidden></div>
+    <div class="pos-modal-btns">
+        <button type="button" class="btn verde" id="btnFVGuardar">Guardar</button>
+        <button type="button" class="btn gris" id="btnFVCancelar">Cancelar (Esc)</button>
+        <button type="button" class="btn rojo" id="btnFVEliminar" style="margin-left:auto" hidden>Eliminar</button>
     </div>
 </section>
 
@@ -1444,6 +1499,132 @@ $('btnVentas').addEventListener('click', function () {
     pintarVentas();               // muestra lo que ya se sabe
     abrirModal('modalVentas');
     cargarVentas();               // y lo refresca del servidor
+});
+
+// ---------- Frutas y Verduras ----------
+// Endpoint propio (precios_fv.php), no pos_api.php: no tiene nada que ver con
+// vender, es su propia pantalla metida en un popup. Mismo _token CSRF.
+function apiFV(url, opciones) {
+    return fetch(url, opciones).then(function (r) {
+        return r.json().then(function (j) {
+            if (!r.ok || j.error) throw new Error(j.error || 'Error de conexión.');
+            return j;
+        });
+    });
+}
+
+var fvProductos = [];
+function pintarFV(lista) {
+    var g = $('fvGrid');
+    g.innerHTML = '';
+    if (!lista.length) { g.innerHTML = '<p class="pos-vacio">Sin productos.</p>'; return; }
+    lista.forEach(function (p) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'fv-card';
+        var img = p.imagen
+            ? '<img class="fv-img" src="' + p.imagen + '" alt="">'
+            : '<div class="fv-img-vacia">🥦</div>';
+        b.innerHTML = img +
+            '<div class="fv-info"><div class="fv-nombre"></div>' +
+            '<div class="fv-precio"></div></div>';
+        b.querySelector('.fv-nombre').textContent = p.nombre;
+        b.querySelector('.fv-precio').textContent = clp(p.precio) + ' ';
+        b.querySelector('.fv-precio').appendChild(Object.assign(document.createElement('span'),
+            { className: 'fv-unidad', textContent: '/ ' + p.unidad }));
+        b.addEventListener('click', function () { abrirFVForm(p); });
+        g.appendChild(b);
+    });
+}
+
+var tFV = null;
+function cargarFV(q) {
+    apiFV('precios_fv.php?accion=listar&q=' + encodeURIComponent(q || ''), { method: 'GET' })
+        .then(function (j) { fvProductos = j.productos; pintarFV(fvProductos); })
+        .catch(function (e) { toast(e.message, true); });
+}
+$('btnFV').addEventListener('click', function () {
+    $('fvBuscar').value = '';
+    abrirModal('modalFV');
+    cargarFV('');
+});
+$('fvBuscar').addEventListener('input', function () {
+    clearTimeout(tFV); tFV = setTimeout(function () { cargarFV($('fvBuscar').value); }, 220);
+});
+
+function abrirFVForm(p) {
+    $('fvFormTitulo').textContent = p ? 'Editar producto' : 'Nuevo producto';
+    $('fvId').value = p ? p.id : '';
+    $('fvNombre').value = p ? p.nombre : '';
+    $('fvPrecio').value = p ? String(Math.round(p.precio)) : '';
+    $('fvUnidad').value = p ? p.unidad : 'kilo';
+    $('fvObservacion').value = p && p.observacion ? p.observacion : '';
+    $('fvActivo').checked = !p || p.activo;
+    $('fvQuitarImagen').checked = false;
+    $('fvImagen').value = '';
+    if (p && p.imagen) {
+        $('fvPreview').src = p.imagen; $('fvPreview').hidden = false;
+        $('fvPreviewVacia').hidden = true;
+    } else {
+        $('fvPreview').hidden = true; $('fvPreviewVacia').hidden = false;
+    }
+    $('fvFormErr').hidden = true;
+    $('btnFVEliminar').hidden = !p;
+    abrirModal('modalFVForm', 'fvNombre');
+}
+$('btnFVNuevo').addEventListener('click', function () { abrirFVForm(null); });
+
+$('fvImagen').addEventListener('change', function () {
+    var f = this.files[0];
+    if (!f) return;
+    $('fvQuitarImagen').checked = false;
+    var lector = new FileReader();
+    lector.onload = function (e) {
+        $('fvPreview').src = e.target.result; $('fvPreview').hidden = false;
+        $('fvPreviewVacia').hidden = true;
+    };
+    lector.readAsDataURL(f);
+});
+
+function errFV(msg) { $('fvFormErr').textContent = msg; $('fvFormErr').hidden = false; }
+
+// El formulario es un paso adentro de la lista: cancelar/guardar/eliminar
+// vuelven a mostrarla, no cierran todo el popup.
+function volverFV() { abrirModal('modalFV'); cargarFV($('fvBuscar').value); }
+$('btnFVCancelar').addEventListener('click', volverFV);
+
+$('btnFVGuardar').addEventListener('click', function () {
+    var nombre = $('fvNombre').value.trim(), precio = num($('fvPrecio').value);
+    if (!nombre) return errFV('Escribe el nombre del producto.');
+    if (precio === null || precio <= 0) return errFV('Escribe un precio válido.');
+
+    var fd = new FormData();
+    fd.append('_token', CSRF_TOKEN);
+    fd.append('accion', 'guardar');
+    fd.append('id', $('fvId').value);
+    fd.append('nombre', nombre);
+    fd.append('precio', $('fvPrecio').value);
+    fd.append('unidad', $('fvUnidad').value);
+    fd.append('observacion', $('fvObservacion').value.trim());
+    fd.append('activo', $('fvActivo').checked ? '1' : '0');
+    fd.append('quitar_imagen', $('fvQuitarImagen').checked ? '1' : '0');
+    if ($('fvImagen').files[0]) fd.append('imagen', $('fvImagen').files[0]);
+
+    $('btnFVGuardar').disabled = true;
+    apiFV('precios_fv.php', { method: 'POST', body: fd })
+        .then(function () { volverFV(); toast('Producto guardado.'); })
+        .catch(function (e) { errFV(e.message); })
+        .then(function () { $('btnFVGuardar').disabled = false; });
+});
+
+$('btnFVEliminar').addEventListener('click', function () {
+    if (!confirm('¿Eliminar este producto de la lista?')) return;
+    var fd = new FormData();
+    fd.append('_token', CSRF_TOKEN);
+    fd.append('accion', 'eliminar');
+    fd.append('id', $('fvId').value);
+    apiFV('precios_fv.php', { method: 'POST', body: fd })
+        .then(function () { volverFV(); toast('Producto eliminado.'); })
+        .catch(function (e) { errFV(e.message); });
 });
 
 // ---------- Anular una venta ----------

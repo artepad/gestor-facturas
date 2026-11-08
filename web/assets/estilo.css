@@ -720,18 +720,6 @@ tr:hover td { background: #eef5ff; }
 .np-kpi.k-gris    { border-left-color: var(--borde); }
 /* Íconos en los títulos de panel */
 .panel-titulo .ic { width: 17px; height: 17px; color: var(--azul); vertical-align: -3px; margin-right: 4px; }
-/* Frutas y Verduras: tarjetas de precio (móvil-primero) */
-.precios-grid { display: grid; gap: 12px; margin-bottom: 20px;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-.precio-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
-  border-left: 4px solid var(--verde-ok); padding: 14px 16px;
-  display: flex; flex-direction: column; gap: 4px; }
-.precio-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.precio-nombre { font-size: 16px; font-weight: 700; line-height: 1.2; }
-.precio-valor { font-size: 24px; font-weight: 800; color: var(--verde-ok); line-height: 1.1; }
-.precio-unidad { font-size: 13px; font-weight: 600; color: var(--texto-sec); }
-.precio-obs { font-size: 13px; color: var(--texto-sec); }
-.precio-fecha { font-size: 11.5px; color: var(--texto-tenue); margin-top: 2px; }
 /* Accesos directos a Herramientas en el Home */
 .home-tools { display: grid; gap: 14px; margin-bottom: 20px;
   grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); }
@@ -1170,6 +1158,24 @@ th.col-num { text-align: right; }
 .rapido { border: 1px solid var(--borde); background: #f1f4f7; border-radius: 7px;
   padding: 8px 12px; cursor: pointer; font-size: 13.5px; }
 .rapido:hover { background: #e6ebf1; }
+
+/* Frutas y Verduras, dentro de la pantalla de Venta: grilla de tarjetas con foto */
+.fv-grid { display: grid; gap: 10px; margin-top: 12px; max-height: 50vh; overflow: auto;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.fv-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  overflow: hidden; display: flex; flex-direction: column; cursor: pointer; text-align: left; padding: 0; }
+.fv-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+.fv-img, .fv-img-vacia { width: 100%; aspect-ratio: 1.3; object-fit: cover; background: #f1f4f7; display: block; }
+.fv-img-vacia { display: flex; align-items: center; justify-content: center; color: var(--texto-tenue); }
+.fv-img-vacia .ic { width: 34px; height: 34px; }
+.fv-info { padding: 8px 10px 10px; }
+.fv-nombre { font-size: 14px; font-weight: 700; line-height: 1.2; }
+.fv-precio { font-size: 17px; font-weight: 800; color: var(--verde-ok); margin-top: 2px; }
+.fv-unidad { font-size: 11.5px; font-weight: 600; color: var(--texto-sec); }
+.fv-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fv-form-imagen { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.fv-form-preview { width: 70px; height: 70px; border-radius: 8px; object-fit: cover;
+  background: #f1f4f7; border: 1px solid var(--borde); flex-shrink: 0; }
 
 /* Resultados de busqueda */
 .buscar-res { margin-top: 12px; max-height: 46vh; overflow: auto; }

@@ -755,4 +755,9 @@ agregar_columna($pdo, 'cortes',        'actualizado_en', "TIMESTAMP NULL DEFAULT
 agregar_columna($pdo, 'compras',       'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 agregar_columna($pdo, 'ventas',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
+echo "\n[Frutas y Verduras: imagen del producto + mudanza a la ventana de Venta]\n";
+// La pantalla se movio adentro de Ventas (ver POS_DISENO.md y CLAUDE.md);
+// esta columna guarda la ruta relativa de la foto subida (uploads/precios_fv/).
+agregar_columna($pdo, 'precios_fv', 'imagen', "VARCHAR(255) NULL AFTER unidad");
+
 echo "\nListo. Migraciones aplicadas.\n";

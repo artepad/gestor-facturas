@@ -21,3 +21,7 @@ web/logs_app.log
 # Servidor web: respaldos de PDF generados por scripts/respaldo_pdfs.php
 web/respaldos_pdf/*
 !web/respaldos_pdf/.htaccess
+
+# Servidor web: fotos subidas por los usuarios (Frutas y Verduras, etc.)
+web/uploads/precios_fv/*
+!web/uploads/precios_fv/.gitkeep
