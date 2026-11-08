@@ -158,10 +158,50 @@ estándar sugiere en general pero que acá no aplica o no conviene todavía):
 - **Collation explícita** (`utf8mb4_unicode_ci`): ya está en utf8mb4 en todas las
   tablas; fijar la collation a mano sería puro cosmético, sin beneficio práctico.
 
-## Fase 8 en adelante
+## Fase 8 · Archivos y subidas
 
-Archivos y subidas, despliegue y cierre — según el estándar general, una vez
-terminado el POS.
+**Estado: terminada (2026-11-07).** Inventario de toda subida de archivo del
+proyecto: solo hay 2 — el PDF que sincroniza la app de Python (`api/facturas.php`)
+y el Excel del catálogo (`herramienta_productos.php`).
+
+1. ✅ **PDF de facturas** (`api/facturas.php`). El servidor no validaba que el
+   archivo fuera realmente un PDF — solo confiaba en lo que mandaba el cliente.
+   Se agregó: validación de la cabecera real del archivo (`%PDF-`, no la
+   extensión ni el nombre) y un tope de 25 MB, **antes** de escribirlo a disco.
+   Si el archivo no pasa, **no se cae toda la sincronización**: la factura se
+   guarda igual, solo sin PDF — mismo criterio que ya existía para cuando la
+   subida fallaba. El cliente Python no necesita ningún cambio (siempre manda
+   PDFs reales); documentado en `CONTRATO.md`.
+   Probado con una máquina y 2 facturas de prueba desechables: un PDF real
+   quedó guardado y enlazado correctamente; uno falso (texto disfrazado de
+   .pdf) NO se guardó en disco pero la factura igual se registró con sus
+   datos — confirmado que nada se cae. Todo el rastro de prueba (facturas,
+   `sync_log`, la máquina y el archivo) se borró al terminar, confirmado con
+   conteos antes/después.
+2. ✅ **Excel del catálogo** (`herramienta_productos.php`): revisado, ya estaba
+   bien hecho desde antes — valida que de verdad se subió el archivo,
+   extensión `.xlsx`, tope de 8 MB, y nunca queda guardado en disco (se lee y
+   se descarta en el mismo request). Nada que cambiar.
+3. ✅ **Carpetas de archivos privados**: `almacen_pdf/` y `respaldos_pdf/` ya
+   tienen `.htaccess` con acceso totalmente denegado por fuera (`ver_pdf.php`
+   es la única puerta, con control de acceso por negocio) — y en la
+   arquitectura nueva (Fase 4) ya viven fuera de `public/`, así que cuando el
+   dominio apunte ahí (Fase 9) quedan inaccesibles por estructura de
+   carpetas, no solo por `.htaccess`.
+4. ✅ **Nombres aleatorios**: los PDF ya se nombran por `uuid_local` (no el
+   nombre original) desde la Fase 5 (hallazgo H2).
+
+**Revisado y descartado a propósito:**
+
+- **Limpieza de huérfanos**: cuando una factura se borra (siempre soft-delete,
+  nunca físico) su PDF queda en disco indefinidamente. Purgarlo después de un
+  tiempo es una decisión de **retención de datos del negocio** (cuánto tiempo
+  guardar comprobantes eliminados), no un arreglo técnico — se deja para
+  cuando el dueño decida una política concreta, no se asume ahora.
+
+## Fase 9 en adelante
+
+Despliegue y cierre — según el estándar general, una vez terminado el POS.
 
 ---
 

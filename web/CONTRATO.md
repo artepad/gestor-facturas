@@ -77,7 +77,13 @@ Comportamiento del servidor (`api/facturas.php`):
   local no re-crea facturas en la web.
 - `negocio_id` se asigna desde el token, no del payload.
 - Si viene `pdf`, se guarda en `almacen_pdf/{negocio_id}/{uuid_local}.pdf` y se
-  registra `ruta_pdf` relativa.
+  registra `ruta_pdf` relativa. **(Fase 8 de la migración de arquitectura)**
+  antes de guardarlo el servidor valida que el contenido empiece con la
+  cabecera real de un PDF (`%PDF-`) y que pese 25 MB o menos — nunca confía
+  en el nombre o la extensión que mande el cliente. Si el archivo no pasa
+  esa validación, **no se cae toda la sincronización**: la factura se guarda
+  igual (con `ruta_pdf: null`), igual que cuando la subida fallaba antes.
+  El cliente Python no necesita ningún cambio — siempre manda PDFs reales.
 - El `detalle` (si viene) **reemplaza completo** el detalle previo de esa factura.
 - Cada operación deja una fila en `sync_log` y actualiza `maquinas.ultima_sync`.
 

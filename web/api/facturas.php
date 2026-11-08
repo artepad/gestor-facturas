@@ -79,8 +79,17 @@ if (!empty($datos['eliminar'])) {
 }
 
 // --- Guardar el PDF si vino ---
+// Fase 8 de la migracion (archivos y subidas): nunca confiar en lo que dice
+// el cliente sobre el archivo (nombre, extension) -- se valida el contenido
+// real (cabecera %PDF-) y un tope de tamano antes de escribirlo a disco. Si
+// no pasa, NO se falla toda la sincronizacion: la factura se guarda igual,
+// solo sin PDF (mismo criterio que ya existia para una subida fallida).
 $rutaPdf = null;
-if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK) {
+if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK
+    && $_FILES['pdf']['size'] > 0 && $_FILES['pdf']['size'] <= 25 * 1024 * 1024
+    && is_uploaded_file($_FILES['pdf']['tmp_name'])
+    && str_starts_with((string)file_get_contents($_FILES['pdf']['tmp_name'], false, null, 0, 5), '%PDF-')
+) {
     $cfg = cargar_config();
     $carpeta = $cfg['carpeta_pdf'] . '/' . $negocioId;
     if (!is_dir($carpeta)) {
