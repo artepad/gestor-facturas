@@ -163,13 +163,12 @@ web/
 │   └── respaldo_pdfs.php           respalda almacen_pdf/ a respaldos_pdf/ (cron diario)
 │
 └── utilitarios de un solo uso (BORRAR del servidor después de usar, salvo migrar.php):
-    ├── setup.php             crea tablas + primer negocio + token (correr 1 vez)
-    ├── crear_admin.php       crea usuarios por URL
     ├── crear_admin_form.php  crea usuarios por formulario (evita problemas de caracteres en URL)
     ├── migrar.php            aplica cambios de esquema a una BD existente — a diferencia de los
     │                         demás, SÍ conviene dejarlo: es idempotente (solo aplica lo que
     │                         falta) y se vuelve a necesitar cada vez que el esquema cambia
     └── reset_facturas.php    borra facturas para pruebas
+    (setup.php y crear_admin.php ya se borraron, del repo y del servidor — 2026-11-08)
 ```
 
 ## Arquitectura del POS (capas)
@@ -489,10 +488,11 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
 - **Formato chileno**: `clp($v)` formatea pesos (`119990` → `$119.990`).
   `fecha_dmy($iso)` pasa `YYYY-MM-DD` → `DD-MM-YYYY` para mostrar. En la BD las
   fechas se guardan como `DATE` (YYYY-MM-DD) y los montos como `DECIMAL(14,2)`.
-- **Archivos de un solo uso**: `setup.php`, `crear_admin*.php`, `migrar.php`,
-  `reset_facturas.php` son utilitarios peligrosos protegidos por `setup_key`. El
-  usuario debe **borrarlos del servidor** después de usarlos. No dependas de ellos
-  en runtime.
+- **Archivos de un solo uso**: `crear_admin_form.php`, `migrar.php`,
+  `reset_facturas.php` son utilitarios peligrosos protegidos por `setup_key`
+  (salvo `migrar.php`, pensado para reusarse). El usuario debe **borrarlos del
+  servidor** después de usarlos. No dependas de ellos en runtime. (`setup.php` y
+  `crear_admin.php` ya se borraron, del repo y del servidor.)
 - **El usuario no es desarrollador**: explicá decisiones en términos prácticos.
   Cuando un cambio requiera tocar la BD del servidor o subir archivos, dale pasos
   concretos de cPanel, no jerga.

@@ -32,7 +32,7 @@ detalle) ya eran del sitio completo desde la Fase 5 y se heredan sin cambios.
 | 16 | Cabeceras HTTP | ⏳ **[R] pendiente** | No se agregaron `X-Content-Type-Options`/`X-Frame-Options`/`Referrer-Policy`. Solo se tocó `.htaccess` para el tipo MIME del manifest |
 | 17 | CSP y HSTS | ⏳ **[R] pendiente** | No implementado — el estándar lo marca opcional |
 | 18 | Archivos sensibles expuestos | ✅ | `.htaccess` deniega ocultos; `almacen_pdf/`, `respaldos_pdf/` bloqueados |
-| 19 | Instalador web temporal | ⏳ **pendiente del dueño** | `setup.php`, `crear_admin*.php`, `reset_facturas.php` siguen en el servidor — borrarlos cuando el dueño lo decida (no son parte del código que se ejecuta solo) |
+| 19 | Instalador web temporal | ✅ parcial / ⏳ resto | `setup.php` y `crear_admin.php` ya se borraron (2026-11-08). Quedan `crear_admin_form.php` y `reset_facturas.php` en el servidor — borrarlos cuando el dueño lo decida |
 | 20 | Datos personales | ✅ | IP siempre hasheada (`ip_hash`), nunca en claro |
 | 21 | Archivos privados | ✅ | PDFs fuera de acceso directo, servidos solo por `ver_pdf.php` con control de negocio |
 | 22 | Respaldos | ⏳ **pendiente del dueño** | El script de respaldo de PDFs existe (`scripts/respaldo_pdfs.php`) pero falta agregar el cron en cPanel; el respaldo de la base de datos es manual (phpMyAdmin), no automático |
@@ -107,9 +107,10 @@ del estándar).
 de bajo riesgo, no bloquean nada):
 - Cabeceras de seguridad HTTP (`X-Content-Type-Options`, etc.) — ítem 16 de la
   tabla.
-- Borrar del servidor los utilitarios de un solo uso ya usados (`setup.php`,
-  `crear_admin.php`, `crear_admin_form.php`, `reset_facturas.php`) — decisión
-  y acción del dueño.
+- Borrar del servidor los utilitarios de un solo uso que quedan
+  (`crear_admin_form.php`, `reset_facturas.php`) — decisión y acción del
+  dueño. (`setup.php` y `crear_admin.php` ya se borraron, del repo y del
+  servidor, 2026-11-08.)
 - Agregar el cron de `scripts/respaldo_pdfs.php` en cPanel — decisión y acción
   del dueño.
 - Limpieza de PDFs huérfanos de facturas eliminadas — pendiente de que el
