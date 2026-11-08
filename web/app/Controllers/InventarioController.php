@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Request;
-use App\Core\Session;
 use App\Core\View;
 use App\Models\Inventario;
 
@@ -12,10 +11,8 @@ use App\Models\Inventario;
  * Inventario: existencias por negocio, ajustes, mermas, kardex y el
  * encendido/apagado del control de stock (opcional por negocio).
  *
- * Corte de la Fase 6 (ver web/docs/01-plan-migracion.md). Mismo
- * comportamiento que web/inventario.php, que sigue intacto y es el que de
- * verdad atiende admin.minimark.cl hasta que este corte se verifique. CSRF
- * (H3) agregado en sus 3 formularios, nuevo en esta pantalla.
+ * Fase 9 (despliegue): vive en web/inventario.php (archivo puente que llama
+ * directo a este Controlador) — misma direccion de siempre.
  */
 final class InventarioController extends BaseController
 {
@@ -39,7 +36,7 @@ final class InventarioController extends BaseController
         $aviso = '';
 
         if (Request::metodo() === 'POST') {
-            $this->verificarCsrf('/inventario/');
+            $this->verificarCsrf('inventario.php');
             $accion = Request::post('accion');
             try {
                 $neg = Request::entero('negocio_id');
@@ -55,7 +52,7 @@ final class InventarioController extends BaseController
                     Inventario::fijarControl($neg, $on);
                     \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'control_stock', null,
                         ($on ? 'Encendió' : 'Apagó') . ' el control de inventario del negocio', null, 'negocio', $neg);
-                    \redirigir(Request::base() . '/inventario/?negocio_id=' . $neg . '&msg=' . ($on ? 'on' : 'off'));
+                    \redirigir('inventario.php?negocio_id=' . $neg . '&msg=' . ($on ? 'on' : 'off'));
                 }
 
                 if ($accion === 'ajuste') {
@@ -86,14 +83,14 @@ final class InventarioController extends BaseController
                         ': ' . ($delta > 0 ? '+' : '') . rtrim(rtrim(number_format($delta, 3, ',', '.'), '0'), ',') .
                         ' → quedan ' . rtrim(rtrim(number_format($nuevo, 3, ',', '.'), '0'), ',') .
                         ' · ' . $motivo, null, 'producto', $pid);
-                    \redirigir(Request::base() . '/inventario/?negocio_id=' . $neg . '&q=' . urlencode($prod['codigo']) . '&msg=ajuste');
+                    \redirigir('inventario.php?negocio_id=' . $neg . '&q=' . urlencode($prod['codigo']) . '&msg=ajuste');
                 }
 
                 if ($accion === 'minimo') {
                     $pid = Request::entero('producto_id');
                     $min = \parsear_monto(Request::post('minimo'));
                     Inventario::fijarMinimo($pid, $neg, $min);
-                    \redirigir(Request::base() . '/inventario/?negocio_id=' . $neg . '&q=' . urlencode(Request::post('q')) . '&msg=minimo');
+                    \redirigir('inventario.php?negocio_id=' . $neg . '&q=' . urlencode(Request::post('q')) . '&msg=minimo');
                 }
 
                 if ($accion === 'conteo') {
@@ -148,13 +145,9 @@ final class InventarioController extends BaseController
         $kardex = $verKardex ? Inventario::kardex($verKardex, $negocioId) : [];
         $prodKardex = $verKardex ? Inventario::productoPorId($verKardex) : null;
 
-        $baseAntiguo = $this->baseSitioAntiguo();
-        $baseNuevo = Request::base();
-        $csrfToken = Session::tokenCsrf();
-
         View::render('inventario/index', compact(
             'usuario', 'negocios', 'negocioId', 'esAdmin', 'error', 'aviso', 'controla', 'resumen',
-            'q', 'solo', 'lista', 'verKardex', 'kardex', 'prodKardex', 'baseAntiguo', 'baseNuevo', 'csrfToken'
+            'q', 'solo', 'lista', 'verKardex', 'kardex', 'prodKardex'
         ));
     }
 }

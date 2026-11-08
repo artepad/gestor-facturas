@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Request;
-use App\Core\Session;
 use App\Core\View;
 use App\Models\Compra;
 use App\Models\Inventario;
@@ -13,10 +12,8 @@ use App\Models\Inventario;
  * Compras: registrar la mercadería que llega (suma stock si el negocio lo
  * lleva) y proveedores.
  *
- * Corte de la Fase 6 (ver web/docs/01-plan-migracion.md). Mismo
- * comportamiento que web/compras.php, que sigue intacto y es el que de
- * verdad atiende admin.minimark.cl hasta que este corte se verifique. CSRF
- * (H3) agregado en sus 2 formularios, nuevo en esta pantalla.
+ * Fase 9 (despliegue): vive en web/compras.php (archivo puente que llama
+ * directo a este Controlador) — misma direccion de siempre.
  */
 final class ComprasController extends BaseController
 {
@@ -39,7 +36,7 @@ final class ComprasController extends BaseController
         $aviso = '';
 
         if (Request::metodo() === 'POST') {
-            $this->verificarCsrf('/compras/');
+            $this->verificarCsrf('compras.php');
             $accion = Request::post('accion');
             try {
                 $neg = Request::entero('negocio_id');
@@ -59,7 +56,7 @@ final class ComprasController extends BaseController
                     );
                     \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'crear_proveedor', null,
                         'Creó el proveedor ' . $nombre, null, 'proveedor', $id);
-                    \redirigir(Request::base() . '/compras/?negocio_id=' . $neg . '&msg=proveedor');
+                    \redirigir('compras.php?negocio_id=' . $neg . '&msg=proveedor');
                 }
 
                 if ($accion === 'compra') {
@@ -111,13 +108,9 @@ final class ComprasController extends BaseController
         $detalle = $verId ? Compra::items($verId) : [];
         $facturas = Compra::facturasRecientes($negocioId);
 
-        $baseAntiguo = $this->baseSitioAntiguo();
-        $baseNuevo = Request::base();
-        $csrfToken = Session::tokenCsrf();
-
         View::render('compras/index', compact(
             'usuario', 'negocios', 'negocioId', 'error', 'aviso', 'controla', 'proveedores',
-            'compras', 'verId', 'detalle', 'facturas', 'baseAntiguo', 'baseNuevo', 'csrfToken'
+            'compras', 'verId', 'detalle', 'facturas'
         ));
     }
 }

@@ -2,24 +2,16 @@
 /**
  * Vista de app/Controllers/PosController::index().
  *
- * Corte 2a de la Fase 6 (ver web/docs/01-plan-migracion.md): SOLO la
- * pantalla (lo que ve la vendedora). El motor de cobro (pos_api.php) NO se
- * toca en este corte -- esta vista sigue llamandolo en su ubicacion de
- * siempre, tal cual, para no arriesgar nada del codigo que vende de verdad.
- * Ese es el proximo corte (2b), con su propia bateria de pruebas por accion.
+ * Fase 9 (despliegue): esta vista ya es la real (web/pos.php la puentea
+ * directo a PosController) — mismo HTML, CSS y JavaScript ya probado en el
+ * negocio real, con rutas relativas normales otra vez ("assets/...",
+ * "caja.php", "pos_api.php"), igual que el archivo original.
  *
  * Variables disponibles (ver PosController): $usuario, $sesion, $pinHash,
- * $espera, $ultima, $ventas, $resumen, $avisoLarga, $baseAntiguo.
+ * $espera, $ultima, $ventas, $resumen, $avisoLarga, $promos, $csrfToken.
  *
- * Es casi una copia textual de web/pos.php desde el <!doctype html> --
- * mismo HTML, mismo CSS, mismo JavaScript ya probado en el negocio real
- * (incluidos bugs reales ya corregidos ahi, como el de la URL que no se
- * debia codificar dos veces). Los unicos cambios son las rutas que antes
- * eran relativas ("assets/...", "caja.php", "pos_api.php") y ahora tienen
- * que apuntar de vuelta al sitio viejo ($baseAntiguo) porque esta vista
- * corre en otra carpeta (/public/pos/). Se usa h() en vez de e() a
- * proposito, para que el resto del archivo quede IDENTICO al original y
- * minimizar el riesgo de un copy-paste de 1700 lineas.
+ * Se usa h() en vez de e() a proposito, para que el resto del archivo quede
+ * IDENTICO al original y minimizar el riesgo de un copy-paste de 1700 lineas.
  */
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
 $rutaWeb = dirname(__DIR__, 3);
@@ -30,12 +22,12 @@ $rutaWeb = dirname(__DIR__, 3);
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Venta · <?= h($sesion['negocio_nombre']) ?></title>
-<link rel="stylesheet" href="<?= e($baseAntiguo) ?>/assets/estilo.css?v=<?= @filemtime($rutaWeb . '/assets/estilo.css') ?>">
+<link rel="stylesheet" href="assets/estilo.css?v=<?= @filemtime($rutaWeb . '/assets/estilo.css') ?>">
 <!-- La caja se puede "instalar" como aplicación: abre en su propia ventana,
      sin barra de direcciones. Ver INSTALAR_POS.md -->
-<link rel="manifest" href="<?= e($baseAntiguo) ?>/manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0d9488">
-<link rel="icon" type="image/svg+xml" href="<?= e($baseAntiguo) ?>/assets/pos-icono.svg">
+<link rel="icon" type="image/svg+xml" href="assets/pos-icono.svg">
 </head>
 <body class="pos-body">
 
@@ -54,7 +46,7 @@ $rutaWeb = dirname(__DIR__, 3);
             ¿Olvidaste el PIN? Cierra sesión y vuelve a entrar con tu contraseña
             (necesita internet).
         </p>
-        <a class="cerrojo-salir" href="<?= e($baseAntiguo) ?>/home.php">Salir de la caja</a>
+        <a class="cerrojo-salir" href="home.php">Salir de la caja</a>
     </div>
 </div>
 
@@ -67,7 +59,7 @@ $rutaWeb = dirname(__DIR__, 3);
     </div>
     <div class="pos-top-der">
         <?php if ($avisoLarga = aviso_caja_larga($sesion)): ?>
-            <a class="pos-aviso-larga" href="<?= e($baseAntiguo) ?>/caja.php" title="<?= h($avisoLarga) ?>">
+            <a class="pos-aviso-larga" href="caja.php" title="<?= h($avisoLarga) ?>">
                 <?= icono('reloj') ?> Caja sin cerrar
             </a>
         <?php endif; ?>
@@ -77,8 +69,8 @@ $rutaWeb = dirname(__DIR__, 3);
         <?php if ($pinHash !== ''): ?>
             <button type="button" class="pos-btn-top" id="btnBloquear">Bloquear</button>
         <?php endif; ?>
-        <a class="pos-btn-top" href="<?= e($baseAntiguo) ?>/caja.php"><?= icono('caja') ?> Caja</a>
-        <a class="pos-btn-top" href="<?= e($baseAntiguo) ?>/home.php"><?= icono('salir') ?> Salir</a>
+        <a class="pos-btn-top" href="caja.php"><?= icono('caja') ?> Caja</a>
+        <a class="pos-btn-top" href="home.php"><?= icono('salir') ?> Salir</a>
     </div>
 </header>
 
@@ -894,7 +886,7 @@ function api(accion, datos, metodo) {
     // OJO: `accion` puede traer parametros ya codificados (ej. "buscar&q=..."),
     // asi que NO se vuelve a codificar entera: eso convertiria el & y el = en
     // texto y el servidor no reconoceria la accion.
-    var url = BASE_NUEVO + '/pos/api?accion=' + accion;
+    var url = 'pos_api.php?accion=' + accion;
     var op = { method: metodo || 'POST', headers: { 'Content-Type': 'application/json' } };
     if (op.method === 'POST') {
         // _token: CSRF (corte 2b). El endpoint viejo lo ignoraba sin problema;
@@ -1586,12 +1578,6 @@ Array.prototype.forEach.call(document.querySelectorAll('a.pos-btn-top'), functio
 
 var PIN_HASH = <?= json_encode($pinHash) ?>;
 var USUARIO_ID = <?= (int)$usuario['id'] ?>;
-var BASE_ANTIGUO = <?= json_encode($baseAntiguo) ?>;   // assets, caja.php, home.php, sw.js siguen ahi
-// Corte 2b: el motor de cobro ya se migro (App\Controllers\PosApiController,
-// probadas las 13 acciones una por una contra pos_api.php antes de apuntar
-// aca). BASE_NUEVO es donde vive ESTA pantalla nueva ("/minimark/public" en
-// local; la raiz del dominio recien en la Fase 9).
-var BASE_NUEVO = <?= json_encode($baseNuevo) ?>;
 var CSRF_TOKEN = <?= json_encode($csrfToken) ?>;
 
 function huellaPin(pin) {
@@ -1643,7 +1629,7 @@ if (PIN_HASH) bloquear();      // arranca bloqueada
 // no haya internet. Vender sin conexión llega en el paso 3C.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-        navigator.serviceWorker.register(BASE_ANTIGUO + '/sw.js').catch(function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {
             // Sin service worker la caja funciona igual, solo que necesita
             // internet para abrir. No vale la pena molestar al vendedor.
         });

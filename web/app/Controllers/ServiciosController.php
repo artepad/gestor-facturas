@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Request;
-use App\Core\Session;
 use App\Core\View;
 use App\Models\CajaSesion;
 use App\Models\Convenio;
@@ -13,10 +12,8 @@ use App\Models\Convenio;
  * Servicios / Recaudación: el saldo de cada convenio (Mercado Pago y otros),
  * las recargas, las liquidaciones y las comisiones ganadas.
  *
- * Corte de la Fase 6 (ver web/docs/01-plan-migracion.md). Mismo
- * comportamiento que web/servicios.php, que sigue intacto y es el que de
- * verdad atiende admin.minimark.cl hasta que este corte se verifique. CSRF
- * (H3) agregado en sus 3 formularios, nuevo en esta pantalla.
+ * Fase 9 (despliegue): vive en web/servicios.php (archivo puente que llama
+ * directo a este Controlador) — misma direccion de siempre.
  */
 final class ServiciosController extends BaseController
 {
@@ -39,7 +36,7 @@ final class ServiciosController extends BaseController
         $aviso = '';
 
         if (Request::metodo() === 'POST') {
-            $this->verificarCsrf('/servicios/');
+            $this->verificarCsrf('servicios.php');
             $accion = Request::post('accion');
             try {
                 if ($accion === 'crear_convenio') {
@@ -52,7 +49,7 @@ final class ServiciosController extends BaseController
                     $id = Convenio::crear($neg, $nombre, $modal, $minimo);
                     \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', 'crear_convenio', null,
                         'Creó el convenio ' . $nombre . ' (' . $modal . ')', null, 'convenio', $id);
-                    \redirigir(Request::base() . '/servicios/?negocio_id=' . $neg . '&msg=convenio');
+                    \redirigir('servicios.php?negocio_id=' . $neg . '&msg=convenio');
                 }
 
                 if ($accion === 'operacion') {
@@ -71,7 +68,7 @@ final class ServiciosController extends BaseController
                     \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', $tipo, null,
                         ($etiquetas[$tipo] ?? $tipo) . ' ' . $r['convenio']['nombre'] . ' por ' . \clp($monto),
                         null, 'convenio', $cid);
-                    \redirigir(Request::base() . '/servicios/?negocio_id=' . $negocioId . '&msg=operacion');
+                    \redirigir('servicios.php?negocio_id=' . $negocioId . '&msg=operacion');
                 }
 
                 if ($accion === 'ajustar') {
@@ -82,7 +79,7 @@ final class ServiciosController extends BaseController
                     \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', 'ajustar_convenio', null,
                         'Cuadró ' . $r['convenio']['nombre'] . ': de ' . \clp($r['saldo_anterior']) . ' a ' . \clp($real),
                         null, 'convenio', $cid);
-                    \redirigir(Request::base() . '/servicios/?negocio_id=' . $negocioId . '&msg=ajuste');
+                    \redirigir('servicios.php?negocio_id=' . $negocioId . '&msg=ajuste');
                 }
             } catch (\Throwable $e) {
                 $error = $e->getMessage();
@@ -101,13 +98,9 @@ final class ServiciosController extends BaseController
         foreach ($convenios as $c) if ((int)$c['id'] === $verId) $verConvenio = $c;
         $ops = $verConvenio ? Convenio::operaciones((int)$verConvenio['id']) : [];
 
-        $baseAntiguo = $this->baseSitioAntiguo();
-        $baseNuevo = Request::base();
-        $csrfToken = Session::tokenCsrf();
-
         View::render('servicios/index', compact(
             'usuario', 'negocios', 'negocioId', 'error', 'aviso', 'convenios', 'verId',
-            'verConvenio', 'ops', 'baseAntiguo', 'baseNuevo', 'csrfToken'
+            'verConvenio', 'ops'
         ));
     }
 }

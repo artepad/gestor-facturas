@@ -4,20 +4,17 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Request;
-use App\Core\Session;
 use App\Core\View;
 use App\Models\Promocion;
 
 /**
  * Promociones automáticas: las ofertas que el POS aplica solo al vender.
- *   /promociones/            -> listado
- *   /promociones/?id=N       -> editar / eliminar
- *   /promociones/?nueva=1    -> crear
+ *   promociones.php            -> listado
+ *   promociones.php?id=N       -> editar / eliminar
+ *   promociones.php?nueva=1    -> crear
  *
- * Corte de la Fase 6 (ver web/docs/01-plan-migracion.md). Mismo
- * comportamiento que web/promociones.php, que sigue intacto y es el que de
- * verdad atiende admin.minimark.cl hasta que este corte se verifique. CSRF
- * (H3) agregado en su formulario, nuevo en esta pantalla.
+ * Fase 9 (despliegue): vive en web/promociones.php (archivo puente que llama
+ * directo a este Controlador) — misma direccion de siempre.
  */
 final class PromocionesController extends BaseController
 {
@@ -44,7 +41,7 @@ final class PromocionesController extends BaseController
 
         if ($id) {
             $promo = Promocion::porId($id);
-            if (!$promo) \redirigir(Request::base() . '/promociones/');
+            if (!$promo) \redirigir('promociones.php');
             $original = $promo;
             $promo['valor'] = $promo['valor'] !== null ? number_format((float)$promo['valor'], 0, ',', '.') : '';
             $promo['cantidad'] = $promo['cantidad'] !== null
@@ -52,14 +49,14 @@ final class PromocionesController extends BaseController
         }
 
         if (Request::metodo() === 'POST') {
-            $this->verificarCsrf('/promociones/');
+            $this->verificarCsrf('promociones.php');
             $accion = Request::post('accion') ?: 'guardar';
 
             if ($accion === 'eliminar' && $id) {
                 Promocion::eliminar($id);
                 \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'eliminar_promocion', null,
                     'Eliminó la promoción ' . $original['nombre'], null, 'promocion', $id);
-                \redirigir(Request::base() . '/promociones/?msg=eliminada');
+                \redirigir('promociones.php?msg=eliminada');
             }
 
             $d = [
@@ -120,7 +117,7 @@ final class PromocionesController extends BaseController
                     \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'crear_promocion', null,
                         'Creó la promoción ' . $d['nombre'], null, 'promocion', $id);
                 }
-                \redirigir(Request::base() . '/promociones/?msg=guardada');
+                \redirigir('promociones.php?msg=guardada');
             }
             $promo = array_merge($promo, $_POST);
             $nueva = !$id;
@@ -133,13 +130,9 @@ final class PromocionesController extends BaseController
         $hoy = date('Y-m-d');
         $editando = $id || $nueva;
 
-        $baseAntiguo = $this->baseSitioAntiguo();
-        $baseNuevo = Request::base();
-        $csrfToken = Session::tokenCsrf();
-
         View::render('promociones/index', compact(
             'usuario', 'negocios', 'id', 'nueva', 'error', 'promo', 'lista', 'deptos',
-            'msg', 'hoy', 'editando', 'baseAntiguo', 'baseNuevo', 'csrfToken'
+            'msg', 'hoy', 'editando'
         ));
     }
 }

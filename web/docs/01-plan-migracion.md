@@ -199,9 +199,77 @@ y el Excel del catálogo (`herramienta_productos.php`).
   guardar comprobantes eliminados), no un arreglo técnico — se deja para
   cuando el dueño decida una política concreta, no se asume ahora.
 
-## Fase 9 en adelante
+## Fase 9 · Despliegue
 
-Despliegue y cierre — según el estándar general, una vez terminado el POS.
+**Estado: hecho en local, pendiente la subida real (2026-11-07).**
+
+**Hallazgo importante antes de empezar**: el estándar de migración da por
+sentado que, al llegar a esta fase, *todo* el sitio ya está en la
+arquitectura nueva y por eso el despliegue consiste en apuntar el dominio a
+`public/`. Acá no es así — se migró **a propósito solo el POS** (así se
+acordó desde el principio: "vamos a migrar nuestro sistema POS"); el resto
+del panel (facturas, fiados, ingresos, gastos, usuarios…) sigue siendo el
+código de siempre. Cambiar el dominio a `public/` habría roto todo lo que no
+es POS, porque esa carpeta solo sabe servir esas 7 pantallas.
+
+**Por eso el despliegue acá fue distinto del estándar genérico**: en vez de
+cambiar qué carpeta ve el navegador, cada pantalla vieja del POS se
+reemplazó por un **archivo puente** — mismo nombre, misma dirección de
+siempre (`pos.php`, `caja.php`, `inventario.php`, `compras.php`,
+`promociones.php`, `servicios.php`, `pos_api.php`), pero su contenido ahora
+es una llamada directa al Controlador correspondiente en vez de la lógica
+vieja. Nadie nota el cambio: la dirección en el navegador no cambia, el
+menú lateral es el mismo de siempre, y si algo saliera mal en una sola
+pantalla se puede revertir solo esa (con `git checkout` sobre ese archivo),
+sin afectar a las demás ni al resto del panel.
+
+Como consecuencia, se pudo retirar todo el andamiaje transicional que existía
+desde la Fase 6 para que el sitio viejo y el esqueleto nuevo convivieran bajo
+distintas direcciones (`BaseController::baseSitioAntiguo()`,
+`Request::base()` usado para armar links, las variables `$baseAntiguo`/
+`$baseNuevo` en cada Vista): ya no hace falta, porque viejo y nuevo vuelven a
+vivir en la misma dirección. Las 5 pantallas que tienen menú lateral
+(`caja`, `inventario`, `compras`, `promociones`, `servicios`) pasaron de un
+encabezado propio de "vista previa" a usar `cabecera_dashboard()`/
+`pie_dashboard()` igual que el resto del panel — comparado byte a byte contra
+lo que mostraba la pantalla vieja (mismo usuario, misma sesión real): la
+única diferencia fue el campo CSRF agregado en cada formulario, nada más.
+`pos.php` sigue en modo kiosco (sin menú lateral), igual que siempre.
+
+**Rutas `/public/...` de la Fase 4 retiradas**: ya cumplieron su función de
+vista previa durante la migración; `public/index.php` quedó solo con la ruta
+de diagnóstico (`/`, confirma autoload+BD+sesión), útil si en el futuro se
+migra otra pantalla del panel.
+
+**Probado en local** (`http://localhost/minimark`, sin ningún `/public/`):
+- Smoke test 32/32 en las direcciones reales.
+- Las 5 pantallas con menú lateral muestran el sidebar completo, sin rastro
+  del cartel de "vista previa", sin errores de PHP.
+- `pos.php` mantiene el modo kiosco (cerrojo, sin sidebar) y su JavaScript ya
+  llama a `pos_api.php` con ruta relativa normal.
+- **Comparación byte a byte** de `caja.php` contra la versión anterior (con
+  la sesión real de un negocio): idéntica salvo los 2 campos CSRF nuevos que
+  corresponden a los formularios visibles en ese momento.
+- Ningún link roto: se revisó que ninguna pantalla migrada conserve una
+  referencia a las rutas transicionales (`/public/`, `baseAntiguo`,
+  `baseNuevo`).
+- El despacho por `accion` del puente de `caja.php` probado de punta a punta
+  con un movimiento de caja real de prueba ($1, motivo marcado) — confirmó
+  que no solo se muestra la pantalla, sino que el Controlador correcto
+  procesa cada acción — y se borró al terminar (conteos antes/después).
+- `pos_api.php` respondiendo JSON correctamente a través del puente.
+
+**Qué falta — la subida real a producción**: esto todavía no se subió a
+`admin.minimark.cl`. El despliegue real necesita que el dueño suba los
+archivos por cPanel (no hay acceso de servidor desde acá). Antes de pedir esa
+subida: aprobación explícita del dueño, lista exacta de archivos a
+reemplazar, y un horario de poco tráfico. Se detalla en el mensaje de cierre
+de este corte.
+
+## Fase 10 en adelante
+
+Cierre (revisión final, documentación, guía de mantenimiento) — según el
+estándar general, una vez confirmada la subida a producción.
 
 ---
 

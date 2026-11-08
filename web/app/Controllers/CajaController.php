@@ -11,9 +11,8 @@ use App\Models\CajaSesion;
 /**
  * Caja: abrir/cerrar turno, movimientos de efectivo, arqueo.
  *
- * Corte 1 de la Fase 6. Mismo comportamiento que web/caja.php (que sigue
- * intacto y es el que de verdad atiende admin.minimark.cl hasta que este
- * corte se verifique y se decida el cambio) — ver web/docs/01-plan-migracion.md.
+ * Fase 9 (despliegue): esta pantalla vive ahora en web/caja.php (un archivo
+ * puente que llama directo a este Controlador) — misma direccion de siempre.
  */
 final class CajaController extends BaseController
 {
@@ -45,19 +44,17 @@ final class CajaController extends BaseController
         $historial     = CajaSesion::cerradasEn($idsVisibles, 15);
         $avisoLarga    = $sesion ? CajaSesion::avisoSiLlevaMuchoAbierta($sesion) : null;
 
-        $baseAntiguo = $this->baseSitioAntiguo();
-
         View::render('caja/index', compact(
             'usuario', 'negocios', 'esAdmin', 'sesion', 'error', 'aviso', 'corteNuevo',
             'resumen', 'movimientos', 'recaudado', 'enEspera', 'otrasAbiertas', 'historial',
-            'avisoLarga', 'baseAntiguo'
+            'avisoLarga'
         ));
     }
 
     public function abrir(array $parametros = []): void
     {
         $usuario = $this->exigirPermiso('ventas');
-        $this->verificarCsrf('/caja/');
+        $this->verificarCsrf('caja.php');
         require_once dirname(__DIR__, 2) . '/lib/auth.php';
         require_once dirname(__DIR__, 2) . '/lib/ui.php';
         require_once dirname(__DIR__, 2) . '/lib/auditoria.php';
@@ -82,13 +79,13 @@ final class CajaController extends BaseController
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
-        \redirigir(Request::base() . '/caja/');
+        \redirigir('caja.php');
     }
 
     public function movimiento(array $parametros = []): void
     {
         $usuario = $this->exigirPermiso('ventas');
-        $this->verificarCsrf('/caja/');
+        $this->verificarCsrf('caja.php');
         require_once dirname(__DIR__, 2) . '/lib/ui.php';
         require_once dirname(__DIR__, 2) . '/lib/auditoria.php';
 
@@ -112,13 +109,13 @@ final class CajaController extends BaseController
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
-        \redirigir(Request::base() . '/caja/');
+        \redirigir('caja.php');
     }
 
     public function cerrar(array $parametros = []): void
     {
         $usuario = $this->exigirPermiso('ventas');
-        $this->verificarCsrf('/caja/');
+        $this->verificarCsrf('caja.php');
         require_once dirname(__DIR__, 2) . '/lib/ui.php';
         require_once dirname(__DIR__, 2) . '/lib/auditoria.php';
 
@@ -139,10 +136,10 @@ final class CajaController extends BaseController
             \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', 'cerrar_caja', null,
                 'Cerró la caja. Esperado ' . \clp($r['efectivo_esperado']) . ', contado ' . \clp($contado)
                 . ', diferencia ' . \clp($r['diferencia']));
-            \redirigir(Request::base() . '/caja/?cerrada=' . (int)($r['corte_id'] ?? 0));
+            \redirigir('caja.php?cerrada=' . (int)($r['corte_id'] ?? 0));
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
-            \redirigir(Request::base() . '/caja/');
+            \redirigir('caja.php');
         }
     }
 }

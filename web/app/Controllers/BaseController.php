@@ -7,21 +7,18 @@ use App\Core\Request;
 use App\Core\Session;
 
 /**
- * Base de los controladores del POS nuevo: exige sesion+permiso y centraliza
- * el CSRF (hallazgo H3 de la auditoria — se agrega pantalla por pantalla, a
- * medida que cada una se migra, no de una sola vez sobre el sitio viejo).
+ * Base de los controladores del POS: exige sesion+permiso y centraliza el
+ * CSRF (hallazgo H3 de la auditoria).
+ *
+ * Fase 9 (despliegue): cada pantalla del POS vive ahora en un archivo puente
+ * en la raiz de web/ (ej. web/caja.php) que llama directo a su Controlador —
+ * misma direccion de siempre, sin carpeta /public/ de por medio. Por eso las
+ * redirecciones de aca son rutas simples ("caja.php"), igual que las usaba
+ * el codigo viejo.
  */
 abstract class BaseController
 {
-    /**
-     * Exige sesion y el permiso del modulo dado (misma matriz de siempre,
-     * lib/permisos.php). Si falta algo, redirige y termina la ejecucion.
-     *
-     * TRANSICION (quitar en la Fase 9): el sitio viejo todavia vive en la
-     * raiz de web/ y el nuevo en web/public/. Mientras los dos convivan, la
-     * redireccion a login.php/home.php tiene que apuntar un nivel arriba de
-     * donde corre esta pantalla nueva.
-     */
+    /** Exige sesion y el permiso del modulo dado (misma matriz de siempre, lib/permisos.php). */
     protected function exigirPermiso(string $modulo): array
     {
         require_once dirname(__DIR__, 2) . '/lib/auth.php';
@@ -29,35 +26,24 @@ abstract class BaseController
 
         $usuario = \usuario_actual();
         if (!$usuario) {
-            \redirigir($this->baseSitioAntiguo() . '/login.php');
+            \redirigir('login.php');
         }
         if (!\puede($usuario, $modulo)) {
-            \redirigir($this->baseSitioAntiguo() . '/home.php');
+            \redirigir('home.php');
         }
         return $usuario;
-    }
-
-    /** Ver docblock de exigirPermiso(): transicional, se retira en la Fase 9. */
-    protected function baseSitioAntiguo(): string
-    {
-        $basePublic = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/public/index.php')), '/');
-        return str_ends_with($basePublic, '/public') ? substr($basePublic, 0, -strlen('/public')) : '';
     }
 
     /**
      * Verifica el token CSRF del POST actual. Si no es valido, deja un
      * mensaje flash y redirige (nunca deja seguir con un formulario viejo o
-     * de otro origen).
-     */
-    /**
-     * $volverA es una ruta de la app NUEVA ("/caja/"), no del sitio viejo:
-     * se le antepone Request::base() automaticamente (ver Core/Request).
+     * de otro origen). $volverA es la pantalla a la que volver (ej. "caja.php").
      */
     protected function verificarCsrf(string $volverA): void
     {
         if (!Session::csrfValido(Request::post('_token'))) {
             Session::flash('error', 'La página estuvo abierta demasiado tiempo. Inténtalo de nuevo.');
-            \redirigir(Request::base() . $volverA);
+            \redirigir($volverA);
         }
     }
 }
