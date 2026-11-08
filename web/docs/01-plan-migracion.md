@@ -117,10 +117,51 @@ Orden (de menor a mayor riesgo):
 Con esto termina la Fase 6: las 7 pantallas del POS ya tienen su versión en
 la arquitectura nueva, conviviendo con el sitio viejo sin tocarlo.
 
-## Fase 7 en adelante
+## Fase 7 · Base de datos
 
-Base de datos (índices, borrado lógico donde falte), despliegue y cierre — según el
-estándar general, una vez terminado el POS.
+**Estado: terminada (2026-11-07).** Auditoría del esquema completo contra el estándar
+(`prompt-migracion-arquitectura.md` 3.5) — este proyecto partió bien construido desde
+el principio, así que la lista de pendientes fue corta:
+
+1. ✅ **Columnas de auditoría faltantes.** 8 tablas que se editan después de creadas
+   no dejaban rastro de cuándo: `clientes`, `fiados`, `abonos`, `convenios`,
+   `caja_sesiones`, `cortes`, `compras`, `ventas`. Se les agregó `actualizado_en`
+   (puro aditivo — ningún código ni pantalla cambia, MySQL la llena solo en cada
+   `UPDATE`). Aplicado en `lib/esquema.sql` (esquema canónico) y `migrar.php`
+   (idempotente, mismo patrón que el resto). Probado con una fila desechable:
+   `creado_en` y `actualizado_en` iguales al crear, `actualizado_en` cambia al
+   editar — confirmado y la fila borrada. Corrido dos veces seguidas en local para
+   comprobar que no duplica nada; smoke test 32/32 después.
+2. ✅ **Intentos de login, índices, llaves foráneas, InnoDB + utf8mb4** — ya
+   cumplidos (la tabla `intentos_login` se agregó en la Fase 5; el resto ya estaba
+   bien desde como se diseñó este proyecto).
+
+**Revisado y descartado a propósito** (para no agregar trabajo o riesgo que el
+estándar sugiere en general pero que acá no aplica o no conviene todavía):
+
+- **`sesiones_recordadas`** (cookie "recuérdame" segura): este proyecto no usa ese
+  patrón — la sesión dura 30 días directamente (decisión ya tomada: "la caja de un
+  almacén no puede pedir contraseña cada mañana") y el cerrojo real es el PIN, no
+  un sistema de sesión recordada aparte. No hay nada que migrar.
+- **`recuperaciones_clave`** (reset de contraseña por correo, autoservicio): no
+  existe hoy — el admin resetea contraseñas a mano desde `crear_admin_form.php`.
+  Agregarlo sería una función nueva, no una reestructuración; queda en la lista de
+  mejoras para después de terminar la migración (como se acordó).
+- **Borrado lógico ampliado** (papelera recuperable de 30 días para clientes,
+  fiados, promociones, proveedores...): hoy solo `facturas` lo tiene. Extenderlo es
+  una mejora real pero grande (cambia cada pantalla de listado + una papelera
+  nueva) — es del tipo de cosas que se decidió dejar para cuando termine la
+  migración, no ahora.
+- **Fechas en UTC**: el negocio opera en una sola zona horaria (Chile) sin
+  necesidad real de otra. Convertir el almacenamiento a UTC tocaría cada fecha del
+  sistema por un beneficio que hoy no existe — no conviene.
+- **Collation explícita** (`utf8mb4_unicode_ci`): ya está en utf8mb4 en todas las
+  tablas; fijar la collation a mano sería puro cosmético, sin beneficio práctico.
+
+## Fase 8 en adelante
+
+Archivos y subidas, despliegue y cierre — según el estándar general, una vez
+terminado el POS.
 
 ---
 

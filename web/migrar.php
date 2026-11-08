@@ -739,4 +739,20 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS intentos_login (
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 echo "  ~ tabla intentos_login lista\n";
 
+echo "\n[Fase 7 migracion: columnas de auditoria faltantes]\n";
+// Estandar de arquitectura (docs/prompt-migracion-arquitectura.md, 3.5):
+// "actualizado_en" en toda tabla de negocio que se edita despues de creada.
+// Puro agregado (no cambia ninguna consulta ni pantalla): MySQL la llena
+// solo en cada UPDATE, asi que desde ahora queda registrado cuando se
+// edito por ultima vez un cliente, un fiado, un abono, un convenio, una
+// caja, un corte o una compra (antes no quedaba rastro de eso).
+agregar_columna($pdo, 'clientes',      'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'fiados',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'abonos',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'convenios',     'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'caja_sesiones', 'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'cortes',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'compras',       'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+agregar_columna($pdo, 'ventas',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
 echo "\nListo. Migraciones aplicadas.\n";

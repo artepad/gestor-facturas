@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS clientes (
   correo     VARCHAR(150) NULL,
   activo     TINYINT(1)   NOT NULL DEFAULT 1,     -- desactivar sin borrar historial
   creado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
   INDEX idx_cliente_negocio (negocio_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -130,6 +131,7 @@ CREATE TABLE IF NOT EXISTS fiados (
   descripcion VARCHAR(255) NULL,
   venta_id    INT NULL,                            -- si nacio de una venta del POS
   creado_en   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
   INDEX idx_fiado_cliente (cliente_id),
   INDEX idx_fiado_venta (venta_id)
@@ -143,6 +145,7 @@ CREATE TABLE IF NOT EXISTS abonos (
   monto      DECIMAL(14,2) NOT NULL,
   nota       VARCHAR(255) NULL,
   creado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
   INDEX idx_abono_cliente (cliente_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -230,6 +233,7 @@ CREATE TABLE IF NOT EXISTS cortes (
   recaudado_efectivo   DECIMAL(14,2) NULL,
   diferencia           DECIMAL(14,2) NULL,   -- contado - esperado en el arqueo
   creado_en            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_corte (negocio_id, cerrado_en, cajero_id),  -- reprocesar no duplica
   FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
   FOREIGN KEY (correo_id)  REFERENCES correos_corte(id) ON DELETE SET NULL,
@@ -406,6 +410,7 @@ CREATE TABLE IF NOT EXISTS caja_sesiones (
   corte_id          INT NULL,                         -- corte generado al cerrar
   nota              VARCHAR(255) NULL,
   creado_en         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en    TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (negocio_id)       REFERENCES negocios(id) ON DELETE CASCADE,
   FOREIGN KEY (usuario_apertura) REFERENCES usuarios(id) ON DELETE SET NULL,
   FOREIGN KEY (usuario_cierre)   REFERENCES usuarios(id) ON DELETE SET NULL,
@@ -451,6 +456,7 @@ CREATE TABLE IF NOT EXISTS ventas (
   origen           VARCHAR(8) NOT NULL DEFAULT 'online',       -- online | offline
   nota             VARCHAR(255) NULL,
   creado_en        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (negocio_id)     REFERENCES negocios(id)      ON DELETE CASCADE,
   FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE SET NULL,
   FOREIGN KEY (usuario_id)     REFERENCES usuarios(id)      ON DELETE SET NULL,
@@ -527,6 +533,7 @@ CREATE TABLE IF NOT EXISTS convenios (
   saldo_ajuste DECIMAL(14,2) NOT NULL DEFAULT 0,      -- correccion manual vs. el portal
   activo       TINYINT(1) NOT NULL DEFAULT 1,
   creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
   UNIQUE KEY uq_convenio (negocio_id, nombre)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -633,6 +640,7 @@ CREATE TABLE IF NOT EXISTS compras (
     nota VARCHAR(255) NULL,
     usuario_id INT NULL,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
     FOREIGN KEY (proveedor_id) REFERENCES proveedores(id) ON DELETE SET NULL,
     FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE SET NULL,
