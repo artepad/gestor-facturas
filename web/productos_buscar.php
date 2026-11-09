@@ -1,21 +1,11 @@
 <?php
+declare(strict_types=1);
+
 /**
- * Endpoint JSON de búsqueda de productos. Lo consume el autocompletar del Gestor
- * de Etiquetas: recibe ?negocio_id= y ?q= (código de barras o texto) y devuelve
- * las coincidencias del catálogo de ese negocio.
+ * Endpoint JSON del autocompletar del Gestor de Etiquetas. Puente hacia
+ * App\Controllers\EtiquetasController (ver web/docs/01-plan-migracion.md).
  */
 
-require __DIR__ . '/lib/auth.php';
-require __DIR__ . '/lib/productos.php';
+require __DIR__ . '/app/bootstrap.php';
 
-$usuario = exigir_permiso('herramientas');
-
-$negocioId = (int)($_GET['negocio_id'] ?? 0);
-$q         = (string)($_GET['q'] ?? '');
-
-if (!$negocioId || !puede_ver_negocio($usuario, $negocioId)) {
-    responder_json(['error' => 'Negocio no válido'], 403);
-}
-
-$resultados = buscar_productos(obtener_pdo(), $q, 20);
-responder_json(['productos' => $resultados]);
+(new \App\Controllers\EtiquetasController())->buscarJson([]);

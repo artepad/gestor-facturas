@@ -567,6 +567,75 @@ indica "pegado a mano"); un corte inexistente; descartar un correo con
 error; y permisos (el rol vendedor no tiene el módulo `ingresos`).
 Verificación visual en el navegador (dashboard y detalle con datos reales).
 
+## Fase 18 · Productos/Herramientas (octavo y último módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+El módulo más grande, dejado para el final a propósito. 12 pantallas/endpoints
+en total, divididos en 5 Controladores (uno por "herramienta", siguiendo el
+mismo criterio que Ingresos: varias pantallas relacionadas comparten
+Controlador):
+
+- `App\Controllers\HerramientasController` (`tablero()`, `caja()`) —
+  `herramientas.php` (tablero de tarjetas) y `herramienta_caja.php`
+  (contador de billetes/monedas). Ninguna de las dos toca la base de datos:
+  el contador calcula todo en el navegador. Sin Modelo.
+- `App\Controllers\ProductosController` (`panel()`, `formulario()`,
+  `historial()`) — `herramienta_productos.php` (cargar el Excel de
+  Eleventa, buscar/editar, zona de peligro "vaciar catálogo"),
+  `producto_form.php` (crear/editar/eliminar un producto) y
+  `historial_productos.php` (auditoría, solo admin). `App\Models\Producto`
+  envuelve `lib/productos.php` (parseo del `.xlsx` con ZipArchive+SimpleXML,
+  reemplazo transaccional del catálogo, estado de actualización, búsquedas —
+  NO se tocó, son funciones puras sin equivalente OOP previo) y usa SQL
+  propio para el CRUD de un producto puntual y el historial de auditoría
+  (que lee la tabla `auditoria` filtrada por `modulo = 'productos'`, la
+  misma que ya usan Inventario/Compras/Promociones del POS — no es un
+  módulo exclusivo del catálogo, eso viene de antes de esta migración).
+- `App\Controllers\EtiquetasController` (`formulario()`, `imprimir()`,
+  `buscarJson()`) — `herramienta_etiquetas.php`, `etiquetas_imprimir.php`
+  (hoja A4 "desnuda") y `productos_buscar.php` (JSON del autocompletar).
+- `App\Controllers\OfertasController` (`formulario()`, `imprimir()`) —
+  `herramienta_ofertas.php` y `ofertas_imprimir.php`. La cola de hasta 4
+  ofertas se arma en el navegador (JS) y se manda como JSON al generar; no
+  hay Modelo, no toca la base de datos.
+- `App\Controllers\CatalogoController` (`index()`, `buscarJson()`) —
+  `herramienta_catalogo.php` (Consultar Catálogo, solo lectura, con escáner
+  de código de barras híbrido) y `catalogo_buscar.php` (JSON con todos los
+  campos del producto, distinto del endpoint liviano de Etiquetas).
+
+**CSRF** se agregó a los dos formularios que escriben en la base de datos:
+cargar Excel / vaciar catálogo (`herramienta_productos.php`) y
+crear/editar/eliminar (`producto_form.php`). Los formularios de
+`etiquetas_imprimir.php` y `ofertas_imprimir.php` NO llevan CSRF a
+propósito: no persisten nada, solo arman una página para imprimir o
+guardar como PDF — mismo criterio que `precios_fv_imprimir.php`.
+`productos_buscar.php` y `catalogo_buscar.php` imitan el comportamiento
+exacto del código viejo: la falta de sesión/permiso redirige (como
+cualquier pantalla), y solo el negocio inválido responde JSON 403.
+
+Probado con `scripts/smoke.php` (32/32) y un script de pruebas funcionales
+dedicado: generó un `.xlsx` de prueba válido (mismo formato que exporta
+Eleventa) y verificó que la carga no borra productos existentes, que queda
+registrada en `producto_cargas`, y que el buscador del panel y los dos
+endpoints JSON (`productos_buscar.php`, `catalogo_buscar.php`) encuentran
+los productos cargados; CSRF (rechaza vaciar/cargar/crear/editar/eliminar
+sin token); creación, edición (con el detalle de qué campo cambió
+auditado) y eliminación de un producto vía `producto_form.php`, incluido
+que un código duplicado se rechaza y que guardar sin cambios reales no
+duplica la auditoría; generación de etiquetas de precio (descarta filas
+vacías, formatea CLP) y de ofertas (las 4 válidas se imprimen, un tipo
+inválido se descarta, los espacios libres se rellenan); filtros del
+historial (texto, acción, persona); y permisos (vendedor entra a
+Herramientas/Productos pero no al historial, que es solo admin).
+Verificación visual en el navegador de las 6 pantallas, incluido probar el
+autocompletar del Gestor de Etiquetas y el buscador de Consultar Catálogo
+con datos reales (escribiendo "coca" y viendo los resultados en vivo).
+
+Con esto terminan los 8 módulos fuera del POS. Todo `web/` sigue la
+arquitectura en capas salvo los scripts de infraestructura sin sesión
+(`api/facturas.php`, `migrar.php`, `procesar_cortes.php`).
+
 ---
 
 ## Lo que NO cambia en ningún momento

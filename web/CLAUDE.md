@@ -18,12 +18,18 @@ lados puede romperlo sin coordinar con el otro.
 > `negocio_form.php`, `negocio_tokens.php`, `negocio_panel.php`) e
 > **Ingresos** (`ingresos.php`, `corte.php`, `corte_pegar.php` — NO
 > `procesar_cortes.php`, ver nota en ese archivo) se sumaron después
-> (2026-11-08/09) — mismo patrón, su propio Controlador y Modelo cada uno.
-> **Solo queda Herramientas** en PHP plano tradicional — el módulo más
-> grande, dejado para el final a propósito. Ver «Arquitectura del POS
-> (capas)» más abajo para cómo trabajar ahí (el patrón es el mismo para
-> cualquier pantalla ya migrada, sea del POS o no), y
-> `web/docs/01-plan-migracion.md` para la bitácora de la migración original. El
+> (2026-11-08/09) se sumaron después del mismo modo — su propio Controlador y
+> Modelo cada uno — y **Herramientas** (`herramientas.php`, `herramienta_caja.php`,
+> `herramienta_etiquetas.php`, `etiquetas_imprimir.php`, `productos_buscar.php`,
+> `herramienta_ofertas.php`, `ofertas_imprimir.php`, `herramienta_productos.php`,
+> `producto_form.php`, `historial_productos.php`, `herramienta_catalogo.php`,
+> `catalogo_buscar.php`) cerró la migración (2026-11-09) con 5 Controladores,
+> uno por "herramienta". **Con esto termina la migración**: todo `web/` sigue
+> la arquitectura en capas salvo los scripts de infraestructura sin sesión
+> (`api/facturas.php`, `migrar.php`, `procesar_cortes.php`). Ver «Arquitectura
+> del POS (capas)» más abajo para cómo trabajar ahí (el patrón es el mismo para
+> cualquier pantalla migrada, sea del POS o no), y
+> `web/docs/01-plan-migracion.md` para la bitácora completa de la migración. El
 > estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
@@ -88,17 +94,21 @@ web/
 ├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
-│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos +
-│   │                      Sistema + Usuarios + Facturas + Negocios + Ingresos)
+│   ├── Controllers/       un Controlador por pantalla migrada, o por grupo de pantallas
+│   │                      relacionadas (POS + Fiados + Gastos + Sistema + Usuarios +
+│   │                      Facturas + Negocios + Ingresos + Herramientas — esta última con
+│   │                      5: Herramientas, Productos, Etiquetas, Ofertas, Catalogo)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
-│   │                      Inventario, Compra) + PrecioFV, Cliente, Home, Usuario, Factura
-│   │                      y Negocio (SQL propio) + Gasto y Corte (mixtos: envuelven
+│   │                      Inventario, Compra) + PrecioFV, Cliente, Home, Usuario, Factura,
+│   │                      Negocio y Producto (SQL propio, salvo Producto que además envuelve
+│   │                      lib/productos.php) + Gasto y Corte (mixtos: envuelven
 │   │                      lib/gastos.php y lib/eleventa.php respectivamente para lo que
 │   │                      ya existía ahí, SQL propio para el resto — ver «Arquitectura
 │   │                      del POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
 │                          promociones/, servicios/, precios_fv/imprimir.php, fiados/,
-│                          gastos/, auth/, home/, usuarios/, facturas/, negocios/, ingresos/).
+│                          gastos/, auth/, home/, usuarios/, facturas/, negocios/, ingresos/,
+│                          herramientas/, productos/, etiquetas/, ofertas/, catalogo/).
 │                          ver_pdf.php no tiene vista (responde el PDF directo)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
@@ -118,8 +128,10 @@ web/
 │                        App\Controllers\ComprasController
 ├── promociones.php      ofertas que el POS aplica solo ("4 x $1.000") — puente a
 │                        App\Controllers\PromocionesController
-├── producto_form.php    crear/editar un producto del catálogo compartido
-├── historial_productos.php  quién creó o editó cada producto (solo admin)
+├── producto_form.php    crear/editar/eliminar un producto del catálogo compartido —
+│                        puente a App\Controllers\ProductosController
+├── historial_productos.php  quién creó o editó cada producto (solo admin) —
+│                        puente al mismo Controlador
 ├── servicios.php        saldo, recargas y comisiones de convenios (Mercado Pago y otros) —
 │                        puente a App\Controllers\ServiciosController
 ├── precios_fv.php       Frutas y Verduras (JSON): listar/guardar/eliminar — ya NO es su
@@ -165,16 +177,26 @@ web/
 ├── categorias_gasto.php CRUD de categorías de gasto (editables) — puente al mismo Controlador
 ├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes) — puente al mismo Controlador
 │
-├── herramientas.php           tablero del módulo Herramientas (tarjetas)
-├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso)
-├── herramienta_etiquetas.php  gestor de etiquetas de precio (+ buscador desde el catálogo)
-├── etiquetas_imprimir.php     hoja A4 imprimible de etiquetas de precio (página desnuda)
-├── herramienta_ofertas.php    creador de etiquetas de oferta (4 tipos)
-├── ofertas_imprimir.php       hoja A4 imprimible de etiquetas de oferta (página desnuda)
-├── herramienta_productos.php  Base de Datos de Productos: carga el Excel de Eleventa por negocio
-├── productos_buscar.php       endpoint JSON de búsqueda del catálogo (lo usa el gestor de etiquetas)
-├── herramienta_catalogo.php   Consultar Catálogo: buscador + escáner de cámara de productos
-├── catalogo_buscar.php        endpoint JSON con todos los campos del producto (lo usa Consultar Catálogo)
+├── herramientas.php           tablero del módulo Herramientas (tarjetas) — puente a
+│                              App\Controllers\HerramientasController
+├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso) —
+│                              puente al mismo Controlador
+├── herramienta_etiquetas.php  gestor de etiquetas de precio (+ buscador desde el catálogo) —
+│                              puente a App\Controllers\EtiquetasController
+├── etiquetas_imprimir.php     hoja A4 imprimible de etiquetas de precio (página desnuda) —
+│                              puente al mismo Controlador
+├── productos_buscar.php       endpoint JSON de búsqueda del catálogo (lo usa el gestor de
+│                              etiquetas) — puente al mismo Controlador
+├── herramienta_ofertas.php    creador de etiquetas de oferta (4 tipos) — puente a
+│                              App\Controllers\OfertasController
+├── ofertas_imprimir.php       hoja A4 imprimible de etiquetas de oferta (página desnuda) —
+│                              puente al mismo Controlador
+├── herramienta_productos.php  Base de Datos de Productos: carga el Excel de Eleventa —
+│                              puente a App\Controllers\ProductosController
+├── herramienta_catalogo.php   Consultar Catálogo: buscador + escáner de cámara de productos —
+│                              puente a App\Controllers\CatalogoController
+├── catalogo_buscar.php        endpoint JSON con todos los campos del producto (lo usa
+│                              Consultar Catálogo) — puente al mismo Controlador
 │
 ├── login.php            formulario de ingreso — puente a App\Controllers\AuthController
 ├── logout.php           cerrar sesión — puente al mismo Controlador
@@ -261,20 +283,24 @@ con `h()`/`e()` en cada salida.
   esta migración), y SQL propio para todo lo demás (el dashboard, el
   detalle de un corte, el registro manual).
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
-  POST) existe **solo en las pantallas migradas que tienen formularios**
-  (POS + Fiados + Gastos + Usuarios + Negocios + Ingresos, salvo
-  `negocio_panel.php` que es de solo lectura) — es el hallazgo H3 de la
-  auditoría, cerrado pantalla por pantalla durante la migración original y
-  extendido módulo por módulo después. El resto del panel todavía no lo
-  tiene. La mayoría lo valida vía `BaseController::verificarCsrf()`;
+  POST) existe **solo en las pantallas migradas que tienen formularios que
+  escriben en la base de datos** (POS + Fiados + Gastos + Usuarios +
+  Negocios + Ingresos + Herramientas, salvo `negocio_panel.php` que es de
+  solo lectura) — es el hallazgo H3 de la auditoría, cerrado pantalla por
+  pantalla durante la migración original y extendido módulo por módulo
+  después. La mayoría lo valida vía `BaseController::verificarCsrf()`;
   `pos_api.php` y `precios_fv.php` no extienden `BaseController` (responden
   JSON/multipart, no redirigen) y llaman `Session::csrfValido()` directo.
   **Las pantallas de solo lectura no llevan CSRF**
   (`login.php`/`logout.php`/`ver_pdf.php`/`panel_facturas.php`/`factura.php`/
-  `negocio_panel.php`/`corte.php`: nada que proteger, no hay formularios con
-  estado — login no tenía CSRF en el código viejo tampoco, por decisión
-  consciente: un login forzado por CSRF no le sirve a un atacante sin la
-  contraseña). `AuthController` no extiende `BaseController`;
+  `negocio_panel.php`/`corte.php`/`herramienta_catalogo.php`: nada que
+  proteger, no hay formularios con estado — login no tenía CSRF en el
+  código viejo tampoco, por decisión consciente: un login forzado por CSRF
+  no le sirve a un atacante sin la contraseña). **Tampoco lo llevan
+  `etiquetas_imprimir.php`/`ofertas_imprimir.php`**: reciben un POST pero no
+  persisten nada en la base de datos, solo arman una página para imprimir o
+  guardar como PDF — mismo criterio que `precios_fv_imprimir.php`.
+  `AuthController` no extiende `BaseController`;
   `VerPdfController`/`FacturasController` lo extienden solo por
   `exigirPermiso()`; `NegociosController::panel()` usa
   `BaseController::exigirSesion()` (como `HomeController`) porque cualquier
@@ -296,12 +322,14 @@ con `h()`/`e()` en cada salida.
   del panel.
 
 **Para agregar una acción nueva a una pantalla ya migrada**: agregar el método
-al Modelo (envolviendo una función de `lib/pos.php`, `lib/gastos.php` o
-`lib/eleventa.php` si ya existe ahí, o SQL propio si no), el método o rama
-`accion` al Controlador, y el formulario con `campo_csrf()` a la Vista. **Solo
-queda un módulo por migrar: Productos/Herramientas** (el más grande, dejado
-para el final a propósito) — seguir el mismo patrón de estos cortes, descrito
-en detalle en `web/docs/01-plan-migracion.md`.
+al Modelo (envolviendo una función de `lib/pos.php`, `lib/gastos.php`,
+`lib/eleventa.php` o `lib/productos.php` si ya existe ahí, o SQL propio si
+no), el método o rama `accion` al Controlador, y el formulario con
+`campo_csrf()` a la Vista. **La migración a capas terminó** (2026-11-09,
+Fase 18 — Productos/Herramientas, el módulo que quedaba, era el más grande y
+se dejó para el final a propósito): el único código fuera de este patrón son
+los scripts de infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
+`procesar_cortes.php`). Bitácora completa en `web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 
@@ -400,7 +428,14 @@ correcto en el servidor.
 `vendedor`). Incluye el contador de caja, el gestor de etiquetas de precio, el
 creador de etiquetas de oferta y la Base de Datos de Productos. Las páginas
 `*_imprimir.php` son "desnudas" (sin layout) para imprimir limpio vía
-`window.print()`.
+`window.print()`. Último módulo migrado a capas (Fase 18, 2026-11-09): 5
+Controladores (`HerramientasController`, `ProductosController`,
+`EtiquetasController`, `OfertasController`, `CatalogoController`) + un único
+Modelo, `App\Models\Producto` (envuelve `lib/productos.php` para el parseo
+del Excel/estado/búsquedas, SQL propio para el CRUD de un producto y el
+historial de auditoría). `HerramientasController::tablero()/caja()` y
+`OfertasController` no tienen Modelo: no tocan la base de datos (el
+contador de caja y la cola de ofertas calculan todo en el navegador).
 
 **Módulo Gastos** (web-nativo; gastos operacionales del negocio: agua, luz, gas,
 sueldos, arriendo, etc.). **Solo admin** (información financiera del dueño, igual
