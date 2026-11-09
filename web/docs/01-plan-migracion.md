@@ -311,6 +311,46 @@ No se tocó `lib/pos.php`: el POS sigue escribiendo directo en `fiados`/
 leyendo el saldo para el selector "Fiado" — eso es responsabilidad del
 Modelo `Venta`/`PosApiController`, no de `FiadosController`.
 
+## Fase 12 · Gastos (segundo módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Segundo módulo del plan de migración módulo-por-módulo (después de Fiados).
+Cuatro pantallas: `gastos.php` (panel del período + generar gastos fijos del
+mes), `gasto_form.php` (CRUD de un gasto), `categorias_gasto.php` (CRUD de
+categorías), `gastos_fijos.php` (CRUD de plantillas de gasto mensual).
+
+Mismo patrón que Fiados: `App\Controllers\GastosController` (métodos
+`panel()`, `formulario()`, `categorias()`, `fijos()`), vistas en
+`app/views/gastos/`. `App\Models\Gasto` es **mixto** — a diferencia de
+`Cliente`/`PrecioFV` (SQL 100% propio): envuelve `lib/gastos.php` para lo
+que ya existía ahí (categorías, totales/desglose del período, generación
+idempotente de gastos fijos), porque esas funciones las comparten `home.php`
+y `negocio_panel.php` y **no se podían tocar**; usa SQL propio solo para el
+CRUD de gastos/categorías/plantillas, que antes vivía suelto en cada
+pantalla sin una función reutilizable.
+
+Se agregó CSRF a los formularios (el código viejo no lo tenía). Se conservó
+una particularidad del comportamiento original: "Generar gastos fijos del
+mes" no redirige, pinta el resultado en la misma respuesta — se mantuvo así
+a propósito, no es un descuido.
+
+Probado con `scripts/smoke.php` (32/32, sin cambios en la lista de rutas) y
+un script de pruebas funcionales dedicado: CRUD completo de categoría/gasto
+fijo/gasto, generación de fijos con verificación de idempotencia (segunda
+generación no duplica), CSRF, permisos (el rol vendedor no tiene el módulo
+`gastos` en `lib/permisos.php`, así que se verificó que las 4 pantallas y la
+acción `generar_fijos` redirigen igual para ese rol), y limpieza sin dejar
+rastro en la BD. Verificación visual en el navegador.
+
+**Nota aparte, no relacionada con esta migración**: durante las pruebas se
+detectó que el XAMPP local tiene `date.timezone = Europe/Berlin` en vez de
+la zona horaria de Chile — un gasto creado con la fecha "de hoy" quedaba al
+día siguiente según el reloj de PHP. Es una configuración del entorno local
+(`php.ini`), no un bug del código (viejo o nuevo: ambos llaman `date()` de
+la misma forma) — queda pendiente corregir el `php.ini` local si molesta
+para pruebas futuras cerca de la medianoche.
+
 ---
 
 ## Lo que NO cambia en ningún momento

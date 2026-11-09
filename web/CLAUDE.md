@@ -11,14 +11,16 @@ lados puede romperlo sin coordinar con el otro.
 > `servicios.php`, `precios_fv.php`) siguen capas (Router → Controlador → Modelo →
 > Vista, en `app/`) y así están en producción desde el 2026-11-08. **Fiados**
 > (`fiados.php`, `cliente.php`, `cliente_form.php`, `estado_cuenta_imprimir.php`)
-> se sumó después (2026-11-08) como el primer módulo fuera del POS en migrarse —
-> mismo patrón, su propio Controlador y Modelo. **El resto del panel** (facturas,
-> ingresos, gastos, herramientas, negocios, usuarios) sigue siendo PHP plano
-> tradicional — se van migrando módulo por módulo, no todos de una. Ver
-> «Arquitectura del POS (capas)» más abajo para cómo trabajar ahí (el patrón es
-> el mismo para cualquier pantalla ya migrada, sea del POS o no), y
-> `web/docs/01-plan-migracion.md` para la bitácora de la migración original. El
-> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
+> y **Gastos** (`gastos.php`, `gasto_form.php`, `categorias_gasto.php`,
+> `gastos_fijos.php`) se sumaron después (2026-11-08/09) como los primeros
+> módulos fuera del POS en migrarse — mismo patrón, su propio Controlador y
+> Modelo cada uno. **El resto del panel** (facturas, ingresos, herramientas,
+> negocios, usuarios) sigue siendo PHP plano tradicional — se van migrando
+> módulo por módulo, no todos de una. Ver «Arquitectura del POS (capas)» más
+> abajo para cómo trabajar ahí (el patrón es el mismo para cualquier pantalla
+> ya migrada, sea del POS o no), y `web/docs/01-plan-migracion.md` para la
+> bitácora de la migración original. El estándar general que se siguió está en
+> `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -82,12 +84,14 @@ web/
 ├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
-│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados)
+│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
-│   │                      Inventario, Compra) + PrecioFV y Cliente (SQL propio, no envuelven
-│   │                      nada viejo — ver «Arquitectura del POS» más abajo)
+│   │                      Inventario, Compra) + PrecioFV y Cliente (SQL propio) + Gasto
+│   │                      (mixto: envuelve lib/gastos.php para lo que ya existía ahí,
+│   │                      SQL propio para el CRUD que no tenía — ver «Arquitectura del
+│   │                      POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
-│                          promociones/, servicios/, precios_fv/imprimir.php, fiados/)
+│                          promociones/, servicios/, precios_fv/imprimir.php, fiados/, gastos/)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
 │                          producción — las pantallas del POS son archivos puente (ver abajo)
@@ -135,10 +139,11 @@ web/
 ├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron)
 ├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o ?clave=setup_key)
 │
-├── gastos.php           dashboard del módulo Gastos (resumen del período + desglose + tabla)
-├── gasto_form.php       crear/editar/eliminar un gasto
-├── categorias_gasto.php CRUD de categorías de gasto (editables)
-├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes)
+├── gastos.php           dashboard del módulo Gastos (resumen del período + desglose + tabla) —
+│                        puente a App\Controllers\GastosController
+├── gasto_form.php       crear/editar/eliminar un gasto — puente al mismo Controlador
+├── categorias_gasto.php CRUD de categorías de gasto (editables) — puente al mismo Controlador
+├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes) — puente al mismo Controlador
 │
 ├── herramientas.php           tablero del módulo Herramientas (tarjetas)
 ├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso)
@@ -182,10 +187,10 @@ web/
 
 ## Arquitectura del POS (capas)
 
-Las pantallas del POS y, desde el 2026-11-08, las de Fiados son las únicas de
-todo `web/` que siguen el patrón Router → Controlador → Modelo → Vista
-(estándar completo en `web/docs/prompt-migracion-arquitectura.md`). El resto
-del panel NO sigue este patrón todavía — ver el contexto en el banner del
+Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados y Gastos son las
+únicas de todo `web/` que siguen el patrón Router → Controlador → Modelo →
+Vista (estándar completo en `web/docs/prompt-migracion-arquitectura.md`). El
+resto del panel NO sigue este patrón todavía — ver el contexto en el banner del
 principio de este archivo. El nombre de la sección quedó de cuando solo era el
 POS; el patrón que describe aplica igual a cualquier pantalla migrada.
 
@@ -207,16 +212,21 @@ con `h()`/`e()` en cada salida.
   para no mover 1.500 líneas de golpe; significa que **el SQL real del POS sigue
   viviendo en `lib/pos.php`** — para entender o cambiar una regla de negocio del
   POS (cómo se calcula el vuelto, cómo se aplica una promoción, cómo se liquida
-  un convenio), hay que mirar ahí, no en `app/Models/`. **Excepción:**
+  un convenio), hay que mirar ahí, no en `app/Models/`. **Excepciones:**
   `App\Models\PrecioFV` (Frutas y Verduras) y `App\Models\Cliente` (Fiados)
   tienen su SQL propio — no envuelven nada de `lib/pos.php` porque no existía
   código viejo de POS para esas pantallas (Frutas y Verduras venía de su
   propio módulo, reescrito desde cero a pedido del dueño; Fiados nunca tuvo
-  equivalente en el POS).
+  equivalente en el POS). `App\Models\Gasto` es **mixto**: envuelve
+  `lib/gastos.php` para lo que ya existía ahí (categorías, totales/desglose
+  del período, generación de gastos fijos — esas funciones las comparte con
+  `home.php` y `negocio_panel.php`, así que `lib/gastos.php` NO se tocó), y
+  usa SQL propio para el CRUD de gastos/categorías/plantillas que antes vivía
+  suelto dentro de cada pantalla.
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
-  POST) existe **solo en las pantallas migradas** (POS + Fiados) — es el
-  hallazgo H3 de la auditoría, cerrado pantalla por pantalla durante la
-  migración original y extendido a Fiados en su propio corte. El resto del
+  POST) existe **solo en las pantallas migradas** (POS + Fiados + Gastos) — es
+  el hallazgo H3 de la auditoría, cerrado pantalla por pantalla durante la
+  migración original y extendido módulo por módulo después. El resto del
   panel todavía no lo tiene. La mayoría lo valida vía
   `BaseController::verificarCsrf()`; `pos_api.php` y `precios_fv.php` no
   extienden `BaseController` (responden JSON/multipart, no redirigen) y
@@ -238,13 +248,12 @@ con `h()`/`e()` en cada salida.
   del panel.
 
 **Para agregar una acción nueva a una pantalla ya migrada**: agregar el método
-al Modelo (envolviendo una función de `lib/pos.php` si es del POS, o SQL propio
-si es de un módulo como Fiados o Frutas y Verduras), el método o rama `accion`
-al Controlador, y el formulario con `campo_csrf()` a la Vista. **Para migrar
-una pantalla nueva del panel** (el próximo candidato, a decidir con el dueño:
-Ingresos, Gastos, Negocios, Productos/Herramientas, Facturas, Usuarios o
-Sistema): seguir el mismo patrón de estos cortes, descrito en detalle en
-`web/docs/01-plan-migracion.md`.
+al Modelo (envolviendo una función de `lib/pos.php` o `lib/gastos.php` si ya
+existe ahí, o SQL propio si no), el método o rama `accion` al Controlador, y el
+formulario con `campo_csrf()` a la Vista. **Para migrar una pantalla nueva del
+panel** (el próximo candidato, a decidir con el dueño: Ingresos, Negocios,
+Productos/Herramientas, Facturas, Usuarios o Sistema): seguir el mismo patrón
+de estos cortes, descrito en detalle en `web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 
@@ -341,7 +350,15 @@ creador de etiquetas de oferta y la Base de Datos de Productos. Las páginas
 
 **Módulo Gastos** (web-nativo; gastos operacionales del negocio: agua, luz, gas,
 sueldos, arriendo, etc.). **Solo admin** (información financiera del dueño, igual
-que Ingresos). Acotado por `negocios_visibles()`. Helpers en `lib/gastos.php`.
+que Ingresos). Acotado por `negocios_visibles()`. Segundo módulo fuera del POS
+migrado a capas (2026-11-09): `gastos.php`/`gasto_form.php`/
+`categorias_gasto.php`/`gastos_fijos.php` son puentes a
+`App\Controllers\GastosController` (métodos `panel()`, `formulario()`,
+`categorias()`, `fijos()`), con `App\Models\Gasto` y las vistas en
+`app/views/gastos/`. `lib/gastos.php` sigue existiendo y NO se tocó —
+`home.php` y `negocio_panel.php` llaman sus funciones directo (sin pasar por
+el Controlador), y `App\Models\Gasto` envuelve esas mismas funciones para el
+panel migrado (ver «Arquitectura del POS» más arriba, sección de Modelos).
 - **`categorias_gasto`** — catálogo editable de tipos de gasto (`nombre` UNIQUE,
   `activo`, `orden`). **Compartido entre negocios** (el dueño es uno). Se siembra con
   categorías base (Agua, Luz, Gas, Sueldos, Arriendo, Internet/Teléfono, Mantención,
@@ -353,8 +370,12 @@ que Ingresos). Acotado por `negocios_visibles()`. Helpers en `lib/gastos.php`.
 - **`gastos_fijos`** — plantillas de gasto mensual recurrente (`negocio_id`,
   `categoria_id`, `descripcion`, `monto_estimado`, `dia_mes`, `activo`). CRUD en
   `gastos_fijos.php`. **Recurrencia sin cron**: el botón "Generar gastos fijos del
-  mes" en `gastos.php` llama `registrar_gastos_fijos()`, que inserta un `gasto` por
+  mes" en `gastos.php` llama `App\Models\Gasto::generarFijosDelMes()`
+  (envoltorio de `registrar_gastos_fijos()`), que inserta un `gasto` por
   plantilla activa que aún no tenga uno este mes (idempotente: no duplica).
+  **Nota de UX conservada del código viejo**: esta acción NO redirige — pinta
+  el mensaje de resultado en la misma respuesta (200), a diferencia de las
+  demás acciones del Controlador que sí redirigen tras guardar.
 
 El **Home** muestra "Gastos del mes" (reemplazó a "Por cobrar") y suma los gastos en
 la grilla "Estado por negocio". El dashboard de Gastos compara ventas (de `cortes`)
