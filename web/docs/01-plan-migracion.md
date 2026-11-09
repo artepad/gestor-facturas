@@ -410,6 +410,39 @@ verificó la firma `%PDF` de la respuesta) y el filtro de acceso por
 negocio. Verificación visual en el navegador (pantalla de login y tablero
 de inicio completo, con sus alertas de "Requiere atención").
 
+## Fase 14 · Usuarios (cuarto módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Cuarto módulo del plan módulo-por-módulo. Una sola pantalla (`usuarios.php`):
+listado, crear/editar (con PIN opcional de la caja y asignación de
+negocios), eliminar. `App\Controllers\UsuariosController` (un solo método
+`index()`, mismo patrón que `GastosController::fijos()`: lista y formulario
+en la misma pantalla, según haya o no `?editar=N`) + `App\Models\Usuario`
+(SQL propio, sin equivalente previo en ningún `lib/*.php`).
+
+Se preservaron intactas las dos salvaguardas del código viejo (no se
+tocaron, solo se migraron tal cual): no dejar el sistema sin ningún
+administrador (al degradar de rol o al eliminar) y no poder eliminarse a
+uno mismo. Se agregó CSRF a los dos formularios (crear/editar y eliminar).
+
+**Nota de comportamiento conservada**: igual que `gastos.php` con
+"Generar gastos fijos del mes", guardar o eliminar un usuario **no
+redirige** — la pantalla responde 200 con el mensaje ("Usuario guardado."/
+"Usuario eliminado.") pintado en la misma respuesta. Es el comportamiento
+del código viejo (nunca tuvo un `header('Location:...')` en esta pantalla),
+no una regresión de la migración.
+
+Probado con `scripts/smoke.php` (32/32) y un script de pruebas funcionales
+dedicado: CSRF, crear usuario con PIN y negocio asignado, contraseña corta,
+correo duplicado, editar sin tocar la contraseña (se verificó que el hash
+no cambia), promover a admin (pierde sus negocios asignados — un admin ve
+todos), degradar un admin que NO es el último, intento de auto-eliminación,
+permisos (el rol vendedor no tiene el módulo `usuarios`), y una prueba
+aislada adicional que confirmó, contra el único admin real de la base de
+datos local, que degradarlo se rechaza y su rol queda intacto. Verificación
+visual en el navegador (listado y formulario de creación).
+
 ---
 
 ## Lo que NO cambia en ningún momento

@@ -12,15 +12,16 @@ lados puede romperlo sin coordinar con el otro.
 > Vista, en `app/`) y así están en producción desde el 2026-11-08. **Fiados**
 > (`fiados.php`, `cliente.php`, `cliente_form.php`, `estado_cuenta_imprimir.php`),
 > **Gastos** (`gastos.php`, `gasto_form.php`, `categorias_gasto.php`,
-> `gastos_fijos.php`) y **Sistema** (`login.php`, `logout.php`, `home.php`,
-> `ver_pdf.php`) se sumaron después (2026-11-08/09) — mismo patrón, su propio
-> Controlador y Modelo cada uno. **El resto del panel** (facturas, ingresos,
-> herramientas, negocios, usuarios) sigue siendo PHP plano tradicional — se van
-> migrando módulo por módulo, no todos de una. Ver «Arquitectura del POS
-> (capas)» más abajo para cómo trabajar ahí (el patrón es el mismo para
-> cualquier pantalla ya migrada, sea del POS o no), y
-> `web/docs/01-plan-migracion.md` para la bitácora de la migración original. El
-> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
+> `gastos_fijos.php`), **Sistema** (`login.php`, `logout.php`, `home.php`,
+> `ver_pdf.php`) y **Usuarios** (`usuarios.php`) se sumaron después
+> (2026-11-08/09) — mismo patrón, su propio Controlador y Modelo cada uno.
+> **El resto del panel** (facturas, ingresos, herramientas, negocios) sigue
+> siendo PHP plano tradicional — se van migrando módulo por módulo, no todos
+> de una. Ver «Arquitectura del POS (capas)» más abajo para cómo trabajar ahí
+> (el patrón es el mismo para cualquier pantalla ya migrada, sea del POS o
+> no), y `web/docs/01-plan-migracion.md` para la bitácora de la migración
+> original. El estándar general que se siguió está en
+> `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -84,16 +85,18 @@ web/
 ├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
-│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos + Sistema)
+│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos +
+│   │                      Sistema + Usuarios)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
 │   │                      Inventario, Compra) + PrecioFV y Cliente (SQL propio) + Gasto
 │   │                      (mixto: envuelve lib/gastos.php para lo que ya existía ahí,
-│   │                      SQL propio para el CRUD que no tenía) + Home y Factura
-│   │                      (SQL propio, Factura solo trae lo que necesita ver_pdf —
+│   │                      SQL propio para el CRUD que no tenía) + Home, Factura y Usuario
+│   │                      (SQL propio; Factura solo trae lo que necesita ver_pdf —
 │   │                      ver «Arquitectura del POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
 │                          promociones/, servicios/, precios_fv/imprimir.php, fiados/,
-│                          gastos/, auth/, home/). ver_pdf.php no tiene vista (responde el PDF directo)
+│                          gastos/, auth/, home/, usuarios/). ver_pdf.php no tiene vista
+│                          (responde el PDF directo)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
 │                          producción — las pantallas del POS son archivos puente (ver abajo)
@@ -166,7 +169,8 @@ web/
 ├── negocios.php         lista de negocios (tarjetas)
 ├── negocio_form.php     crear/editar perfil de negocio (nombre, rut, teléfono, dirección, correo)
 ├── negocio_tokens.php   gestión de máquinas/tokens de un negocio
-├── usuarios.php         CRUD de usuarios + asignación de negocios (solo admin)
+├── usuarios.php         CRUD de usuarios + asignación de negocios (solo admin) —
+│                        puente a App\Controllers\UsuariosController
 │
 ├── almacen_pdf/         PDFs sincronizados, organizados en subcarpetas por negocio_id. Bloqueado por .htaccess
 ├── respaldos_pdf/       zips de respaldo de almacen_pdf/ (scripts/respaldo_pdfs.php). Bloqueado por .htaccess
@@ -191,8 +195,8 @@ web/
 
 ## Arquitectura del POS (capas)
 
-Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados, Gastos y
-Sistema son las únicas de todo `web/` que siguen el patrón Router →
+Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados, Gastos,
+Sistema y Usuarios son las únicas de todo `web/` que siguen el patrón Router →
 Controlador → Modelo → Vista (estándar completo en
 `web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
 patrón todavía — ver el contexto en el banner del principio de este archivo.
@@ -227,14 +231,15 @@ con `h()`/`e()` en cada salida.
   del período, generación de gastos fijos — esas funciones las comparte con
   `home.php` y `negocio_panel.php`, así que `lib/gastos.php` NO se tocó), y
   usa SQL propio para el CRUD de gastos/categorías/plantillas que antes vivía
-  suelto dentro de cada pantalla. `App\Models\Home` y `App\Models\Factura`
-  (Sistema) también son SQL propio — no hay nada en `lib/` que envolver para
-  el tablero de inicio, y `Factura::paraPdf()` solo trae lo mínimo que
-  necesita `ver_pdf.php` (el módulo Facturas completo aún no está migrado).
+  suelto dentro de cada pantalla. `App\Models\Home`, `App\Models\Factura`
+  (Sistema) y `App\Models\Usuario` también son SQL propio — no hay nada en
+  `lib/` que envolver para el tablero de inicio ni para la gestión de
+  usuarios, y `Factura::paraPdf()` solo trae lo mínimo que necesita
+  `ver_pdf.php` (el módulo Facturas completo aún no está migrado).
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
-  POST) existe **solo en las pantallas migradas** (POS + Fiados + Gastos) — es
-  el hallazgo H3 de la auditoría, cerrado pantalla por pantalla durante la
-  migración original y extendido módulo por módulo después. El resto del
+  POST) existe **solo en las pantallas migradas** (POS + Fiados + Gastos +
+  Usuarios) — es el hallazgo H3 de la auditoría, cerrado pantalla por pantalla
+  durante la migración original y extendido módulo por módulo después. El resto del
   panel todavía no lo tiene. La mayoría lo valida vía
   `BaseController::verificarCsrf()`; `pos_api.php` y `precios_fv.php` no
   extienden `BaseController` (responden JSON/multipart, no redirigen) y
@@ -266,8 +271,8 @@ al Modelo (envolviendo una función de `lib/pos.php` o `lib/gastos.php` si ya
 existe ahí, o SQL propio si no), el método o rama `accion` al Controlador, y el
 formulario con `campo_csrf()` a la Vista. **Para migrar una pantalla nueva del
 panel** (el próximo candidato, a decidir con el dueño: Ingresos, Negocios,
-Productos/Herramientas, Facturas o Usuarios): seguir el mismo patrón de estos
-cortes, descrito en detalle en `web/docs/01-plan-migracion.md`.
+Productos/Herramientas o Facturas): seguir el mismo patrón de estos cortes,
+descrito en detalle en `web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 
@@ -538,8 +543,10 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
   módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
   en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.
-- Cada página protegida llama **`exigir_permiso('modulo')`** (en `permisos.php`):
-  `exigir_login()` + chequea la matriz; si no tiene el permiso redirige a `home.php`.
+- Cada página protegida llama **`exigir_permiso('modulo')`** (en `permisos.php`,
+  directo en el código viejo o vía `BaseController::exigirPermiso()` en las
+  pantallas migradas — por dentro es la misma función): `exigir_login()` +
+  chequea la matriz; si no tiene el permiso redirige a `home.php`.
   `exigir_admin()` queda para chequeos puntuales "solo admin".
 - **Alcance por negocio** se mantiene: `negocios_visibles($usuario)` (admin = todos;
   cualquier otro rol = asignados en `usuario_negocio`) y `puede_ver_negocio()`.
@@ -548,6 +555,8 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
   sirvas datos de un negocio que el usuario no puede ver.
 - `usuarios.php` solo admin (`exigir_permiso('usuarios')`); incluye salvaguarda de
   **no dejar el sistema sin ningún administrador** (al cambiar rol o eliminar).
+  Migrado a capas (2026-11-09): `App\Controllers\UsuariosController` +
+  `App\Models\Usuario`, SQL propio (sin equivalente previo en `lib/`).
 
 ## Convenciones importantes
 
