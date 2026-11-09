@@ -14,13 +14,15 @@ lados puede romperlo sin coordinar con el otro.
 > **Gastos** (`gastos.php`, `gasto_form.php`, `categorias_gasto.php`,
 > `gastos_fijos.php`), **Sistema** (`login.php`, `logout.php`, `home.php`,
 > `ver_pdf.php`), **Usuarios** (`usuarios.php`), **Facturas**
-> (`panel_facturas.php`, `factura.php`) y **Negocios** (`negocios.php`,
-> `negocio_form.php`, `negocio_tokens.php`, `negocio_panel.php`) se sumaron
-> después (2026-11-08/09) — mismo patrón, su propio Controlador y Modelo cada
-> uno. **El resto del panel** (ingresos, herramientas) sigue siendo PHP plano
-> tradicional — se van migrando módulo por módulo, no todos de una. Ver
-> «Arquitectura del POS (capas)» más abajo para cómo trabajar ahí (el patrón
-> es el mismo para cualquier pantalla ya migrada, sea del POS o no), y
+> (`panel_facturas.php`, `factura.php`), **Negocios** (`negocios.php`,
+> `negocio_form.php`, `negocio_tokens.php`, `negocio_panel.php`) e
+> **Ingresos** (`ingresos.php`, `corte.php`, `corte_pegar.php` — NO
+> `procesar_cortes.php`, ver nota en ese archivo) se sumaron después
+> (2026-11-08/09) — mismo patrón, su propio Controlador y Modelo cada uno.
+> **Solo queda Herramientas** en PHP plano tradicional — el módulo más
+> grande, dejado para el final a propósito. Ver «Arquitectura del POS
+> (capas)» más abajo para cómo trabajar ahí (el patrón es el mismo para
+> cualquier pantalla ya migrada, sea del POS o no), y
 > `web/docs/01-plan-migracion.md` para la bitácora de la migración original. El
 > estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
 
@@ -87,15 +89,16 @@ web/
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
 │   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos +
-│   │                      Sistema + Usuarios + Facturas + Negocios)
+│   │                      Sistema + Usuarios + Facturas + Negocios + Ingresos)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
 │   │                      Inventario, Compra) + PrecioFV, Cliente, Home, Usuario, Factura
-│   │                      y Negocio (SQL propio) + Gasto (mixto: envuelve lib/gastos.php
-│   │                      para lo que ya existía ahí, SQL propio para el CRUD que no
-│   │                      tenía — ver «Arquitectura del POS» más abajo)
+│   │                      y Negocio (SQL propio) + Gasto y Corte (mixtos: envuelven
+│   │                      lib/gastos.php y lib/eleventa.php respectivamente para lo que
+│   │                      ya existía ahí, SQL propio para el resto — ver «Arquitectura
+│   │                      del POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
 │                          promociones/, servicios/, precios_fv/imprimir.php, fiados/,
-│                          gastos/, auth/, home/, usuarios/, facturas/, negocios/).
+│                          gastos/, auth/, home/, usuarios/, facturas/, negocios/, ingresos/).
 │                          ver_pdf.php no tiene vista (responde el PDF directo)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
@@ -144,10 +147,17 @@ web/
 ├── cliente.php          ficha del cliente: saldo + registrar fiados/abonos + historial — puente al mismo Controlador
 ├── estado_cuenta_imprimir.php  estado de cuenta del cliente en PDF — puente al mismo Controlador
 │
-├── ingresos.php         dashboard del módulo Ingresos (cortes de caja de Eleventa)
-├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original)
-├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron)
-├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o ?clave=setup_key)
+├── ingresos.php         dashboard del módulo Ingresos (cortes de caja de Eleventa) —
+│                        puente a App\Controllers\IngresosController
+├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original) —
+│                        puente al mismo Controlador
+├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron) —
+│                        puente al mismo Controlador
+├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o
+│                        ?clave=setup_key). Fuera de la migración a capas a propósito: no es
+│                        una pantalla de sesión, no renderiza nada (solo texto plano) — mismo
+│                        criterio que api/facturas.php o migrar.php. Sigue llamando
+│                        lib/eleventa.php directo, igual que antes
 │
 ├── gastos.php           dashboard del módulo Gastos (resumen del período + desglose + tabla) —
 │                        puente a App\Controllers\GastosController
@@ -200,8 +210,9 @@ web/
 ## Arquitectura del POS (capas)
 
 Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados, Gastos,
-Sistema, Usuarios, Facturas y Negocios son las únicas de todo `web/` que
-siguen el patrón Router → Controlador → Modelo → Vista (estándar completo en
+Sistema, Usuarios, Facturas, Negocios e Ingresos son las únicas de todo
+`web/` que siguen el patrón Router → Controlador → Modelo → Vista (estándar
+completo en
 `web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
 patrón todavía — ver el contexto en el banner del principio de este archivo.
 El nombre de la sección quedó de cuando solo era el POS; el patrón que
@@ -243,19 +254,25 @@ con `h()`/`e()` en cada salida.
   completó al migrar el módulo Facturas — ver Fase 15 en el plan) ni los
   negocios. `Negocio` reutiliza `Home::ventasPorDia()`/`comprasPorNegocio()`
   y `Gasto::totalPeriodo()`/`porCategoria()` en vez de duplicar esas
-  consultas para `negocio_panel.php`.
+  consultas para `negocio_panel.php`. `App\Models\Corte` (Ingresos) es
+  **mixto**, mismo criterio que `Gasto`: envuelve `lib/eleventa.php` solo
+  para `procesar_correo_corte()` (el parser del correo de Eleventa — NO se
+  toca, lo sigue usando también `procesar_cortes.php`, que quedó fuera de
+  esta migración), y SQL propio para todo lo demás (el dashboard, el
+  detalle de un corte, el registro manual).
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
   POST) existe **solo en las pantallas migradas que tienen formularios**
-  (POS + Fiados + Gastos + Usuarios + Negocios, salvo `negocio_panel.php` que
-  es de solo lectura) — es el hallazgo H3 de la auditoría, cerrado pantalla
-  por pantalla durante la migración original y extendido módulo por módulo
-  después. El resto del panel todavía no lo tiene. La mayoría lo valida vía
-  `BaseController::verificarCsrf()`; `pos_api.php` y `precios_fv.php` no
-  extienden `BaseController` (responden JSON/multipart, no redirigen) y
-  llaman `Session::csrfValido()` directo. **Las pantallas de solo lectura no
-  llevan CSRF** (`login.php`/`logout.php`/`ver_pdf.php`/`panel_facturas.php`/
-  `factura.php`/`negocio_panel.php`: nada que proteger, no hay formularios
-  con estado — login no tenía CSRF en el código viejo tampoco, por decisión
+  (POS + Fiados + Gastos + Usuarios + Negocios + Ingresos, salvo
+  `negocio_panel.php` que es de solo lectura) — es el hallazgo H3 de la
+  auditoría, cerrado pantalla por pantalla durante la migración original y
+  extendido módulo por módulo después. El resto del panel todavía no lo
+  tiene. La mayoría lo valida vía `BaseController::verificarCsrf()`;
+  `pos_api.php` y `precios_fv.php` no extienden `BaseController` (responden
+  JSON/multipart, no redirigen) y llaman `Session::csrfValido()` directo.
+  **Las pantallas de solo lectura no llevan CSRF**
+  (`login.php`/`logout.php`/`ver_pdf.php`/`panel_facturas.php`/`factura.php`/
+  `negocio_panel.php`/`corte.php`: nada que proteger, no hay formularios con
+  estado — login no tenía CSRF en el código viejo tampoco, por decisión
   consciente: un login forzado por CSRF no le sirve a un atacante sin la
   contraseña). `AuthController` no extiende `BaseController`;
   `VerPdfController`/`FacturasController` lo extienden solo por
@@ -279,12 +296,12 @@ con `h()`/`e()` en cada salida.
   del panel.
 
 **Para agregar una acción nueva a una pantalla ya migrada**: agregar el método
-al Modelo (envolviendo una función de `lib/pos.php` o `lib/gastos.php` si ya
-existe ahí, o SQL propio si no), el método o rama `accion` al Controlador, y el
-formulario con `campo_csrf()` a la Vista. **Para migrar una pantalla nueva del
-panel** (el próximo candidato, a decidir con el dueño: Ingresos o
-Productos/Herramientas — el último que queda grande): seguir el mismo patrón
-de estos cortes, descrito en detalle en `web/docs/01-plan-migracion.md`.
+al Modelo (envolviendo una función de `lib/pos.php`, `lib/gastos.php` o
+`lib/eleventa.php` si ya existe ahí, o SQL propio si no), el método o rama
+`accion` al Controlador, y el formulario con `campo_csrf()` a la Vista. **Solo
+queda un módulo por migrar: Productos/Herramientas** (el más grande, dejado
+para el final a propósito) — seguir el mismo patrón de estos cortes, descrito
+en detalle en `web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 
@@ -344,7 +361,13 @@ todas las acciones del módulo Fiados (crear/editar/eliminar fiado, abono y clie
 Sin página de consulta todavía (se puede agregar una vista admin a futuro).
 
 **Módulo Ingresos** (web-nativo; los datos llegan por el correo de corte de
-Eleventa, NO por la sincronización de facturas):
+Eleventa, NO por la sincronización de facturas). Séptimo módulo fuera del
+POS migrado a capas (2026-11-09): `ingresos.php`/`corte.php`/
+`corte_pegar.php` son puentes a `App\Controllers\IngresosController`
+(métodos `panel()`, `detalle()`, `pegar()`), con `App\Models\Corte` y las
+vistas en `app/views/ingresos/`. `procesar_cortes.php` (el worker de
+cron/IMAP, más abajo) quedó fuera, a propósito — ver su entrada en el árbol
+de archivos más arriba.
 - **`correos_corte`** — cada correo crudo recibido (`cuerpo` MEDIUMTEXT,
   `message_id` UNIQUE para idempotencia, `origen` imap|manual, `estado`
   pendiente|procesado|error). Se guarda SIEMPRE el crudo: si Eleventa cambia el

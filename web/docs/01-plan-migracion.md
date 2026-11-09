@@ -519,6 +519,54 @@ pantallas de admin, pero con acceso a `negocio_panel.php` de sus propios
 negocios y bloqueado en los ajenos). Verificación visual en el navegador
 (listado, panel de análisis y tokens, los tres con datos reales).
 
+## Fase 17 · Ingresos (séptimo módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Séptimo módulo del plan módulo-por-módulo. Tres de las cuatro pantallas se
+migraron: `ingresos.php` (dashboard: filtros, resumen con comparativa
+contra el período anterior, evolución diaria, rendimiento por cajero, tabla
+de cortes, y el aviso plegable de correos sin procesar con su botón
+"Descartar"), `corte.php` (detalle completo de un corte: dinero en caja,
+ventas por medio de pago, movimientos, departamentos y el correo original)
+y `corte_pegar.php` (registrar un corte pegando el texto del correo a
+mano). `App\Controllers\IngresosController` (`panel()`, `detalle()`,
+`pegar()`) + `App\Models\Corte`.
+
+**Decisión de alcance — `procesar_cortes.php` queda fuera**: es el worker
+que corre por cron cada 10 minutos (o a mano con `?clave=setup_key`) leyendo
+la casilla IMAP de cortes. No tiene sesión, no usa `exigir_permiso()`, no
+renderiza una pantalla del panel (solo texto plano de diagnóstico) — es más
+parecido a `api/facturas.php` (el endpoint de sincronización) o a
+`migrar.php` que a una pantalla que un usuario abre con el navegador. Por
+eso no se le aplicó el patrón Router→Controlador→Modelo→Vista; sigue
+llamando `lib/eleventa.php` directo, exactamente como antes. Esto es
+consistente con el resto del proyecto: ninguno de esos scripts de
+infraestructura se ha migrado, solo las pantallas de sesión.
+
+`App\Models\Corte` sigue el mismo criterio que `Gasto`: envuelve
+`lib/eleventa.php` únicamente para `procesar_correo_corte()` (el parser
+completo del correo de Eleventa, que NO se tocó — lo sigue usando también
+`procesar_cortes.php`), y usa SQL propio para todo lo demás (las consultas
+del dashboard, el detalle de un corte y el alta/actualización del correo
+pegado a mano, que antes vivían sueltas en cada pantalla).
+
+Se agregó CSRF a los dos formularios con escritura (`corte_pegar.php` y el
+botón "Descartar" de `ingresos.php`); `corte.php` es de solo lectura.
+
+Probado con `scripts/smoke.php` (32/32) y un script de pruebas funcionales
+dedicado que registró un corte real pegando un correo de Eleventa de
+ejemplo (con cajero, departamento y un movimiento de salida) y verificó
+contra la base de datos que los montos (ventas totales, salidas, número de
+ventas) quedaron exactamente como el correo los traía; probó la
+deduplicación por hash del contenido (pegar el mismo correo dos veces no
+crea una segunda fila en `correos_corte`); CSRF; validaciones (negocio
+inválido, cuerpo vacío); que el corte recién creado aparece en el listado
+filtrado por fecha y por cajero; el detalle de ese corte (incluido que
+indica "pegado a mano"); un corte inexistente; descartar un correo con
+error; y permisos (el rol vendedor no tiene el módulo `ingresos`).
+Verificación visual en el navegador (dashboard y detalle con datos reales).
+
 ---
 
 ## Lo que NO cambia en ningún momento
