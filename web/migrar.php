@@ -326,7 +326,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS precios_fv (
 echo "  ~ tabla precios_fv lista\n";
 
 echo "\n[Modulo Ventas / POS]\n";
-// Etapa 1 del POS (ver web/POS_DISENO.md). Solo agrega: no toca datos ni
+// Etapa 1 del POS (ver web/docs/POS_DISENO.md). Solo agrega: no toca datos ni
 // tablas existentes. Las columnas de stock quedan en 0 y sin usar hasta que
 // se active el control de inventario (Etapa 4).
 agregar_columna($pdo, 'negocios',  'control_stock', "TINYINT(1) NOT NULL DEFAULT 0");
@@ -499,7 +499,7 @@ foreach ($tablasPos as $nombre => $ddl) {
 echo "\n[Catalogo compartido entre negocios]\n";
 // A DIFERENCIA DEL RESTO DE ESTE ARCHIVO, este bloque NO es solo aditivo:
 // deduplica filas y quita la columna negocio_id de `productos`. Ver
-// POS_DISENO.md 7.1. Antes de tocar nada verifica que los catalogos de los
+// docs/POS_DISENO.md 7.1. Antes de tocar nada verifica que los catalogos de los
 // negocios sean identicos; si NO lo son, ABORTA el bloque sin cambiar nada y
 // muestra las diferencias para que el usuario decida.
 if (!tiene_columna($pdo, 'productos', 'negocio_id')) {
@@ -524,7 +524,7 @@ if (!tiene_columna($pdo, 'productos', 'negocio_id')) {
         }
         if (count($difs) > 20) echo "       ... y " . (count($difs) - 20) . " mas\n";
     } else {
-        // 1. Stock por negocio (el stock NUNCA se comparte: ver POS_DISENO.md 7.1).
+        // 1. Stock por negocio (el stock NUNCA se comparte: ver docs/POS_DISENO.md 7.1).
         $pdo->exec("CREATE TABLE IF NOT EXISTS producto_stock (
             producto_id INT NOT NULL,
             negocio_id INT NOT NULL,
@@ -605,7 +605,7 @@ try {
 
 echo "\n[Promociones]\n";
 // Promociones automaticas que el POS aplica solo al vender (ej. "4 x $1.000").
-// Ver POS_DISENO.md. Idempotente.
+// Ver docs/POS_DISENO.md. Idempotente.
 $pdo->exec("CREATE TABLE IF NOT EXISTS promociones (
     id INT AUTO_INCREMENT PRIMARY KEY,
     negocio_id INT NULL,
@@ -636,7 +636,7 @@ echo "
 ";
 // PIN corto para desbloquear la caja en el propio equipo, util cuando el PC
 // arranca sin internet. NO reemplaza la contrasena: es un cerrojo local para
-// que otra persona no use la caja que quedo abierta. Ver POS_DISENO.md 3D.
+// que otra persona no use la caja que quedo abierta. Ver docs/POS_DISENO.md 3D.
 agregar_columna($pdo, 'usuarios', 'pin_hash', "VARCHAR(64) NULL");
 
 echo "\n[Inventario]\n";
@@ -756,7 +756,7 @@ agregar_columna($pdo, 'compras',       'actualizado_en', "TIMESTAMP NULL DEFAULT
 agregar_columna($pdo, 'ventas',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
 echo "\n[Frutas y Verduras: imagen del producto + mudanza a la ventana de Venta]\n";
-// La pantalla se movio adentro de Ventas (ver POS_DISENO.md y CLAUDE.md);
+// La pantalla se movio adentro de Ventas (ver docs/POS_DISENO.md y CLAUDE.md);
 // esta columna guarda la ruta relativa de la foto subida (uploads/precios_fv/).
 agregar_columna($pdo, 'precios_fv', 'imagen', "VARCHAR(255) NULL AFTER unidad");
 

@@ -15,8 +15,10 @@ web/almacen_pdf/*
 !web/almacen_pdf/.htaccess
 config.yaml
 
-# Servidor web: registro de errores del esqueleto nuevo (app/bootstrap.php)
-web/logs_app.log
+# Servidor web: registro de errores (app/bootstrap.php y lib/db.php)
+web/logs/*
+!web/logs/.htaccess
+!web/logs/.gitkeep
 
 # Servidor web: respaldos de PDF generados por scripts/respaldo_pdfs.php
 web/respaldos_pdf/*

@@ -8,7 +8,7 @@ use PDO;
 
 /**
  * Facturas (espejo de las sincronizadas desde la app de escritorio — la
- * fuente de verdad es la BD local de cada PC, ver CONTRATO.md). SQL propio,
+ * fuente de verdad es la BD local de cada PC, ver docs/CONTRATO.md). SQL propio,
  * sin equivalente previo en ningún lib/*.php (vivía suelto en
  * panel_facturas.php y factura.php) — mismo criterio que App\Models\Cliente.
  */

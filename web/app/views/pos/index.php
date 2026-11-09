@@ -24,7 +24,7 @@ $rutaWeb = dirname(__DIR__, 3);
 <title>Venta · <?= h($sesion['negocio_nombre']) ?></title>
 <link rel="stylesheet" href="assets/estilo.css?v=<?= @filemtime($rutaWeb . '/assets/estilo.css') ?>">
 <!-- La caja se puede "instalar" como aplicación: abre en su propia ventana,
-     sin barra de direcciones. Ver INSTALAR_POS.md -->
+     sin barra de direcciones. Ver docs/INSTALAR_POS.md -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0d9488">
 <link rel="icon" type="image/svg+xml" href="assets/pos-icono.svg">
@@ -485,7 +485,7 @@ function toast(msg, malo) {
 // ================= Copia local del catálogo =================
 // La caja guarda todo el catálogo en el propio PC (IndexedDB) para que
 // escanear sea instantáneo y para poder vender aunque se caiga internet.
-// Ver POS_DISENO.md (Etapa 3).
+// Ver docs/POS_DISENO.md (Etapa 3).
 
 var DB_NOMBRE = 'minimark-pos', DB_VERSION = 2;
 var catalogo = [];          // productos en memoria (búsqueda instantánea)
@@ -1693,7 +1693,7 @@ function accion(a) {
 
 // ---------- Teclado (el corazón de la velocidad) ----------
 // F12 y F1 los reserva el navegador y NO se pueden interceptar desde una
-// página normal: por eso el POS se abre en modo kiosco/app (ver POS_DISENO.md)
+// página normal: por eso el POS se abre en modo kiosco/app (ver docs/POS_DISENO.md)
 // y además se deja el + del teclado numérico como alternativa garantizada.
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') { if (modalActivo) { e.preventDefault(); cerrarModal(); } return; }

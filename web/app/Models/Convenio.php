@@ -7,7 +7,7 @@ use App\Core\Database;
 
 /**
  * Convenios (Klap y otros): pago de cuentas de terceros desde la caja. Ver
- * POS_DISENO.md 7.7 — la plata NO es venta propia, solo la comisión.
+ * docs/POS_DISENO.md 7.7 — la plata NO es venta propia, solo la comisión.
  * Corte 2b de la Fase 6: envoltorio sobre lib/pos.php (mismo criterio que
  * el resto de los Modelos del POS).
  */

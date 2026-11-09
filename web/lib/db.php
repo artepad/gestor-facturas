@@ -17,7 +17,7 @@ if (!defined('MINIMARK_ERRORES_CONFIGURADOS')) {
     $esProduccion = !in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost'], true)
         && !str_starts_with($_SERVER['HTTP_HOST'] ?? '', '127.0.0.1');
     ini_set('log_errors', '1');
-    ini_set('error_log', __DIR__ . '/../logs_app.log');
+    ini_set('error_log', __DIR__ . '/../logs/app.log');
     ini_set('display_errors', $esProduccion ? '0' : '1');
     error_reporting(E_ALL);
 

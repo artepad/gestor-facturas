@@ -682,9 +682,12 @@ pedida explícitamente por el dueño al ver la carpeta en el editor
    ve el navegador no cambia. Los archivos reales (CSS, `uploads/`,
    `api/facturas.php`, `migrar.php`, `procesar_cortes.php`, `config.php`)
    siguen sirviéndose directo, nunca pasan por el Router.
-6. Se borraron los ~45 archivos puente de la raíz (`git rm`). Quedan como
-   archivos reales en `web/`: `index.php`, `config.php`,
-   `config.ejemplo.php`, `migrar.php`, `procesar_cortes.php` — nada más.
+6. Se borraron los ~45 archivos puente de la raíz (`git rm`) — ninguna
+   pantalla quedó con un archivo físico propio. En la raíz de `web/`
+   siguieron existiendo los archivos que nunca fueron pantallas
+   (`config.php`, `.htaccess`, `sw.js`, `manifest.webmanifest`,
+   `migrar.php`, `procesar_cortes.php`, `CLAUDE.md`, varios `.md`) — esos
+   se ordenaron después, en la Fase 20.
 
 **Ninguna URL cambió.** `admin.minimark.cl/herramienta_caja.php` sigue
 siendo exactamente esa dirección; lo único que cambió es que ya no hay un
@@ -712,6 +715,72 @@ idénticos).
   turno abierto de verdad) y la pantalla de Venta en modo kiosco (sin
   sidebar, con su propio CSS/JS, candado por PIN) — todas renderizan
   idéntico a como lo hacían con los archivos puente.
+
+## Fase 20 · Orden de la raíz de web/
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Con los archivos puente fuera (Fase 19), quedaban sueltos en la raíz de
+`web/` varios `.md` y un log de errores — pedido explícito del dueño al
+revisar la carpeta en el editor. Ninguno de estos archivos se ejecuta ni
+cambia el comportamiento del sitio, así que el reordenamiento es solo
+organización:
+
+- **6 documentos `.md` se movieron a `docs/`**: `CONTRATO.md`,
+  `DESPLIEGUE.md`, `INSTALAR_POS.md`, `MIGRACION_POS.md`, `POS_DISENO.md`,
+  `README_SERVIDOR.md`. Ya estaban bloqueados para acceso web directo
+  (`FilesMatch "\.md$"` en `.htaccess`, sin relación con dónde viven en el
+  disco) y ningún `.php` los `require`/`include` — son solo prosa que un
+  humano lee. Se actualizaron las referencias "de verdad" (los punteros en
+  `CLAUDE.md` de la raíz del repo, en `web/CLAUDE.md`, y los comentarios
+  sueltos en `lib/pos.php`, `lib/auth.php`, `lib/productos.php`,
+  `migrar.php`, `app/Models/Convenio.php`, `app/Models/Factura.php` y
+  `app/views/pos/index.php` que decían "ver POS_DISENO.md" etc.) para que
+  sigan apuntando al lugar correcto. Los que ya vivían dentro de `docs/`
+  (`00-auditoria.md`, `01-plan-migracion.md`, `03-cierre.md`) mencionaban
+  estos archivos sin prefijo de carpeta — como ahora son vecinos de
+  verdad, esas menciones ya eran correctas y no se tocaron.
+- **El log de errores se movió a una carpeta propia, `logs/`**: antes era
+  `web/logs_app.log`, sin ninguna regla de `.htaccess` que lo bloqueara (un
+  descuido menor — un error con detalle técnico habría quedado accesible
+  si alguien adivinaba el nombre). Ahora es `web/logs/app.log`, con su
+  propio `.htaccess` (`Require all denied`, mismo criterio que
+  `almacen_pdf/` y `respaldos_pdf/`). Se actualizó la ruta en los dos
+  lugares que la fijan (`app/bootstrap.php` y el bloque de compatibilidad
+  de `lib/db.php`, que corre primero en cualquier request y si no se
+  actualizaba también habría pisado el cambio) y la entrada del
+  `.gitignore` del repo.
+- **Lo que se evaluó mover y se decidió dejar en la raíz**, con la razón
+  de cada uno:
+  - `index.php` / `.htaccess` — son el punto de entrada y la configuración
+    del servidor; tienen que vivir en la raíz del sitio.
+  - `config.php` / `config.ejemplo.php` — `lib/db.php` resuelve la ruta a
+    mano (`__DIR__ . '/../config.php'`); además `config.php` está
+    gitignored con esa ruta exacta y la instalación documentada en
+    `docs/README_SERVIDOR.md` asume que vive ahí.
+  - `sw.js` / `manifest.webmanifest` — el "scope" de un service worker (lo
+    que le permite a `pos.php` funcionar sin internet e instalarse como
+    app) depende de que viva en la misma carpeta que las páginas que
+    controla; moverlo rompe eso sin configurar un header extra.
+  - `migrar.php` — su propio comentario documenta la URL real que un
+    admin visita a mano (`https://admin.minimark.cl/migrar.php`); moverlo
+    cambia esa dirección.
+  - `procesar_cortes.php` — lo invoca un cron ya configurado en cPanel
+    (fuera de este repo) apuntando a su ruta exacta en el servidor;
+    moverlo rompería ese cron hasta reconfigurarlo a mano, algo que no se
+    puede verificar desde acá.
+  - `CLAUDE.md` — convención ya establecida (el `CLAUDE.md` de la raíz del
+    repo dice explícitamente que la documentación de este proyecto vive en
+    `web/CLAUDE.md`).
+
+**Raíz de `web/` después de esta fase** (9 archivos, cada uno con una razón
+para estar ahí): `.htaccess`, `CLAUDE.md`, `config.ejemplo.php`,
+`config.php`, `index.php`, `manifest.webmanifest`, `migrar.php`,
+`procesar_cortes.php`, `sw.js`.
+
+Probado: `scripts/smoke.php` (32/32) y lint de todos los `.php` tocados
+(solo cambiaron comentarios y dos líneas de `ini_set('error_log', ...)`,
+nada de lógica). Documentado acá y en `web/CLAUDE.md`.
 
 ---
 

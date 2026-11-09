@@ -206,7 +206,7 @@ function reemplazar_catalogo(PDO $pdo, int $negocioId, array $parse, array $meta
         // UPSERT: actualiza lo que ya existe y agrega lo nuevo. NUNCA borra.
         // Antes esto hacía DELETE + INSERT del catálogo completo; con el
         // catálogo compartido eso habría vaciado el de los dos negocios, y
-        // además se llevaría el stock por delante (ver POS_DISENO.md 7.1).
+        // además se llevaría el stock por delante (ver docs/POS_DISENO.md 7.1).
         $antes = (int)$pdo->query("SELECT COUNT(*) FROM productos")->fetchColumn();
         $usuarioId = $meta['usuario_id'] ?? null;
 

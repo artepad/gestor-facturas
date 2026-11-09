@@ -6,7 +6,7 @@
  * Las funciones reciben los IDs ya acotados a los negocios visibles del usuario
  * desde el llamador (nunca consultan sin ese filtro).
  *
- * Diseño completo del módulo: web/POS_DISENO.md
+ * Diseño completo del módulo: web/docs/POS_DISENO.md
  */
 
 /**
@@ -153,7 +153,7 @@ function tickets_en_espera(PDO $pdo, int $sesionId): int
  *
  * Ojo con las recaudaciones (Klap y otros convenios): el efectivo del cliente
  * SÍ entra al cajón aunque NO sea una venta. Si no se sumaran acá, el arqueo
- * mostraría un sobrante todos los días. Ver POS_DISENO.md sección 7.7.
+ * mostraría un sobrante todos los días. Ver docs/POS_DISENO.md sección 7.7.
  */
 function resumen_caja(PDO $pdo, int $sesionId): array
 {
@@ -284,7 +284,7 @@ function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
         'abierto_en'    => $sesion['abierto_en'],
         'cerrado_en'    => date('Y-m-d H:i:s'),
         // Ventas del negocio. La recaudación de convenios NO va acá: no es
-        // venta (ver POS_DISENO.md 7.7); viaja en recaudado_efectivo.
+        // venta (ver docs/POS_DISENO.md 7.7); viaja en recaudado_efectivo.
         'ventas_totales'       => $r['ventas_total'],
         'ganancia'             => ($r['ganancia'] ?? null),
         'numero_ventas'        => $r['numero_ventas'],
@@ -296,7 +296,7 @@ function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
         'efectivo_esperado'    => $r['efectivo_esperado'],
         'ventas_tarjeta'       => $r['ventas_tarjeta'],
         'ventas_credito'       => $r['ventas_credito'],
-        'ventas_vales'         => 0,        // no aplica en Chile (ver POS_DISENO.md)
+        'ventas_vales'         => 0,        // no aplica en Chile (ver docs/POS_DISENO.md)
         'ventas_transferencia' => $r['ventas_transferencia'],
         'recaudado_efectivo'   => $r['recaudado_efectivo'],
         'diferencia'           => $diferencia,
@@ -385,7 +385,7 @@ function buscar_producto_pos(PDO $pdo, string $termino, int $limite = 20): array
     $t = trim($termino);
     if ($t === '') return [];
 
-    // El catálogo es compartido por los dos negocios (POS_DISENO.md 7.1), así
+    // El catálogo es compartido por los dos negocios (docs/POS_DISENO.md 7.1), así
     // que la búsqueda ya no se filtra por negocio.
     $cols = "id, codigo, nombre, precio_venta, precio_costo, departamento, afecto_iva";
 
@@ -614,7 +614,7 @@ function huella_pin(string $pin, int $usuarioId): string
 // ===================== Inventario (Etapa 4, opcional) =====================
 // TODO esto solo actúa si el negocio tiene control_stock = 1. Con el control
 // apagado —como nacen los dos negocios— el POS ni menciona el stock.
-// Ver POS_DISENO.md sección 4.0.
+// Ver docs/POS_DISENO.md sección 4.0.
 
 /** ¿Este negocio lleva control de existencias? */
 function negocio_controla_stock(PDO $pdo, int $negocioId): bool
@@ -634,7 +634,7 @@ function negocio_controla_stock(PDO $pdo, int $negocioId): bool
  *
  * NUNCA bloquea por falta de stock: en un almacén, si el producto está en la
  * mano se vende. Si el saldo queda negativo se registra igual y se muestra en
- * rojo para que el dueño lo revise (POS_DISENO.md 4.1).
+ * rojo para que el dueño lo revise (docs/POS_DISENO.md 4.1).
  *
  * Devuelve el stock que quedó, o null si el negocio no lleva control.
  */
@@ -1252,7 +1252,7 @@ function descartar_espera(PDO $pdo, int $sesionId, int $esperaId): string
 // ============ Recaudación de servicios (Klap y otros convenios) ============
 // CRÍTICO para el balance y el arqueo: la plata que paga el cliente NO es venta
 // del negocio (es de la empresa de servicios), pero el efectivo SÍ entra al
-// cajón. Ver POS_DISENO.md sección 7.7.
+// cajón. Ver docs/POS_DISENO.md sección 7.7.
 
 /** Servicios que se pueden pagar. Lista fija por ahora; se puede volver tabla. */
 const SERVICIOS_RECAUDACION = [
@@ -1363,7 +1363,7 @@ function registrar_recaudacion(PDO $pdo, array $usuario, array $sesion, string $
  *
  * Es un cálculo propio, no un dato en línea del proveedor: por eso se muestra
  * siempre como "estimado" y existe `saldo_ajuste` para cuadrarlo contra el
- * portal. Ver POS_DISENO.md 7.7.
+ * portal. Ver docs/POS_DISENO.md 7.7.
  */
 function saldo_convenio(PDO $pdo, array $convenio): array
 {
@@ -1414,7 +1414,7 @@ function convenios_con_saldo(PDO $pdo, int $negocioId, bool $soloActivos = true)
 /**
  * Registra una recarga de saldo, una liquidación o una comisión.
  *
- * OJO con la contabilidad (POS_DISENO.md 7.7): recargar saldo NO es un gasto
+ * OJO con la contabilidad (docs/POS_DISENO.md 7.7): recargar saldo NO es un gasto
  * (es plata propia cambiando de bolsillo) y liquidar tampoco. El único ingreso
  * real del negocio es la comisión.
  *

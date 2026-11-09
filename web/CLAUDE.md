@@ -2,7 +2,7 @@
 
 Guía para Claude Code cuando trabaje **dentro de la carpeta `web/`**. Este es un
 proyecto separado en su intención (el dashboard web), aunque vive en el mismo
-repositorio que la app de escritorio de Python. **Lee también `web/CONTRATO.md`**:
+repositorio que la app de escritorio de Python. **Lee también `web/docs/CONTRATO.md`**:
 ahí está el "puente" que conecta la web con el cliente Python; ninguno de los dos
 lados puede romperlo sin coordinar con el otro.
 
@@ -59,7 +59,7 @@ Por eso, cuando termines un cambio, **dile al usuario exactamente qué archivos
 subir** (ruta relativa dentro de `web/`). No asumas que un cambio está "en
 producción" hasta que el usuario lo confirme.
 
-Detalle completo de instalación inicial en `web/README_SERVIDOR.md`.
+Detalle completo de instalación inicial en `web/docs/README_SERVIDOR.md`.
 
 ## Arquitectura de archivos
 
@@ -90,7 +90,7 @@ web/
 │
 ├── api/
 │   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver
-│                        CONTRATO.md. Fuera del Router a propósito (ver más abajo)
+│                        docs/CONTRATO.md. Fuera del Router a propósito (ver más abajo)
 │
 ├── app/
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
@@ -126,12 +126,24 @@ web/
 │
 ├── almacen_pdf/         PDFs sincronizados, organizados en subcarpetas por negocio_id. Bloqueado por .htaccess
 ├── respaldos_pdf/       zips de respaldo de almacen_pdf/ (scripts/respaldo_pdfs.php). Bloqueado por .htaccess
+├── logs/                log de errores de PHP (app/bootstrap.php y lib/db.php escriben acá:
+│                        logs/app.log, gitignored). Bloqueado por .htaccess
 │
-├── docs/                 bitácora y estándar de la migración de arquitectura del POS
+├── docs/                 toda la documentación que no es código: bitácora de la migración
+│   │                     + guías operativas y de referencia (nada de esto se ejecuta ni se
+│   │                     sirve por la web — FilesMatch "\.md$" en .htaccess las bloquea igual)
 │   ├── 00-auditoria.md             auditoría de seguridad previa a migrar
 │   ├── 01-plan-migracion.md        plan y bitácora fase por fase (la fuente de verdad del historial)
 │   ├── 02-linea-base.md            comportamiento "antes" para comparar durante la migración
-│   └── prompt-migracion-arquitectura.md   el estándar general que se siguió
+│   ├── 03-cierre.md                cierre de la Fase 10 (revisión final + pendientes del POS)
+│   ├── prompt-migracion-arquitectura.md   el estándar general que se siguió
+│   ├── CONTRATO.md                 formato exacto de sincronización con la app de Python (ver también
+│   │                               la raíz del repo, CLAUDE.md, y lib/auth.php/pos.php que la referencian)
+│   ├── DESPLIEGUE.md                guía de despliegue manual por cPanel
+│   ├── README_SERVIDOR.md          instalación inicial del servidor (BD, config.php, cron)
+│   ├── POS_DISENO.md                diseño completo del módulo Ventas/POS — leer antes de tocar nada ahí
+│   ├── INSTALAR_POS.md             instalación del POS en un PC (modo kiosco incluido)
+│   └── MIGRACION_POS.md            guía para migrar un negocio desde Eleventa al POS propio
 │
 ├── scripts/              utilidades de consola (guardadas con PHP_SAPI !== 'cli')
 │   ├── smoke.php                   prueba de humo: recorre las rutas clave y compara
@@ -338,7 +350,7 @@ Definición canónica en `lib/esquema.sql`. Tablas:
   puede tener varias máquinas, pero normalmente escanea solo el PC principal.
 - **`facturas`** — el espejo de cada factura. `uuid_local` (CHAR(36) **UNIQUE**)
   es la clave de idempotencia: es el mismo UUID que generó el PC. **Soft-delete**
-  vía `eliminada_en` (no se borra físicamente). Ver CONTRATO.md para los campos.
+  vía `eliminada_en` (no se borra físicamente). Ver docs/CONTRATO.md para los campos.
 - **`detalle_factura`** — líneas de producto de una factura (relación con
   `ON DELETE CASCADE`). Se reemplaza completo en cada sync.
 - **`sync_log`** — bitácora de cada operación de sincronización (auditoría).
@@ -525,9 +537,9 @@ El botón "Crear etiqueta" de cada resultado abre `herramienta_etiquetas.php?nom
 con la primera fila precargada.
 
 **Módulo Ventas / POS** (web-nativo; reemplaza a Eleventa). **El diseño completo,
-las decisiones y el plan por etapas están en `web/POS_DISENO.md`: leerlo antes de
-tocar nada del POS.** Guías operativas: `INSTALAR_POS.md` (instalación en un PC,
-incluido el modo kiosco) y `MIGRACION_POS.md` (el cambio desde Eleventa).
+las decisiones y el plan por etapas están en `web/docs/POS_DISENO.md`: leerlo antes de
+tocar nada del POS.** Guías operativas: `docs/INSTALAR_POS.md` (instalación en un PC,
+incluido el modo kiosco) y `docs/MIGRACION_POS.md` (el cambio desde Eleventa).
 
 - **`pos.php`** es una pantalla "de trabajo": documento propio, sin el layout del
   dashboard, pensada para operarse **solo con el teclado** (el flujo real del
@@ -556,7 +568,7 @@ incluido el modo kiosco) y `MIGRACION_POS.md` (el cambio desde Eleventa).
   robo hormiga). Anular revierte el fiado y devuelve el stock.
 
 **Recaudación de convenios** (`convenios`, `servicio_operaciones`) — **crítico para
-que el balance sea real** (ver POS_DISENO.md 7.7): la plata que el cliente paga por
+que el balance sea real** (ver docs/POS_DISENO.md 7.7): la plata que el cliente paga por
 su cuenta de luz **NO es venta** (es de la empresa de servicios) y recargar saldo
 **NO es un gasto** (es plata propia cambiando de bolsillo). El único ingreso real
 es la **comisión**. El efectivo sí entra al cajón, así que el arqueo lo suma: sin
@@ -594,7 +606,7 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
   `fiados`, `productos`, `herramientas`).
   **`ventas` se habilitó para vendedoras el 2026-11-08** (antes era solo admin,
   mientras el POS se construía y probaba sin que las vendedoras vieran nada —
-  ver `MIGRACION_POS.md` paso 5. Ya se probó en producción, así que se
+  ver `docs/MIGRACION_POS.md` paso 5. Ya se probó en producción, así que se
   habilitó). Da acceso a `pos.php` y `caja.php`: las vendedoras ya pueden
   vender y abrir/cerrar su propio turno.
   **`productos`** (crear/editar catálogo y promociones) lo tienen ambos por decisión
@@ -657,6 +669,6 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
   compartido y el despliegue es manual; hay que mantenerlo simple).
 - No cambiar el **contrato de sincronización** (`api/facturas.php`, campos,
   `uuid_local`, soft-delete) sin actualizar también el cliente Python y
-  `web/CONTRATO.md`. Romper el contrato deja de sincronizar las facturas.
+  `web/docs/CONTRATO.md`. Romper el contrato deja de sincronizar las facturas.
 - No tocar la app de escritorio de Python desde acá; eso vive en `src/` y tiene su
   propio chat/contexto. Acá solo el lado web del contrato.

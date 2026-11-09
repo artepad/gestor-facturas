@@ -1,0 +1,3 @@
+# Log de errores de la aplicación (app/bootstrap.php). Nunca se sirve por
+# la web: podría mostrar rutas del servidor o detalles internos de un error.
+Require all denied

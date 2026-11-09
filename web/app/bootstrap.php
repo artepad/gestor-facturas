@@ -34,7 +34,7 @@ require_once RAIZ_APP . '/Core/helpers.php';
 // produccion (hallazgo H4 de la auditoria — el codigo viejo depende de lo
 // que traiga el hosting por defecto; este bootstrap lo fija explicito).
 ini_set('log_errors', '1');
-ini_set('error_log', dirname(RAIZ_APP) . '/logs_app.log');   // fuera de Git (ver .gitignore)
+ini_set('error_log', dirname(RAIZ_APP) . '/logs/app.log');   // fuera de Git (ver .gitignore)
 ini_set('display_errors', \App\Core\Config::esProduccion() ? '0' : '1');
 error_reporting(E_ALL);
 

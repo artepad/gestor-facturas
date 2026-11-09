@@ -14,7 +14,7 @@ function iniciar_sesion(): void
         $https = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off');
         // Sesion larga (30 dias): la caja de un almacen no puede pedir
         // contrasena cada manana, y menos si ese dia no hay internet. El
-        // cerrojo de la caja es el PIN (ver POS_DISENO.md 3D), no el cierre
+        // cerrojo de la caja es el PIN (ver docs/POS_DISENO.md 3D), no el cierre
         // de sesion.
         $dias = 30 * 24 * 60 * 60;
         ini_set('session.gc_maxlifetime', (string)$dias);
