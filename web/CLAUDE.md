@@ -6,31 +6,28 @@ repositorio que la app de escritorio de Python. **Lee también `web/CONTRATO.md`
 ahí está el "puente" que conecta la web con el cliente Python; ninguno de los dos
 lados puede romperlo sin coordinar con el otro.
 
-> **Arquitectura mixta, a propósito.** Las pantallas del POS (`pos.php`,
-> `pos_api.php`, `caja.php`, `inventario.php`, `compras.php`, `promociones.php`,
-> `servicios.php`, `precios_fv.php`) siguen capas (Router → Controlador → Modelo →
-> Vista, en `app/`) y así están en producción desde el 2026-11-08. **Fiados**
-> (`fiados.php`, `cliente.php`, `cliente_form.php`, `estado_cuenta_imprimir.php`),
-> **Gastos** (`gastos.php`, `gasto_form.php`, `categorias_gasto.php`,
-> `gastos_fijos.php`), **Sistema** (`login.php`, `logout.php`, `home.php`,
-> `ver_pdf.php`), **Usuarios** (`usuarios.php`), **Facturas**
-> (`panel_facturas.php`, `factura.php`), **Negocios** (`negocios.php`,
-> `negocio_form.php`, `negocio_tokens.php`, `negocio_panel.php`) e
-> **Ingresos** (`ingresos.php`, `corte.php`, `corte_pegar.php` — NO
-> `procesar_cortes.php`, ver nota en ese archivo) se sumaron después
-> (2026-11-08/09) se sumaron después del mismo modo — su propio Controlador y
-> Modelo cada uno — y **Herramientas** (`herramientas.php`, `herramienta_caja.php`,
-> `herramienta_etiquetas.php`, `etiquetas_imprimir.php`, `productos_buscar.php`,
-> `herramienta_ofertas.php`, `ofertas_imprimir.php`, `herramienta_productos.php`,
-> `producto_form.php`, `historial_productos.php`, `herramienta_catalogo.php`,
-> `catalogo_buscar.php`) cerró la migración (2026-11-09) con 5 Controladores,
-> uno por "herramienta". **Con esto termina la migración**: todo `web/` sigue
-> la arquitectura en capas salvo los scripts de infraestructura sin sesión
-> (`api/facturas.php`, `migrar.php`, `procesar_cortes.php`). Ver «Arquitectura
-> del POS (capas)» más abajo para cómo trabajar ahí (el patrón es el mismo para
-> cualquier pantalla migrada, sea del POS o no), y
-> `web/docs/01-plan-migracion.md` para la bitácora completa de la migración. El
-> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
+> **Todo `web/` sigue la arquitectura en capas** (Router → Controlador →
+> Modelo → Vista, en `app/`): POS, Fiados, Gastos, Sistema, Usuarios,
+> Facturas, Negocios, Ingresos y Herramientas migraron pantalla por
+> pantalla entre 2026-11-08 y 2026-11-09 (bitácora completa en
+> `web/docs/01-plan-migracion.md`). Lo único fuera de este patrón son los
+> scripts de infraestructura sin sesión: `api/facturas.php`, `migrar.php` y
+> `procesar_cortes.php`.
+>
+> **Un solo punto de entrada (2026-11-09, Fase 19).** Ya NO hay un archivo
+> físico por pantalla en la raíz de `web/` (se borraron los ~45 "archivos
+> puente" que hubo durante la migración). `index.php` es el único archivo
+> real que queda: el `.htaccess` manda ahí cualquier dirección que no sea
+> un archivo real que ya exista, e `index.php` usa un Router
+> (`app/Core/Router.php`, con la tabla completa en `app/routes.php`) para
+> decidir qué Controlador atiende cada dirección. **Las direcciones NO
+> cambiaron** — `admin.minimark.cl/herramienta_caja.php` sigue siendo esa
+> misma URL, solo que ya no hay un `herramienta_caja.php` físico: lo
+> resuelve el Router. Ver «Arquitectura del POS (capas)» más abajo para el
+> patrón de Controlador/Modelo/Vista, y la sección «El Router (punto de
+> entrada único)» para cómo agregar o tocar una ruta. El estándar general
+> que se siguió en la migración original está en
+> `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -68,10 +65,13 @@ Detalle completo de instalación inicial en `web/README_SERVIDOR.md`.
 
 ```
 web/
-├── index.php            raíz: si hay sesión → home.php, si no → login.php
+├── index.php            PUNTO DE ENTRADA ÚNICO de todo el panel (Fase 19). El único
+│                        archivo real que atiende pantallas en la raíz — crea el Router
+│                        y lo despacha según app/routes.php (ver «El Router» más abajo)
 ├── config.php           ← credenciales MySQL + setup_key. NO se sube a git (gitignored)
 ├── config.ejemplo.php   plantilla de config.php
-├── .htaccess            HTTPS forzado + seguridad
+├── .htaccess            HTTPS forzado + seguridad + reescribe todo lo que no sea un
+│                        archivo real hacia index.php
 │
 ├── lib/
 │   ├── db.php           obtener_pdo() (singleton PDO), cargar_config(), responder_json()
@@ -89,10 +89,13 @@ web/
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
-│   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver CONTRATO.md
+│   └── facturas.php     ENDPOINT de sincronización (POST desde el cliente Python). Ver
+│                        CONTRATO.md. Fuera del Router a propósito (ver más abajo)
 │
-├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
+├── app/
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
+│   ├── routes.php         TABLA DE RUTAS completa: qué dirección va a qué Controlador
+│   │                      (ver «El Router» más abajo)
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
 │   ├── Controllers/       un Controlador por pantalla migrada, o por grupo de pantallas
 │   │                      relacionadas (POS + Fiados + Gastos + Sistema + Usuarios +
@@ -111,102 +114,15 @@ web/
 │                          herramientas/, productos/, etiquetas/, ofertas/, catalogo/).
 │                          ver_pdf.php no tiene vista (responde el PDF directo)
 ├── public/
-│   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
-│                          producción — las pantallas del POS son archivos puente (ver abajo)
+│   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión), un entorno
+│                          aislado del panel real. No atiende ninguna pantalla
 │
-├── pos.php              PUNTO DE VENTA (ver POS_DISENO.md) — archivo puente a
-│                        App\Controllers\PosController
-├── pos_api.php          motor de cobro JSON (buscar, cobrar, anular, espera…) — puente a
-│                        App\Controllers\PosApiController
-├── caja.php             abrir/cerrar turno, entradas y salidas, arqueo — puente a
-│                        App\Controllers\CajaController
 ├── sw.js                service worker: la caja abre y vende sin internet
 ├── manifest.webmanifest hace la caja instalable como aplicación
-├── inventario.php       existencias, ajustes, mermas, alertas y kardex (opcional) — puente a
-│                        App\Controllers\InventarioController
-├── compras.php          mercadería recibida (suma stock) y proveedores — puente a
-│                        App\Controllers\ComprasController
-├── promociones.php      ofertas que el POS aplica solo ("4 x $1.000") — puente a
-│                        App\Controllers\PromocionesController
-├── producto_form.php    crear/editar/eliminar un producto del catálogo compartido —
-│                        puente a App\Controllers\ProductosController
-├── historial_productos.php  quién creó o editó cada producto (solo admin) —
-│                        puente al mismo Controlador
-├── servicios.php        saldo, recargas y comisiones de convenios (Mercado Pago y otros) —
-│                        puente a App\Controllers\ServiciosController
-├── precios_fv.php       Frutas y Verduras (JSON): listar/guardar/eliminar — ya NO es su
-│                        propia pantalla, es un popup dentro de pos.php (botón junto a
-│                        Caja/Salir) — puente a App\Controllers\PreciosFvController
-├── precios_fv_imprimir.php  hoja imprimible con la lista completa — puente al mismo Controlador
 │
 ├── uploads/
 │   └── precios_fv/        fotos de Frutas y Verduras (WebP, nombre aleatorio). Servido
 │                          directo pero sin poder ejecutar nada (uploads/.htaccess)
-│
-├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos) —
-│                        puente a App\Controllers\HomeController
-├── negocio_panel.php    panel de análisis de un negocio (clic en "Estado por negocio") —
-│                        puente a App\Controllers\NegociosController
-├── panel_facturas.php   listado de facturas + filtros (la página principal de consulta) —
-│                        puente a App\Controllers\FacturasController
-├── factura.php          detalle de una factura (cabecera + productos + botón Ver PDF) —
-│                        puente al mismo Controlador
-├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio —
-│                        puente a App\Controllers\VerPdfController
-│
-├── fiados.php           listado de clientes con su saldo — puente a App\Controllers\FiadosController
-├── cliente_form.php     crear/editar un cliente de fiados — puente al mismo Controlador
-├── cliente.php          ficha del cliente: saldo + registrar fiados/abonos + historial — puente al mismo Controlador
-├── estado_cuenta_imprimir.php  estado de cuenta del cliente en PDF — puente al mismo Controlador
-│
-├── ingresos.php         dashboard del módulo Ingresos (cortes de caja de Eleventa) —
-│                        puente a App\Controllers\IngresosController
-├── corte.php            detalle de un corte (resumen, movimientos, departamentos, correo original) —
-│                        puente al mismo Controlador
-├── corte_pegar.php      registrar un corte pegando el correo a mano (respaldo del cron) —
-│                        puente al mismo Controlador
-├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o
-│                        ?clave=setup_key). Fuera de la migración a capas a propósito: no es
-│                        una pantalla de sesión, no renderiza nada (solo texto plano) — mismo
-│                        criterio que api/facturas.php o migrar.php. Sigue llamando
-│                        lib/eleventa.php directo, igual que antes
-│
-├── gastos.php           dashboard del módulo Gastos (resumen del período + desglose + tabla) —
-│                        puente a App\Controllers\GastosController
-├── gasto_form.php       crear/editar/eliminar un gasto — puente al mismo Controlador
-├── categorias_gasto.php CRUD de categorías de gasto (editables) — puente al mismo Controlador
-├── gastos_fijos.php     plantillas de gasto fijo mensual (recurrentes) — puente al mismo Controlador
-│
-├── herramientas.php           tablero del módulo Herramientas (tarjetas) — puente a
-│                              App\Controllers\HerramientasController
-├── herramienta_caja.php       contador de caja (billetes/monedas, monedas por peso) —
-│                              puente al mismo Controlador
-├── herramienta_etiquetas.php  gestor de etiquetas de precio (+ buscador desde el catálogo) —
-│                              puente a App\Controllers\EtiquetasController
-├── etiquetas_imprimir.php     hoja A4 imprimible de etiquetas de precio (página desnuda) —
-│                              puente al mismo Controlador
-├── productos_buscar.php       endpoint JSON de búsqueda del catálogo (lo usa el gestor de
-│                              etiquetas) — puente al mismo Controlador
-├── herramienta_ofertas.php    creador de etiquetas de oferta (4 tipos) — puente a
-│                              App\Controllers\OfertasController
-├── ofertas_imprimir.php       hoja A4 imprimible de etiquetas de oferta (página desnuda) —
-│                              puente al mismo Controlador
-├── herramienta_productos.php  Base de Datos de Productos: carga el Excel de Eleventa —
-│                              puente a App\Controllers\ProductosController
-├── herramienta_catalogo.php   Consultar Catálogo: buscador + escáner de cámara de productos —
-│                              puente a App\Controllers\CatalogoController
-├── catalogo_buscar.php        endpoint JSON con todos los campos del producto (lo usa
-│                              Consultar Catálogo) — puente al mismo Controlador
-│
-├── login.php            formulario de ingreso — puente a App\Controllers\AuthController
-├── logout.php           cerrar sesión — puente al mismo Controlador
-│
-├── negocios.php         lista de negocios (tarjetas) — puente al mismo Controlador
-├── negocio_form.php     crear/editar perfil de negocio (nombre, rut, teléfono, dirección, correo) —
-│                        puente al mismo Controlador
-├── negocio_tokens.php   gestión de máquinas/tokens de un negocio — puente al mismo Controlador
-├── usuarios.php         CRUD de usuarios + asignación de negocios (solo admin) —
-│                        puente a App\Controllers\UsuariosController
 │
 ├── almacen_pdf/         PDFs sincronizados, organizados en subcarpetas por negocio_id. Bloqueado por .htaccess
 ├── respaldos_pdf/       zips de respaldo de almacen_pdf/ (scripts/respaldo_pdfs.php). Bloqueado por .htaccess
@@ -221,37 +137,75 @@ web/
 │   ├── smoke.php                   prueba de humo: recorre las rutas clave y compara
 │   └── respaldo_pdfs.php           respalda almacen_pdf/ a respaldos_pdf/ (cron diario)
 │
+├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o
+│                        ?clave=setup_key). Fuera del Router a propósito: no es una
+│                        pantalla de sesión, no renderiza nada (solo texto plano) — mismo
+│                        criterio que api/facturas.php o migrar.php. Sigue llamando
+│                        lib/eleventa.php directo, igual que antes
+│
 └── migrar.php            único utilitario que queda en el servidor — aplica cambios de
                           esquema a una BD existente. A diferencia de los demás (todos ya
                           borrados, del repo y del servidor — 2026-11-08: setup.php,
                           crear_admin.php, crear_admin_form.php, reset_facturas.php), SÍ
                           conviene dejarlo: es idempotente (solo aplica lo que falta) y se
-                          vuelve a necesitar cada vez que el esquema cambia
+                          vuelve a necesitar cada vez que el esquema cambia. Fuera del
+                          Router, igual que procesar_cortes.php
 ```
+
+**Dónde quedó cada pantalla** (todas corren a través de `index.php` + el Router — ver
+«El Router» abajo — ninguna tiene ya un archivo físico propio):
+
+| Dirección (URL) | Controlador → método |
+|---|---|
+| `/` | redirige a `home.php` o `login.php` según haya sesión |
+| `login.php` / `logout.php` | `AuthController::login` / `logout` |
+| `home.php` | `HomeController::index` |
+| `ver_pdf.php` | `VerPdfController::index` |
+| `usuarios.php` | `UsuariosController::index` |
+| `panel_facturas.php` / `factura.php` | `FacturasController::panel` / `detalle` |
+| `negocios.php` / `negocio_form.php` / `negocio_tokens.php` / `negocio_panel.php` | `NegociosController::index` / `formulario` / `tokens` / `panel` |
+| `fiados.php` / `cliente_form.php` / `cliente.php` / `estado_cuenta_imprimir.php` | `FiadosController::listado` / `formulario` / `ficha` / `estadoCuenta` |
+| `gastos.php` / `gasto_form.php` / `categorias_gasto.php` / `gastos_fijos.php` | `GastosController::panel` / `formulario` / `categorias` / `fijos` |
+| `ingresos.php` / `corte.php` / `corte_pegar.php` | `IngresosController::panel` / `detalle` / `pegar` |
+| `herramientas.php` / `herramienta_caja.php` | `HerramientasController::tablero` / `caja` |
+| `herramienta_productos.php` / `producto_form.php` / `historial_productos.php` | `ProductosController::panel` / `formulario` / `historial` |
+| `herramienta_etiquetas.php` / `etiquetas_imprimir.php` / `productos_buscar.php` | `EtiquetasController::formulario` / `imprimir` / `buscarJson` |
+| `herramienta_ofertas.php` / `ofertas_imprimir.php` | `OfertasController::formulario` / `imprimir` |
+| `herramienta_catalogo.php` / `catalogo_buscar.php` | `CatalogoController::index` / `buscarJson` |
+| `pos.php` / `pos_api.php` | `PosController::index` / `PosApiController::index` |
+| `caja.php` | `CajaController` — único caso especial: la ruta es una función que elige `abrir`/`movimiento`/`cerrar`/`index` según el `accion` del POST, igual que antes lo elegía el archivo puente |
+| `inventario.php` / `compras.php` / `promociones.php` / `servicios.php` | `InventarioController` / `ComprasController` / `PromocionesController` / `ServiciosController::index` |
+| `precios_fv.php` / `precios_fv_imprimir.php` | `PreciosFvController::index` / `imprimir` |
+
+Lista exacta y siempre actualizada: `app/routes.php`.
 
 ## Arquitectura del POS (capas)
 
-Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados, Gastos,
-Sistema, Usuarios, Facturas, Negocios e Ingresos son las únicas de todo
-`web/` que siguen el patrón Router → Controlador → Modelo → Vista (estándar
-completo en
-`web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
-patrón todavía — ver el contexto en el banner del principio de este archivo.
-El nombre de la sección quedó de cuando solo era el POS; el patrón que
-describe aplica igual a cualquier pantalla migrada.
+**Todo** `web/` sigue el patrón Router → Controlador → Modelo → Vista
+(estándar completo en `web/docs/prompt-migracion-arquitectura.md`), salvo
+los scripts de infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
+`procesar_cortes.php` — ver el banner del principio de este archivo). El
+nombre de la sección quedó de cuando solo era el POS; el patrón que
+describe aplica igual a cualquier pantalla.
 
 **Una visita a `pos.php` (o cualquiera de las otras):**
-`pos.php` (archivo puente en la raíz, mismo nombre de siempre) → `app/bootstrap.php`
-(autoload + sesión) → `new PosController()` → `index()` lee la sesión/permiso,
-llama a los Modelos, elige la Vista → `View::render('pos/index', [...])` → HTML
-con `h()`/`e()` en cada salida.
+el navegador pide `pos.php` (misma dirección de siempre) → el `.htaccess` ve
+que no hay un archivo real con ese nombre y manda todo a `index.php` →
+`index.php` arma el Router, carga `app/routes.php` (ahí está registrado que
+`/pos.php` va a `PosController::index`) y lo despacha → `index()` lee la
+sesión/permiso, llama a los Modelos, elige la Vista →
+`View::render('pos/index', [...])` → HTML con `h()`/`e()` en cada salida.
+Ver «El Router (punto de entrada único)» más abajo para el detalle completo.
 
-- **Los archivos puente son deliberadamente chicos** (10-20 líneas): no tienen
-  lógica, solo instancian el Controlador. `caja.php` es la excepción — tiene un
-  `match()` de una línea por `accion` del `$_POST`, porque `CajaController` separa
-  `abrir()`/`movimiento()`/`cerrar()` en vez de una sola función. Si algo se ve
-  raro en una pantalla, el archivo puente casi nunca es el problema: mirar el
-  Controlador.
+- **Ya no hay un archivo físico por pantalla** (hasta el 2026-11-09 cada
+  pantalla tenía su "archivo puente" de 10-20 líneas en la raíz de `web/`,
+  hoy borrados — ver Fase 19 en el plan). Si algo se ve raro en una
+  pantalla, el primer lugar para mirar es su entrada en `app/routes.php`
+  (¿está registrada? ¿apunta al método correcto?) y después el Controlador.
+  `caja.php` es la única ruta "especial": en vez de `[Controlador, 'metodo']`
+  registra una función que hace el mismo `match()` de un `accion` del
+  `$_POST` que antes hacía el archivo puente, porque `CajaController` separa
+  `abrir()`/`movimiento()`/`cerrar()` en vez de una sola función.
 - **Los Modelos son envoltorios sobre `lib/pos.php`, no una reescritura**
   (decisión tomada en el corte de Caja, Fase 6): `App\Models\Venta::registrar()`
   por dentro llama a `\registrar_venta()` de `lib/pos.php`. Esto fue intencional
@@ -315,21 +269,58 @@ con `h()`/`e()` en cada salida.
   una vista propia: es parte de la pantalla de Venta, no una pantalla aparte.
 - **`public/index.php` ya no es una vista previa de nada**: durante la migración
   (Fases 4-8) sirvió para probar cada pantalla nueva en paralelo bajo
-  `/public/...` sin tocar lo que atendía producción. Una vez verificado, cada
-  pantalla pasó a su archivo puente (Fase 9) y esas rutas se retiraron. Hoy
-  `public/index.php` solo confirma que el autoload/BD/sesión arrancan bien —
-  útil como diagnóstico rápido, o como base si algún día se migra otra pantalla
-  del panel.
+  `/public/...` sin tocar lo que atendía producción. Hoy es un diagnóstico
+  aislado (confirma que el autoload/BD/sesión arrancan bien) — no tiene
+  relación con `index.php` de la raíz, que es el punto de entrada real
+  desde la Fase 19.
 
 **Para agregar una acción nueva a una pantalla ya migrada**: agregar el método
 al Modelo (envolviendo una función de `lib/pos.php`, `lib/gastos.php`,
 `lib/eleventa.php` o `lib/productos.php` si ya existe ahí, o SQL propio si
 no), el método o rama `accion` al Controlador, y el formulario con
-`campo_csrf()` a la Vista. **La migración a capas terminó** (2026-11-09,
-Fase 18 — Productos/Herramientas, el módulo que quedaba, era el más grande y
-se dejó para el final a propósito): el único código fuera de este patrón son
-los scripts de infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
+`campo_csrf()` a la Vista — **la ruta ya existe** si la pantalla ya existía,
+no hace falta tocar `app/routes.php`. **La migración a capas terminó**
+(2026-11-09): todo `web/` sigue este patrón salvo los scripts de
+infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
 `procesar_cortes.php`). Bitácora completa en `web/docs/01-plan-migracion.md`.
+
+## El Router (punto de entrada único)
+
+Desde la Fase 19 (2026-11-09) ya no hay un archivo real por pantalla en la
+raíz de `web/`. En su lugar:
+
+1. **`.htaccess`** (al final del archivo) reescribe cualquier dirección que
+   NO sea un archivo o carpeta real existente hacia `index.php`, sin
+   cambiar la URL que ve el navegador (`RewriteCond %{REQUEST_FILENAME}
+   !-f` / `!-d`, sin flag `[R]`). Los archivos reales (CSS, imágenes,
+   `uploads/`, `api/facturas.php`, `migrar.php`, `procesar_cortes.php`,
+   `config.php`) se siguen sirviendo directo, nunca pasan por acá.
+2. **`index.php`** (la raíz) crea un `App\Core\Router`, incluye
+   `app/routes.php` (que registra ahí todas las direcciones) y despacha
+   según `Request::metodo()` + `Request::ruta()`. Si ninguna ruta hace
+   match, responde 404 de verdad.
+3. **`App\Core\Request::ruta()`** calcula la dirección a matchear
+   descontando sola la carpeta donde vive `index.php` (vía
+   `dirname($_SERVER['SCRIPT_NAME'])`): da lo mismo si el sitio vive en la
+   raíz del dominio (producción) o en una subcarpeta como
+   `http://localhost/minimark/` (XAMPP local) — no hay que configurar nada
+   al desplegar.
+4. **`App\Core\Router`** solo entiende rutas estáticas (`/gastos.php`) y con
+   parámetros (`/cliente/{id}`, sin usar hoy pero soportado); escapa los
+   tramos literales con `preg_quote` para que, por ejemplo, el `.` de
+   `.php` no matchee cualquier carácter.
+5. **`app/routes.php`** es la tabla completa, agrupada por módulo. Cada
+   línea es `$ambos('/direccion.php', [Controller::class, 'metodo']);` —
+   `$ambos()` registra la misma ruta en GET y POST porque los archivos
+   puente de antes respondían a cualquier método (cada Controlador decide
+   adentro qué hacer según `Request::metodo()`, eso no cambió). La única
+   ruta que no es `[Controlador, 'metodo']` es `/caja.php`, que registra una
+   función (ver arriba).
+
+**Para agregar una pantalla nueva** (no una acción a una ya existente, ver
+el párrafo de arriba): crear el Controlador/Modelo/Vista como siempre, y
+agregar su línea en `app/routes.php` con `$ambos()`. No hace falta tocar el
+`.htaccess` ni `index.php`.
 
 ## Modelo de datos (MySQL)
 

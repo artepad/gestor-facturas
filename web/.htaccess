@@ -35,3 +35,15 @@ RewriteCond %{HTTP_HOST} !^127\.0\.0\.1 [NC]
 RewriteCond %{HTTP_HOST} !\.test$ [NC]
 RewriteCond %{HTTPS} off
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Punto de entrada único (Fase 19 de la migración, ver
+# web/docs/01-plan-migracion.md): cualquier dirección que NO sea un archivo
+# o carpeta real (css, imágenes, uploads/, api/facturas.php, migrar.php,
+# procesar_cortes.php, etc. se siguen sirviendo directo) se manda a
+# index.php, que decide con el Router (app/routes.php) qué pantalla
+# mostrar. Las direcciones (ej. /herramienta_caja.php) NO cambian para
+# quien las usa — index.php lee la dirección pedida y responde igual que
+# antes respondía el archivo puente de ese nombre.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]

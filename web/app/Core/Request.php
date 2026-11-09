@@ -10,34 +10,27 @@ namespace App\Core;
  */
 final class Request
 {
-    private static string $base = '';
-
-    /**
-     * Fija la base donde vive public/index.php (la calcula index.php una
-     * sola vez, al arrancar). Local: "/minimark/public". Produccion, cuando
-     * el dominio apunte directo a public/ (Fase 9): "". Las vistas la usan
-     * para armar los href/action de los links y formularios.
-     */
-    public static function fijarBase(string $base): void
-    {
-        self::$base = $base;
-    }
-
-    public static function base(): string
-    {
-        return self::$base;
-    }
-
     public static function metodo(): string
     {
         return strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
     }
 
-    /** La ruta de la URL, sin query string (para el Router). */
+    /**
+     * La ruta de la URL para el Router: sin query string y sin el prefijo de
+     * carpeta donde vive index.php. Ese prefijo se calcula solo con
+     * SCRIPT_NAME (en vez de configurarlo a mano): en local XAMPP es
+     * "/minimark" (http://localhost/minimark/...), en producción es "" (el
+     * dominio apunta directo a web/) — funciona igual en los dos sin tocar
+     * nada acá cuando se suba al servidor.
+     */
     public static function ruta(): string
     {
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
         $ruta = parse_url($uri, PHP_URL_PATH) ?: '/';
+        $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+        if ($base !== '' && str_starts_with($ruta, $base)) {
+            $ruta = substr($ruta, strlen($base));
+        }
         return $ruta === '' ? '/' : $ruta;
     }
 

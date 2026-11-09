@@ -24,11 +24,20 @@ final class Router
 
     private function agregar(string $metodo, string $ruta, callable|array $destino): void
     {
+        // Arma el regex trozo a trozo: los tramos literales (ej. "/home.php")
+        // van escapados con preg_quote (el "." no debe matchear cualquier
+        // caracter), los "{param}" se reemplazan por un grupo de captura.
         $parametros = [];
-        $regex = preg_replace_callback('#\{([a-zA-Z_][a-zA-Z0-9_]*)\}#', function ($m) use (&$parametros) {
-            $parametros[] = $m[1];
-            return '([^/]+)';
-        }, $ruta);
+        $trozos = preg_split('#(\{[a-zA-Z_][a-zA-Z0-9_]*\})#', $ruta, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $regex = '';
+        foreach ($trozos as $trozo) {
+            if (preg_match('#^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$#', $trozo, $m)) {
+                $parametros[] = $m[1];
+                $regex .= '([^/]+)';
+            } else {
+                $regex .= preg_quote($trozo, '#');
+            }
+        }
         $this->rutas[] = [
             'metodo' => $metodo,
             'patron' => $ruta,

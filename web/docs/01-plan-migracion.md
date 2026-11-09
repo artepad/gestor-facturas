@@ -636,6 +636,83 @@ Con esto terminan los 8 módulos fuera del POS. Todo `web/` sigue la
 arquitectura en capas salvo los scripts de infraestructura sin sesión
 (`api/facturas.php`, `migrar.php`, `procesar_cortes.php`).
 
+## Fase 19 · Punto de entrada único (Router)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Con los 8 módulos migrados, la raíz de `web/` tenía ~45 "archivos puente"
+de 10-15 líneas, uno por pantalla — necesarios para que cada dirección
+(`herramienta_caja.php`, `gastos.php`, etc.) siguiera existiendo como
+archivo real, pero sin lógica adentro más allá de instanciar un
+Controlador. Esta fase los reemplaza por un único punto de entrada,
+pedida explícitamente por el dueño al ver la carpeta en el editor
+("código suelto" en la raíz).
+
+**Qué cambió:**
+
+1. `app/Core/Router.php` — se corrigió `agregar()` para escapar los tramos
+   literales de cada ruta con `preg_quote` (antes el regex se armaba sin
+   escapar, así que el `.` de `.php` matcheaba cualquier carácter; no era
+   explotable porque no había rutas "vecinas" peligrosas, pero ahora que el
+   Router despacha TODO el sitio convenía cerrarlo bien).
+2. `app/Core/Request.php` — `ruta()` ahora calcula sola el prefijo de
+   carpeta donde vive `index.php` (`dirname($_SERVER['SCRIPT_NAME'])`) y lo
+   descuenta antes de matchear. Funciona igual en local
+   (`http://localhost/minimark/`) y en producción (dominio directo a
+   `web/`) sin configurar nada a mano. Se retiraron `fijarBase()`/`base()`
+   (quedaban sin usar — nadie los llamaba — y describían un diseño viejo:
+   el dominio apuntando a `public/`, que nunca se usó).
+3. `app/routes.php` (nuevo) — la tabla completa de rutas: una línea por
+   dirección, agrupadas por módulo, registrando GET y POST con el mismo
+   destino vía el helper `$ambos()` (los archivos puente de antes
+   respondían a cualquier método HTTP, así que para no cambiar el
+   comportamiento se registran ambos siempre). La única ruta que no es
+   `[Controlador, 'metodo']` es `/caja.php`: registra una función que hace
+   el mismo `match()` por `accion` del POST que antes hacía el archivo
+   puente (`CajaController` separa `abrir()`/`movimiento()`/`cerrar()` en
+   vez de un solo método).
+4. `index.php` (la raíz) — pasó de ser un simple redirect ("si hay sesión →
+   home.php, si no → login.php") a ser el único archivo real: crea el
+   Router, incluye `app/routes.php`, despacha según método+ruta (HEAD se
+   trata como GET) y responde 404 si nada hace match. La redirección vieja
+   de la raíz ("/") ahora es la primera ruta registrada en `app/routes.php`.
+5. `.htaccess` — una regla nueva al final: cualquier dirección que NO sea
+   un archivo o carpeta real existente (`RewriteCond %{REQUEST_FILENAME}
+   !-f`/`!-d`) se manda a `index.php`, SIN el flag `[R]` — así la URL que
+   ve el navegador no cambia. Los archivos reales (CSS, `uploads/`,
+   `api/facturas.php`, `migrar.php`, `procesar_cortes.php`, `config.php`)
+   siguen sirviéndose directo, nunca pasan por el Router.
+6. Se borraron los ~45 archivos puente de la raíz (`git rm`). Quedan como
+   archivos reales en `web/`: `index.php`, `config.php`,
+   `config.ejemplo.php`, `migrar.php`, `procesar_cortes.php` — nada más.
+
+**Ninguna URL cambió.** `admin.minimark.cl/herramienta_caja.php` sigue
+siendo exactamente esa dirección; lo único que cambió es que ya no hay un
+`herramienta_caja.php` físico — lo resuelve el Router. Tampoco cambió el
+comportamiento de ninguna pantalla (CSRF, permisos, uploads, JSON, etc.
+idénticos).
+
+**Probado:**
+- `scripts/smoke.php` (32/32) corriendo a través del Router.
+- Se volvieron a correr **todos** los scripts de pruebas funcionales de
+  cada módulo migrado (Sistema, Usuarios, Facturas, Negocios, Ingresos,
+  Fiados, Gastos, Productos/Herramientas) sin cambiarles una línea: todos
+  siguen pasando igual, confirmando que uploads multipart (el Excel de
+  productos), JSON, y los formularios con CSRF funcionan idénticos a
+  través del nuevo punto de entrada.
+- Un script de pruebas nuevo dedicado al Router: `caja.php` con sus 3
+  acciones especiales (`abrir`/`movimiento`/`cerrar`, cada una redirige
+  por CSRF inválido sin token, y una acción desconocida cae al `index()`
+  por defecto, igual que el `match()` original); un archivo estático
+  (`assets/estilo.css`) se sigue sirviendo directo sin pasar por PHP;
+  `config.php` sigue bloqueado; una ruta realmente inexistente da 404
+  limpio (no 500); la raíz `/` redirige según sesión; `pos_api.php`
+  responde JSON válido.
+- Verificación visual en el navegador: Home, Herramientas, Caja (con un
+  turno abierto de verdad) y la pantalla de Venta en modo kiosco (sin
+  sidebar, con su propio CSS/JS, candado por PIN) — todas renderizan
+  idéntico a como lo hacían con los archivos puente.
+
 ---
 
 ## Lo que NO cambia en ningún momento
