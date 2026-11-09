@@ -472,6 +472,53 @@ ver, redirige igual que una inexistente) y el control de acceso por
 negocio para el rol vendedor. Verificación visual en el navegador (listado
 y detalle con datos reales).
 
+## Fase 16 · Negocios (sexto módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Sexto módulo del plan módulo-por-módulo. Cuatro pantallas:
+`negocios.php` (listado con conteo de facturas y PCs), `negocio_form.php`
+(crear/editar perfil, con generación de slug único), `negocio_tokens.php`
+(generar/revocar tokens de sincronización de cada PC) y `negocio_panel.php`
+(análisis: ventas, compras, gastos, fiados y balance de un negocio, con
+gráficos). `App\Controllers\NegociosController` (`index()`, `formulario()`,
+`tokens()`, `panel()`) + `App\Models\Negocio`, SQL propio.
+
+**Particularidad de permisos**: a diferencia de las otras tres pantallas
+(solo admin, `exigir_permiso('negocios')`), `negocio_panel.php` es para
+**cualquier rol** que pueda ver ese negocio — es la pantalla a la que llega
+cualquier usuario al hacer clic en una tarjeta de "Estado por negocio" del
+Home. Usa `BaseController::exigirSesion()` (el mismo método agregado en la
+Fase 13 para `home.php`) en vez de `exigirPermiso()`.
+
+**Sin duplicar consultas**: en vez de reescribir las métricas de
+`negocio_panel.php` desde cero, `Negocio` reutiliza `Home::ventasPorDia()` y
+`Home::comprasPorNegocio()` (pasándoles un array de un solo id) y
+`Gasto::totalPeriodo()`/`Gasto::porCategoria()` — las únicas consultas
+nuevas son las que no existían en ningún otro Modelo (resumen de ventas por
+medio de pago, ventas por departamento, productos más comprados, deuda
+vigente de un negocio).
+
+Se agregó CSRF a los tres formularios con escritura (crear/editar negocio,
+generar/eliminar token); `negocio_panel.php` es de solo lectura, sin CSRF.
+Se conserva que generar un token no redirige: se muestra en texto plano una
+sola vez, en la misma respuesta — exactamente el comportamiento original
+(crítico no cambiarlo: es la única vez que el token completo es visible).
+
+Probado con `scripts/smoke.php` (32/32) y un script de pruebas funcionales
+dedicado: listado contra el conteo real de la BD, CSRF, crear negocio y
+verificar el slug generado, slugs únicos al repetir el nombre (sufijo
+`-2`), nombre vacío rechazado, editar (incluida la casilla "activo"
+desmarcada) sin que el slug cambie, el panel de análisis con un negocio
+real y con un id inexistente/ausente, generación de token verificando que
+el hash guardado en la BD coincide con `sha256()` del token mostrado y que
+el token en claro no vuelve a aparecer al recargar, aislamiento entre
+negocios (no se puede eliminar una máquina de otro negocio desde su propia
+pantalla de tokens), y permisos por rol (vendedor sin acceso a las tres
+pantallas de admin, pero con acceso a `negocio_panel.php` de sus propios
+negocios y bloqueado en los ajenos). Verificación visual en el navegador
+(listado, panel de análisis y tokens, los tres con datos reales).
+
 ---
 
 ## Lo que NO cambia en ningún momento
