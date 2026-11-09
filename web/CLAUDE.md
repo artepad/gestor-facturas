@@ -10,17 +10,17 @@ lados puede romperlo sin coordinar con el otro.
 > `pos_api.php`, `caja.php`, `inventario.php`, `compras.php`, `promociones.php`,
 > `servicios.php`, `precios_fv.php`) siguen capas (Router → Controlador → Modelo →
 > Vista, en `app/`) y así están en producción desde el 2026-11-08. **Fiados**
-> (`fiados.php`, `cliente.php`, `cliente_form.php`, `estado_cuenta_imprimir.php`)
-> y **Gastos** (`gastos.php`, `gasto_form.php`, `categorias_gasto.php`,
-> `gastos_fijos.php`) se sumaron después (2026-11-08/09) como los primeros
-> módulos fuera del POS en migrarse — mismo patrón, su propio Controlador y
-> Modelo cada uno. **El resto del panel** (facturas, ingresos, herramientas,
-> negocios, usuarios) sigue siendo PHP plano tradicional — se van migrando
-> módulo por módulo, no todos de una. Ver «Arquitectura del POS (capas)» más
-> abajo para cómo trabajar ahí (el patrón es el mismo para cualquier pantalla
-> ya migrada, sea del POS o no), y `web/docs/01-plan-migracion.md` para la
-> bitácora de la migración original. El estándar general que se siguió está en
-> `web/docs/prompt-migracion-arquitectura.md`.
+> (`fiados.php`, `cliente.php`, `cliente_form.php`, `estado_cuenta_imprimir.php`),
+> **Gastos** (`gastos.php`, `gasto_form.php`, `categorias_gasto.php`,
+> `gastos_fijos.php`) y **Sistema** (`login.php`, `logout.php`, `home.php`,
+> `ver_pdf.php`) se sumaron después (2026-11-08/09) — mismo patrón, su propio
+> Controlador y Modelo cada uno. **El resto del panel** (facturas, ingresos,
+> herramientas, negocios, usuarios) sigue siendo PHP plano tradicional — se van
+> migrando módulo por módulo, no todos de una. Ver «Arquitectura del POS
+> (capas)» más abajo para cómo trabajar ahí (el patrón es el mismo para
+> cualquier pantalla ya migrada, sea del POS o no), y
+> `web/docs/01-plan-migracion.md` para la bitácora de la migración original. El
+> estándar general que se siguió está en `web/docs/prompt-migracion-arquitectura.md`.
 
 ## Contexto
 
@@ -84,14 +84,16 @@ web/
 ├── app/                  ← arquitectura en capas del POS (ver «Arquitectura del POS» abajo)
 │   ├── bootstrap.php      arranque: autoload, errores, sesión
 │   ├── Core/              Config, Database, Request, Router, Session, View, helpers.php
-│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos)
+│   ├── Controllers/       un Controlador por pantalla migrada (POS + Fiados + Gastos + Sistema)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
 │   │                      Inventario, Compra) + PrecioFV y Cliente (SQL propio) + Gasto
 │   │                      (mixto: envuelve lib/gastos.php para lo que ya existía ahí,
-│   │                      SQL propio para el CRUD que no tenía — ver «Arquitectura del
-│   │                      POS» más abajo)
+│   │                      SQL propio para el CRUD que no tenía) + Home y Factura
+│   │                      (SQL propio, Factura solo trae lo que necesita ver_pdf —
+│   │                      ver «Arquitectura del POS» más abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
-│                          promociones/, servicios/, precios_fv/imprimir.php, fiados/, gastos/)
+│                          promociones/, servicios/, precios_fv/imprimir.php, fiados/,
+│                          gastos/, auth/, home/). ver_pdf.php no tiene vista (responde el PDF directo)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión); NO es lo que atiende
 │                          producción — las pantallas del POS son archivos puente (ver abajo)
@@ -123,11 +125,13 @@ web/
 │   └── precios_fv/        fotos de Frutas y Verduras (WebP, nombre aleatorio). Servido
 │                          directo pero sin poder ejecutar nada (uploads/.htaccess)
 │
-├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos)
+├── home.php             tablero de inicio (tarjetas resumen + accesos rápidos) —
+│                        puente a App\Controllers\HomeController
 ├── negocio_panel.php    panel de análisis de un negocio (clic en "Estado por negocio")
 ├── panel_facturas.php   listado de facturas + filtros (la página principal de consulta)
 ├── factura.php          detalle de una factura (cabecera + productos + botón Ver PDF)
-├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio
+├── ver_pdf.php          sirve el PDF de una factura con control de acceso por negocio —
+│                        puente a App\Controllers\VerPdfController
 │
 ├── fiados.php           listado de clientes con su saldo — puente a App\Controllers\FiadosController
 ├── cliente_form.php     crear/editar un cliente de fiados — puente al mismo Controlador
@@ -156,8 +160,8 @@ web/
 ├── herramienta_catalogo.php   Consultar Catálogo: buscador + escáner de cámara de productos
 ├── catalogo_buscar.php        endpoint JSON con todos los campos del producto (lo usa Consultar Catálogo)
 │
-├── login.php            formulario de ingreso
-├── logout.php           cerrar sesión
+├── login.php            formulario de ingreso — puente a App\Controllers\AuthController
+├── logout.php           cerrar sesión — puente al mismo Controlador
 │
 ├── negocios.php         lista de negocios (tarjetas)
 ├── negocio_form.php     crear/editar perfil de negocio (nombre, rut, teléfono, dirección, correo)
@@ -187,12 +191,13 @@ web/
 
 ## Arquitectura del POS (capas)
 
-Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados y Gastos son las
-únicas de todo `web/` que siguen el patrón Router → Controlador → Modelo →
-Vista (estándar completo en `web/docs/prompt-migracion-arquitectura.md`). El
-resto del panel NO sigue este patrón todavía — ver el contexto en el banner del
-principio de este archivo. El nombre de la sección quedó de cuando solo era el
-POS; el patrón que describe aplica igual a cualquier pantalla migrada.
+Las pantallas del POS y, desde el 2026-11-08/09, las de Fiados, Gastos y
+Sistema son las únicas de todo `web/` que siguen el patrón Router →
+Controlador → Modelo → Vista (estándar completo en
+`web/docs/prompt-migracion-arquitectura.md`). El resto del panel NO sigue este
+patrón todavía — ver el contexto en el banner del principio de este archivo.
+El nombre de la sección quedó de cuando solo era el POS; el patrón que
+describe aplica igual a cualquier pantalla migrada.
 
 **Una visita a `pos.php` (o cualquiera de las otras):**
 `pos.php` (archivo puente en la raíz, mismo nombre de siempre) → `app/bootstrap.php`
@@ -222,7 +227,10 @@ con `h()`/`e()` en cada salida.
   del período, generación de gastos fijos — esas funciones las comparte con
   `home.php` y `negocio_panel.php`, así que `lib/gastos.php` NO se tocó), y
   usa SQL propio para el CRUD de gastos/categorías/plantillas que antes vivía
-  suelto dentro de cada pantalla.
+  suelto dentro de cada pantalla. `App\Models\Home` y `App\Models\Factura`
+  (Sistema) también son SQL propio — no hay nada en `lib/` que envolver para
+  el tablero de inicio, y `Factura::paraPdf()` solo trae lo mínimo que
+  necesita `ver_pdf.php` (el módulo Facturas completo aún no está migrado).
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
   POST) existe **solo en las pantallas migradas** (POS + Fiados + Gastos) — es
   el hallazgo H3 de la auditoría, cerrado pantalla por pantalla durante la
@@ -230,7 +238,13 @@ con `h()`/`e()` en cada salida.
   panel todavía no lo tiene. La mayoría lo valida vía
   `BaseController::verificarCsrf()`; `pos_api.php` y `precios_fv.php` no
   extienden `BaseController` (responden JSON/multipart, no redirigen) y
-  llaman `Session::csrfValido()` directo.
+  llaman `Session::csrfValido()` directo. **Sistema es la excepción silenciosa**:
+  `login.php`/`logout.php`/`ver_pdf.php` no tienen formularios con estado que
+  proteger (login no tenía CSRF en el código viejo tampoco — es una decisión
+  consciente, no un olvido: un login forzado por CSRF no le sirve a un
+  atacante sin la contraseña), así que `AuthController` no extiende
+  `BaseController` y `VerPdfController` lo extiende solo por `exigirPermiso()`,
+  sin usar `verificarCsrf()` (es una pantalla de solo lectura, sin POST).
 - **`app/views/pos/index.php` y `app/views/pos_api` no existen como tal** —
   `pos_api.php` no tiene Vista (responde JSON); `precios_fv.php` tampoco
   (responde JSON), salvo `precios_fv_imprimir.php` que sí (`precios_fv/imprimir.php`).
@@ -252,8 +266,8 @@ al Modelo (envolviendo una función de `lib/pos.php` o `lib/gastos.php` si ya
 existe ahí, o SQL propio si no), el método o rama `accion` al Controlador, y el
 formulario con `campo_csrf()` a la Vista. **Para migrar una pantalla nueva del
 panel** (el próximo candidato, a decidir con el dueño: Ingresos, Negocios,
-Productos/Herramientas, Facturas, Usuarios o Sistema): seguir el mismo patrón
-de estos cortes, descrito en detalle en `web/docs/01-plan-migracion.md`.
+Productos/Herramientas, Facturas o Usuarios): seguir el mismo patrón de estos
+cortes, descrito en detalle en `web/docs/01-plan-migracion.md`.
 
 ## Modelo de datos (MySQL)
 

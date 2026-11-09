@@ -41,6 +41,13 @@ final class Gasto
         return \gastos_por_categoria(Database::pdo(), $ids, $desde, $hasta);
     }
 
+    /** Mapa negocio_id => total de gastos del período (usado por Home). */
+    public static function porNegocio(array $ids, string $desde, string $hasta): array
+    {
+        self::cargar();
+        return \gastos_por_negocio(Database::pdo(), $ids, $desde, $hasta);
+    }
+
     public static function generarFijosDelMes(int $negocioId, string $mes, ?int $usuarioId): int
     {
         self::cargar();

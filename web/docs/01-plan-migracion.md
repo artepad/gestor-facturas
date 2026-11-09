@@ -343,13 +343,72 @@ generación no duplica), CSRF, permisos (el rol vendedor no tiene el módulo
 acción `generar_fijos` redirigen igual para ese rol), y limpieza sin dejar
 rastro en la BD. Verificación visual en el navegador.
 
-**Nota aparte, no relacionada con esta migración**: durante las pruebas se
-detectó que el XAMPP local tiene `date.timezone = Europe/Berlin` en vez de
-la zona horaria de Chile — un gasto creado con la fecha "de hoy" quedaba al
-día siguiente según el reloj de PHP. Es una configuración del entorno local
-(`php.ini`), no un bug del código (viejo o nuevo: ambos llaman `date()` de
-la misma forma) — queda pendiente corregir el `php.ini` local si molesta
-para pruebas futuras cerca de la medianoche.
+**Corrección a una nota anterior**: durante las pruebas se vio un gasto creado
+con la fecha "de hoy" aparecer fechado al día siguiente, y en su momento se
+anotó acá como un problema de `date.timezone` en el `php.ini` local
+(`Europe/Berlin` en vez de Chile). Investigado mejor en la Fase 13: **no es
+un problema de la app** — `app/bootstrap.php` ya fija
+`date_default_timezone_set('America/Santiago')` para toda pantalla que pase
+por ahí (todo lo migrado a capas, `gastos.php` incluido). El desfase lo causó
+el propio script de pruebas, que calculaba "hoy" con un `php -r` suelto por
+consola (sin cargar `bootstrap.php`, así que usaba el `Europe/Berlin` del
+`php.ini` de XAMPP) y mandaba esa fecha como dato del formulario. Nada que
+corregir en el proyecto; sí vale recordarlo para el próximo script de
+pruebas por consola: si necesita "la fecha de hoy", que la pida al
+Controlador/Modelo real, no que la calcule aparte.
+
+## Fase 13 · Sistema (tercer módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Tercer módulo del plan módulo-por-módulo. Cuatro pantallas sin relación
+funcional entre sí (login/logout, el tablero de inicio, y servir el PDF de
+una factura), así que en vez de un Controlador único (como Fiados/Gastos,
+que sí son un solo dominio) se crearon tres, cada uno del tamaño de lo que
+resuelve:
+- `App\Controllers\AuthController` (`login()`/`logout()`) — login.php,
+  logout.php. Es el único Controlador que NO extiende `BaseController`: la
+  lógica es al revés (si HAY sesión, redirige a home.php en vez de
+  exigirla). Sin CSRF a propósito, igual que el código viejo — un login
+  forzado por CSRF no le sirve a un atacante sin la contraseña.
+- `App\Controllers\HomeController` (`index()`) — home.php, el tablero de
+  mando. Usa un método nuevo en `BaseController`, `exigirSesion()`, para los
+  casos (como este) donde alcanza con estar logueado, sin exigir el permiso
+  de un módulo puntual.
+- `App\Controllers\VerPdfController` (`index()`) — ver_pdf.php. Extiende
+  `BaseController` solo por `exigirPermiso('facturas')`; no usa
+  `verificarCsrf()` porque es una pantalla de solo lectura (GET, sin
+  formularios). Responde el PDF directo, sin Vista — mismo criterio que
+  `pos_api.php` respondiendo JSON directo.
+
+Modelos nuevos, ambos SQL propio (sin equivalente en ningún `lib/*.php`):
+`App\Models\Home` (consultas por negocio: ventas, compras, facturas por
+revisar, correos de corte con error, clientes con deuda) y
+`App\Models\Factura` (hoy solo `paraPdf()`, lo mínimo que necesita
+`ver_pdf.php` — el módulo Facturas completo, con `panel_facturas.php` y
+`factura.php`, sigue sin migrar). `App\Models\Gasto` ganó un método más,
+`porNegocio()` (envoltorio de `gastos_por_negocio()`), que `Home` reutiliza
+para no duplicar esa consulta.
+
+**Limpieza de código muerto encontrada de paso**: `home.php` calculaba
+`$deudaNeg`/`$deudaTotal` (deuda por negocio) pero nunca los mostraba en
+ninguna parte de la pantalla — el bloque "Requiere atención" usa una
+consulta distinta (`$fiadosNeg`, vía `Home::fiadosConDeudaPorNegocio()`).
+Se confirmó con una búsqueda en todo el proyecto que esas variables no se
+usaban en ningún otro lado y se dejaron fuera de la migración (consistente
+con el pedido explícito de "evitar código duplicado o funcionalidades
+innecesarias" del encargo original de esta migración). No cambia nada
+visible para el usuario.
+
+Probado con `scripts/smoke.php` (32/32, login incluido — es la base de
+todo el resto de la suite) y un script de pruebas funcionales dedicado:
+formulario de login sin sesión, credenciales inválidas, login correcto,
+redirección si ya hay sesión, cookie "recordar mi correo" (guardarla,
+precargarla, olvidarla), logout, acceso bloqueado después de logout,
+`ver_pdf.php` sin id / con id inexistente / con una factura real (se
+verificó la firma `%PDF` de la respuesta) y el filtro de acceso por
+negocio. Verificación visual en el navegador (pantalla de login y tablero
+de inicio completo, con sus alertas de "Requiere atención").
 
 ---
 

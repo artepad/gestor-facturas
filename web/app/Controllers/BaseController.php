@@ -34,6 +34,13 @@ abstract class BaseController
         return $usuario;
     }
 
+    /** Exige solo sesion, sin mirar un permiso de modulo (ej. home.php: cualquier rol entra). */
+    protected function exigirSesion(): array
+    {
+        require_once dirname(__DIR__, 2) . '/lib/auth.php';
+        return \exigir_login();
+    }
+
     /**
      * Verifica el token CSRF del POST actual. Si no es valido, deja un
      * mensaje flash y redirige (nunca deja seguir con un formulario viejo o
