@@ -443,6 +443,35 @@ aislada adicional que confirmó, contra el único admin real de la base de
 datos local, que degradarlo se rechaza y su rol queda intacto. Verificación
 visual en el navegador (listado y formulario de creación).
 
+## Fase 15 · Facturas (quinto módulo fuera del POS)
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Quinto módulo del plan módulo-por-módulo. Dos pantallas, ambas de solo
+lectura — sin un solo formulario que guarde algo, así que no hace falta
+CSRF: `panel_facturas.php` (listado + filtros: negocio, proveedor exacto,
+texto libre, rango de fechas) y `factura.php` (cabecera + líneas de
+`detalle_factura` + botón Ver PDF). `App\Controllers\FacturasController`
+(`panel()`/`detalle()`) + `App\Models\Factura`, que ya existía desde la
+Fase 13 (Sistema) con un solo método, `paraPdf()`, para `ver_pdf.php` — acá
+se completó con `listado()`, `proveedoresDe()`, `porId()` y `detalleDe()`.
+`ver_pdf.php` sigue usando `Factura::paraPdf()` sin cambios.
+
+Nada de lib/*.php que envolver: estas consultas vivían sueltas en las dos
+pantallas, sin una función reutilizable en ningún lado (ni siquiera las usa
+`negocio_panel.php`, que tiene las suyas propias para facturas).
+
+Probado con `scripts/smoke.php` (32/32) y un script de pruebas funcionales
+dedicado: el listado sin filtros contra el conteo real de la BD, filtro de
+texto, filtro de proveedor exacto (combo) contra el conteo real, rango de
+fechas amplio y rango sin resultados, el detalle de una factura real
+(proveedor y número correctos, el bloque de líneas de producto aparece
+solo si existen), factura inexistente y sin `id` (ambos redirigen al
+listado), una factura con soft-delete (`eliminada_en` no nula: no se puede
+ver, redirige igual que una inexistente) y el control de acceso por
+negocio para el rol vendedor. Verificación visual en el navegador (listado
+y detalle con datos reales).
+
 ---
 
 ## Lo que NO cambia en ningún momento
