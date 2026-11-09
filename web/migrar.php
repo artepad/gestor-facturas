@@ -760,4 +760,65 @@ echo "\n[Frutas y Verduras: imagen del producto + mudanza a la ventana de Venta]
 // esta columna guarda la ruta relativa de la foto subida (uploads/precios_fv/).
 agregar_columna($pdo, 'precios_fv', 'imagen', "VARCHAR(255) NULL AFTER unidad");
 
+echo "\n[Fase 21 migracion: documentos/facturas/{slug}/{año}/{mes}/]\n";
+// La carpeta de PDFs paso de almacen_pdf/{negocio_id}/{uuid}.pdf a
+// documentos/facturas/{slug del negocio}/{año}/{mes}/{uuid}.pdf, segun la
+// FECHA DE LA FACTURA (ver docs/01-plan-migracion.md, Fase 21, y
+// api/facturas.php que ya guarda ahi los PDF nuevos). Este paso reubica los
+// que ya estaban en la carpeta vieja. Idempotente: una factura cuya
+// ruta_pdf ya tiene el formato nuevo (3 barras en vez de 1) se salta; si
+// almacen_pdf/ ya no existe (reubicacion anterior ya la vacio y se borro),
+// no hace nada.
+$carpetaPdfVieja = __DIR__ . '/almacen_pdf';
+if (is_dir($carpetaPdfVieja)) {
+    $carpetaPdfNueva = rtrim((string)cargar_config()['carpeta_pdf'], '/');
+    $negocios = $pdo->query("SELECT id, slug FROM negocios")->fetchAll(PDO::FETCH_KEY_PAIR); // id => slug
+
+    $st = $pdo->query("SELECT id, negocio_id, fecha, ruta_pdf FROM facturas WHERE ruta_pdf IS NOT NULL");
+    $movidas = 0; $yaNuevo = 0; $sinArchivo = 0; $sinNegocio = 0;
+    foreach ($st->fetchAll() as $f) {
+        if (substr_count($f['ruta_pdf'], '/') >= 3) { $yaNuevo++; continue; } // ya migrada
+
+        $origen = $carpetaPdfVieja . '/' . $f['ruta_pdf'];
+        if (!is_file($origen)) { $sinArchivo++; continue; }
+
+        $slug = $negocios[$f['negocio_id']] ?? null;
+        if (!$slug) { $sinNegocio++; continue; } // negocio borrado: no se toca, queda para revisar a mano
+
+        $fecha = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$f['fecha']) ? $f['fecha'] : date('Y-m-d');
+        $anio = substr($fecha, 0, 4);
+        $mes  = substr($fecha, 5, 2);
+
+        $carpetaDestino = "$carpetaPdfNueva/$slug/$anio/$mes";
+        if (!is_dir($carpetaDestino)) {
+            mkdir($carpetaDestino, 0755, true);
+        }
+        $nombreArchivo = basename($f['ruta_pdf']);
+        $rutaPdfNueva = "$slug/$anio/$mes/$nombreArchivo";
+
+        if (rename($origen, "$carpetaDestino/$nombreArchivo")) {
+            $pdo->prepare("UPDATE facturas SET ruta_pdf = ? WHERE id = ?")->execute([$rutaPdfNueva, $f['id']]);
+            $movidas++;
+        }
+    }
+    echo "  ~ $movidas PDF reubicados, $yaNuevo ya estaban en el formato nuevo, "
+       . "$sinArchivo sin archivo fisico, $sinNegocio con negocio inexistente\n";
+
+    // Limpia las carpetas {negocio_id}/ viejas si quedaron vacias, y la
+    // propia almacen_pdf/ si ya no tiene nada adentro. rmdir() en una
+    // carpeta no vacia simplemente falla (con @ no corta el script).
+    foreach (glob($carpetaPdfVieja . '/*', GLOB_ONLYDIR) as $sub) {
+        @rmdir($sub);
+    }
+    // Su propio .htaccess (Require all denied) no sirve de nada si la
+    // carpeta ya no tiene PDF adentro; sin borrarlo, rmdir() de abajo
+    // fallaria siempre porque la carpeta nunca quedaria realmente vacia.
+    @unlink($carpetaPdfVieja . '/.htaccess');
+    if (@rmdir($carpetaPdfVieja)) {
+        echo "  ~ almacen_pdf/ quedo vacia y se borro\n";
+    }
+} else {
+    echo "  - no existe almacen_pdf/, nada que reubicar\n";
+}
+
 echo "\nListo. Migraciones aplicadas.\n";

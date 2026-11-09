@@ -1,13 +1,15 @@
 <?php
 /**
- * Respaldo automatico de almacen_pdf/ (hallazgo H7 de la auditoria: la base
- * de datos ya tiene respaldo diario de cPanel, pero los PDF escaneados no
- * tenian ninguno — si se pierde el servidor, se pierden las facturas).
+ * Respaldo automatico de documentos/facturas/ (hallazgo H7 de la auditoria:
+ * la base de datos ya tiene respaldo diario de cPanel, pero los PDF
+ * escaneados no tenian ninguno — si se pierde el servidor, se pierden las
+ * facturas).
  *
- * Comprime almacen_pdf/ completo en un .zip con fecha, guardado en
- * respaldos_pdf/ (bloqueado por su propio .htaccess, igual que
- * almacen_pdf/). Conserva los ultimos 14 (mismo criterio que usa cPanel
- * para la base de datos) y borra los mas viejos.
+ * Comprime documentos/facturas/ completo (carpeta_pdf en config.php) en un
+ * .zip con fecha, guardado en documentos/respaldos/ (bloqueados los dos por
+ * el .htaccess de documentos/, Fase 21 de la migracion). Conserva los
+ * ultimos 14 (mismo criterio que usa cPanel para la base de datos) y borra
+ * los mas viejos.
  *
  * Se ejecuta de dos formas, mismo patron que procesar_cortes.php:
  *   - Cron de cPanel (una vez al dia):  php /home/.../scripts/respaldo_pdfs.php
@@ -29,7 +31,7 @@ if (!$esCli) {
 }
 
 $carpetaPdf = rtrim((string)$config['carpeta_pdf'], '/');
-$carpetaRespaldos = dirname(__DIR__) . '/respaldos_pdf';
+$carpetaRespaldos = dirname(__DIR__) . '/documentos/respaldos';
 const RETENCION_DIAS = 14;
 
 function log_linea(string $msg): void
@@ -44,7 +46,8 @@ if (!is_dir($carpetaPdf)) {
 
 if (!is_dir($carpetaRespaldos)) {
     mkdir($carpetaRespaldos, 0755, true);
-    // Mismo candado que almacen_pdf/: esta carpeta nunca se sirve por la web.
+    // Ya queda bloqueada por el .htaccess de documentos/ (su carpeta padre);
+    // esta es una segunda capa por si alguna vez esta carpeta se usa suelta.
     file_put_contents($carpetaRespaldos . '/.htaccess', "Require all denied\n");
 }
 

@@ -1,0 +1,5 @@
+# Documentos del negocio (facturas sincronizadas + sus respaldos). Nunca se
+# sirven directo por la web: facturas.php los accede via ver_pdf.php con
+# control de acceso por negocio; los respaldos no los accede nadie por web.
+# Una sola regla acá protege todo lo de adentro (facturas/, respaldos/).
+Require all denied

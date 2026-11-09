@@ -782,6 +782,85 @@ Probado: `scripts/smoke.php` (32/32) y lint de todos los `.php` tocados
 (solo cambiaron comentarios y dos líneas de `ini_set('error_log', ...)`,
 nada de lógica). Documentado acá y en `web/CLAUDE.md`.
 
+## Fase 21 · documentos/ — facturas por negocio/año/mes
+
+**Estado: terminada en local (2026-11-09), pendiente de subir a producción.**
+
+Pedido del dueño: centralizar los PDF de facturas y sus respaldos en una
+sola carpeta, organizados para que vaya a escalar cuando se sumen más
+negocios. Se discutió la propuesta antes de tocar nada (4 decisiones:
+sin datos reales en el servidor todavía → se podía aplicar directo sin
+una migración "en caliente"; año/mes según la fecha de la factura, no de
+cuándo se sincroniza; carpeta de negocio por `slug` en vez de `id`; una
+sola carpeta madre para facturas + respaldos).
+
+**Estructura nueva**: `documentos/facturas/{slug}/{año}/{mes}/{uuid}.pdf`
+(antes: `almacen_pdf/{negocio_id}/{uuid}.pdf`) y `documentos/respaldos/`
+(antes: `respaldos_pdf/`, carpeta separada en la raíz). Una sola regla
+`Require all denied` en `documentos/.htaccess` protege las dos
+subcarpetas.
+
+**Por qué el `slug` es seguro para usar como carpeta**: se confirmó
+revisando `App\Models\Negocio::actualizar()` que el slug **nunca se toca
+al editar** un negocio (solo se genera una vez, al crearlo, con sufijo
+`-2`/`-3` si hay colisión) — así que es tan estable como el `id`, pero
+legible si alguna vez hay que entrar a mirar los archivos a mano por
+cPanel.
+
+**Qué se tocó:**
+- `config.ejemplo.php` / `config.php` — `carpeta_pdf` pasa a apuntar a
+  `documentos/facturas` (el código que la usa, `api/facturas.php` y
+  `VerPdfController`, no cambió: ya leían el valor desde `config.php`, no
+  tenían la ruta vieja escrita a mano).
+- `api/facturas.php` — arma la carpeta con el `slug` del negocio (ahora
+  se trae con un JOIN en la consulta que ya resolvía la máquina por su
+  token) y el año/mes de `datos.fecha`. Se adelantó la consulta que
+  detecta si la factura ya existía (antes vivía más abajo, dentro de la
+  transacción) para poder comparar la `ruta_pdf` vieja contra la nueva:
+  si una edición cambia la fecha a otro mes, el PDF se guarda en la
+  carpeta nueva y el archivo viejo se borra (evita huérfanos). El cliente
+  Python no necesita ningún cambio — sigue mandando el mismo payload de
+  siempre.
+- `scripts/respaldo_pdfs.php` — la ruta de respaldo pasa de
+  `respaldos_pdf/` (hardcodeada) a `documentos/respaldos/` (sigue
+  hardcodeada: nunca fue configurable y no hacía falta agregarle esa
+  flexibilidad para este cambio).
+- `migrar.php` — nuevo paso idempotente que reubica los PDF que hayan
+  quedado en `almacen_pdf/` (la carpeta vieja) a la estructura nueva y
+  actualiza `ruta_pdf` en la base de datos; si una factura ya tiene la
+  `ruta_pdf` en formato nuevo (3 barras en vez de 1) la salta. Al
+  terminar, si `almacen_pdf/` quedó vacía (incluido su propio
+  `.htaccess`, que ya no cumple ningún propósito), se borra sola.
+- `docs/CONTRATO.md` — actualizada la sección que documenta dónde guarda
+  el PDF el servidor (el cliente Python nunca construye esta ruta, pero
+  el contrato la documenta igual como referencia).
+- `docs/DESPLIEGUE.md` — el paso de permisos (chmod) ahora habla de
+  `documentos/` en vez de `almacen_pdf/`. `docs/README_SERVIDOR.md` NO se
+  tocó: es un documento histórico de la Fase 1, marcado como tal arriba
+  del todo, reemplazado por `DESPLIEGUE.md`.
+- `web/CLAUDE.md` — árbol de archivos actualizado.
+
+**Nota aparte, no corregida en esta fase**: revisando `docs/DESPLIEGUE.md`
+para este cambio se notó que su lista de "archivos a subir" (sección 1)
+quedó desactualizada por la Fase 19 — menciona varios archivos puente que
+ya no existen (`pos.php`, `producto_form.php`, `usuarios.php`, etc.) y no
+menciona `index.php`/`app/`/`.htaccess`, que ahora son imprescindibles.
+Haría falta una revisión completa de esa lista antes del próximo
+despliegue real.
+
+Probado localmente: se corrió `migrar.php` dos veces seguidas (confirma
+que reubicar los 6 PDF de prueba es idempotente — la segunda vez no
+mueve nada); se verificó a mano que `ver_pdf.php` sigue sirviendo el PDF
+con la ruta nueva; se generó un token de máquina de prueba y se simuló
+una sincronización real contra `api/facturas.php` (alta con fecha de
+marzo, edición de la misma factura con fecha de abril) comprobando que:
+el PDF queda en la carpeta correcta según la fecha, la edición mueve el
+archivo y borra el de la carpeta vieja sin dejar huérfanos, el
+`uuid_local` sigue sin duplicar la factura (upsert), y un token inválido
+se sigue rechazando; se corrió `scripts/respaldo_pdfs.php` y generó el
+zip en la carpeta nueva; `scripts/smoke.php` (32/32) y lint de todos los
+`.php` tocados.
+
 ---
 
 ## Lo que NO cambia en ningún momento

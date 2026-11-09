@@ -20,7 +20,8 @@ return [
     'setup_key' => 'CAMBIA_ESTA_CLAVE_POR_UNA_LARGA_Y_SECRETA',
 
     // --- Carpeta donde se guardan los PDF subidos (relativa a este archivo) ---
-    'carpeta_pdf' => __DIR__ . '/almacen_pdf',
+    // Estructura: documentos/facturas/{slug del negocio}/{año}/{mes}/{uuid}.pdf
+    'carpeta_pdf' => __DIR__ . '/documentos/facturas',
 
     // --- Casilla que recibe los cortes de caja de Eleventa (módulo Ingresos) ---
     // Eleventa de cada negocio envía su corte a esta casilla; procesar_cortes.php

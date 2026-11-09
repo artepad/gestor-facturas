@@ -68,8 +68,11 @@ cPanel → **MySQL Databases**:
 En el Administrador de archivos (clic derecho → *Permissions*):
 - Carpetas: **755**  ·  Archivos: **644**.
 - `config.php`: **600** (solo el dueño lo lee).
-- `almacen_pdf/`: **755** y **escribible** por PHP (ahí se guardarán los PDF al
-  activar la sincronización). Verifica que dentro esté su `.htaccess` (deny all).
+- `documentos/`: **755** y **escribible** por PHP (ahí se guardan los PDF
+  sincronizados, en `documentos/facturas/`, y sus respaldos, en
+  `documentos/respaldos/` — ambas subcarpetas se crean solas la primera vez
+  que hacen falta). Verifica que dentro esté su `.htaccess` (deny all) —
+  protege las dos subcarpetas de una sola vez.
 
 ## 6. SSL / HTTPS
 

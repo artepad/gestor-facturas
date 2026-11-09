@@ -1,5 +1,5 @@
 # Fotos subidas por los usuarios (hoy: Frutas y Verduras). Se sirven directo
-# (por eso no es "Require all denied" como almacen_pdf/), pero nunca se
+# (por eso no es "Require all denied" como documentos/), pero nunca se
 # ejecuta nada como código, pase lo que pase con el nombre del archivo.
 php_flag engine off
 <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phar|cgi|pl|py|sh|htaccess)$">

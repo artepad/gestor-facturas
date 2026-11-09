@@ -10,7 +10,7 @@ use App\Models\Factura;
 /**
  * Sirve el PDF de una factura, validando que el usuario tenga acceso al
  * negocio de esa factura. Los PDF están fuera del acceso web directo
- * (almacen_pdf con .htaccess deny); este Controlador es la única vía.
+ * (documentos/ con .htaccess deny); este Controlador es la única vía.
  *   ver_pdf.php?id=N -> index()
  *
  * Responde el binario directo (sin Vista), igual que PosApiController

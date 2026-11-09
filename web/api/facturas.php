@@ -29,14 +29,21 @@ $token = trim(substr($auth, 7));
 $tokenHash = hash('sha256', $token);
 
 $pdo = obtener_pdo();
-$st = $pdo->prepare("SELECT id, negocio_id FROM maquinas WHERE token_hash = ?");
+// Se trae el slug del negocio junto con todo lo demas: lo usa la carpeta
+// del PDF mas abajo (Fase 21 de la migracion: documentos/facturas/{slug}/{anio}/{mes}/).
+$st = $pdo->prepare(
+    "SELECT m.id AS maquina_id, m.negocio_id, n.slug
+       FROM maquinas m JOIN negocios n ON n.id = m.negocio_id
+      WHERE m.token_hash = ?"
+);
 $st->execute([$tokenHash]);
 $maquina = $st->fetch();
 if (!$maquina) {
     responder_json(['error' => 'Token invalido.'], 401);
 }
-$maquinaId = (int)$maquina['id'];
+$maquinaId = (int)$maquina['maquina_id'];
 $negocioId = (int)$maquina['negocio_id'];
+$slugNegocio = $maquina['slug'];
 
 // --- Leer y validar el JSON de datos ---
 $rawDatos = $_POST['datos'] ?? '';
@@ -78,12 +85,31 @@ if (!empty($datos['eliminar'])) {
     }
 }
 
+// --- Factura existente (upsert por uuid_local) ---
+// Se mira ANTES de guardar el PDF porque, si la factura ya existia con un
+// PDF guardado en otra carpeta (ej. el cliente edito la fecha y eso cambia
+// de mes), hay que borrar el archivo viejo despues de guardar el nuevo —
+// ver mas abajo. El resto del script (el UPDATE/INSERT de verdad) reusa
+// $facturaId en vez de volver a consultar.
+$st = $pdo->prepare("SELECT id, ruta_pdf FROM facturas WHERE uuid_local = ?");
+$st->execute([$uuid]);
+$facturaExistente = $st->fetch() ?: null; // fetch() devuelve false, no null, si no hay fila
+$facturaId = $facturaExistente['id'] ?? null;
+$rutaPdfVieja = $facturaExistente['ruta_pdf'] ?? null;
+
 // --- Guardar el PDF si vino ---
 // Fase 8 de la migracion (archivos y subidas): nunca confiar en lo que dice
 // el cliente sobre el archivo (nombre, extension) -- se valida el contenido
 // real (cabecera %PDF-) y un tope de tamano antes de escribirlo a disco. Si
 // no pasa, NO se falla toda la sincronizacion: la factura se guarda igual,
 // solo sin PDF (mismo criterio que ya existia para una subida fallida).
+//
+// Carpeta (Fase 21): documentos/facturas/{slug del negocio}/{anio}/{mes}/,
+// segun la FECHA DE LA FACTURA (no la fecha de sincronizacion) — asi se
+// puede buscar "las facturas de marzo" sin importar cuando se sincronizaron.
+// Como la web nunca edita una factura sincronizada, el archivo no se vuelve
+// a mover por este lado; si se mueve es porque el cliente Python edito la
+// fecha y volvio a sincronizar.
 $rutaPdf = null;
 if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK
     && $_FILES['pdf']['size'] > 0 && $_FILES['pdf']['size'] <= 25 * 1024 * 1024
@@ -91,14 +117,31 @@ if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK
     && str_starts_with((string)file_get_contents($_FILES['pdf']['tmp_name'], false, null, 0, 5), '%PDF-')
 ) {
     $cfg = cargar_config();
-    $carpeta = $cfg['carpeta_pdf'] . '/' . $negocioId;
+
+    $fecha = trim((string)($datos['fecha'] ?? ''));
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+        $fecha = date('Y-m-d'); // defensivo: el contrato la pide siempre, pero nunca se confia ciegamente
+    }
+    $anio = substr($fecha, 0, 4);
+    $mes  = substr($fecha, 5, 2);
+
+    $carpeta = $cfg['carpeta_pdf'] . "/$slugNegocio/$anio/$mes";
     if (!is_dir($carpeta)) {
         mkdir($carpeta, 0755, true);
     }
     $nombrePdf = $uuid . '.pdf';
     $destino = $carpeta . '/' . $nombrePdf;
     if (move_uploaded_file($_FILES['pdf']['tmp_name'], $destino)) {
-        $rutaPdf = $negocioId . '/' . $nombrePdf;  // ruta relativa al almacen
+        $rutaPdf = "$slugNegocio/$anio/$mes/$nombrePdf";  // ruta relativa a carpeta_pdf
+
+        // Si ya tenia un PDF en otra ruta (cambio de fecha en una edicion),
+        // el archivo viejo queda huerfano: se borra para no desperdiciar espacio.
+        if ($rutaPdfVieja && $rutaPdfVieja !== $rutaPdf) {
+            $pdfViejo = $cfg['carpeta_pdf'] . '/' . $rutaPdfVieja;
+            if (is_file($pdfViejo)) {
+                @unlink($pdfViejo);
+            }
+        }
     }
 }
 
@@ -108,11 +151,7 @@ $g = fn($k, $def = null) => $datos[$k] ?? $def;
 try {
     $pdo->beginTransaction();
 
-    // Upsert por uuid_local
-    $st = $pdo->prepare("SELECT id FROM facturas WHERE uuid_local = ?");
-    $st->execute([$uuid]);
-    $facturaId = $st->fetchColumn();
-
+    // Upsert por uuid_local ($facturaId ya se resolvio mas arriba, antes de guardar el PDF)
     $campos = [
         'negocio_id'     => $negocioId,
         'proveedor'      => $g('proveedor'),

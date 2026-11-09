@@ -124,8 +124,15 @@ web/
 │   └── precios_fv/        fotos de Frutas y Verduras (WebP, nombre aleatorio). Servido
 │                          directo pero sin poder ejecutar nada (uploads/.htaccess)
 │
-├── almacen_pdf/         PDFs sincronizados, organizados en subcarpetas por negocio_id. Bloqueado por .htaccess
-├── respaldos_pdf/       zips de respaldo de almacen_pdf/ (scripts/respaldo_pdfs.php). Bloqueado por .htaccess
+├── documentos/           todo lo que no es código: facturas sincronizadas + sus respaldos
+│                        (Fase 21 de la migración). Una sola regla en su .htaccess
+│                        (Require all denied) protege las dos subcarpetas de adentro
+│   ├── facturas/          PDFs sincronizados, en {slug del negocio}/{año}/{mes}/{uuid}.pdf
+│   │                      — el año/mes son los de la FECHA DE LA FACTURA, no de cuándo
+│   │                      se sincronizó (api/facturas.php arma la ruta; gitignored salvo
+│   │                      .gitkeep)
+│   └── respaldos/         zips de respaldo de documentos/facturas/ (scripts/respaldo_pdfs.php,
+│                          gitignored salvo .gitkeep)
 ├── logs/                log de errores de PHP (app/bootstrap.php y lib/db.php escriben acá:
 │                        logs/app.log, gitignored). Bloqueado por .htaccess
 │
@@ -147,7 +154,7 @@ web/
 │
 ├── scripts/              utilidades de consola (guardadas con PHP_SAPI !== 'cli')
 │   ├── smoke.php                   prueba de humo: recorre las rutas clave y compara
-│   └── respaldo_pdfs.php           respalda almacen_pdf/ a respaldos_pdf/ (cron diario)
+│   └── respaldo_pdfs.php           respalda documentos/facturas/ a documentos/respaldos/ (cron diario)
 │
 ├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o
 │                        ?clave=setup_key). Fuera del Router a propósito: no es una
