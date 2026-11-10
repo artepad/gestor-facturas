@@ -11,7 +11,7 @@ use App\Core\Database;
  * turno). El resto de las funciones de venta (cobrar, anular, etc.) se
  * agrega en el corte 2b, cuando le toque a pos_api.php — mismo criterio que
  * CajaSesion: envoltorio sobre lib/pos.php, no una reimplementación (ver
- * web/docs/01-plan-migracion.md).
+ * web/docs/bitacora-migracion.md).
  */
 final class Venta
 {

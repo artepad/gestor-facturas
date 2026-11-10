@@ -726,8 +726,9 @@ try {
 } catch (Throwable $e) { echo "  - indice idx_aud_ref ya existe\n"; }
 
 echo "\n[Fase 5 migracion: bloqueo de intentos de login]\n";
-// Hallazgo H1 de la auditoria (web/docs/00-auditoria.md): sin esto, nada
-// impedia probar contraseñas sin limite. Ver lib/auth.php.
+// Hallazgo H1 de la auditoria de seguridad previa a la migracion (ver
+// web/docs/bitacora-migracion.md, Fase 5): sin esto, nada impedia probar
+// contraseñas sin limite. Ver lib/auth.php.
 $pdo->exec("CREATE TABLE IF NOT EXISTS intentos_login (
     id        INT AUTO_INCREMENT PRIMARY KEY,
     email     VARCHAR(150) NOT NULL,
@@ -740,7 +741,6 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS intentos_login (
 echo "  ~ tabla intentos_login lista\n";
 
 echo "\n[Fase 7 migracion: columnas de auditoria faltantes]\n";
-// Estandar de arquitectura (docs/prompt-migracion-arquitectura.md, 3.5):
 // "actualizado_en" en toda tabla de negocio que se edita despues de creada.
 // Puro agregado (no cambia ninguna consulta ni pantalla): MySQL la llena
 // solo en cada UPDATE, asi que desde ahora queda registrado cuando se
@@ -763,7 +763,7 @@ agregar_columna($pdo, 'precios_fv', 'imagen', "VARCHAR(255) NULL AFTER unidad");
 echo "\n[Fase 21 migracion: documentos/facturas/{slug}/{año}/{mes}/]\n";
 // La carpeta de PDFs paso de almacen_pdf/{negocio_id}/{uuid}.pdf a
 // documentos/facturas/{slug del negocio}/{año}/{mes}/{uuid}.pdf, segun la
-// FECHA DE LA FACTURA (ver docs/01-plan-migracion.md, Fase 21, y
+// FECHA DE LA FACTURA (ver docs/bitacora-migracion.md, Fase 21, y
 // api/facturas.php que ya guarda ahi los PDF nuevos). Este paso reubica los
 // que ya estaban en la carpeta vieja. Idempotente: una factura cuya
 // ruta_pdf ya tiene el formato nuevo (3 barras en vez de 1) se salta; si

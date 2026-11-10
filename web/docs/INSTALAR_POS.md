@@ -82,7 +82,7 @@ del navegador**. Para liberarla hace falta el modo kiosco del Paso 1.
 | `Ctrl+P` | Producto común (pan, verduras, granel) |
 | `F10` | Buscar por nombre |
 | `F7` / `F8` | Entrada / salida de efectivo |
-| `F9` | Pago de cuenta (Klap) |
+| `F9` | Pago de cuenta (convenio: Mercado Pago u otro) |
 | `Supr` | Borrar la línea seleccionada (`↑` `↓` para moverse) |
 | `F6` | Dejar la venta en espera |
 | `F12` *o* `+` del numérico | Cobrar |

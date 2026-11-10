@@ -8,7 +8,7 @@ use App\Core\Database;
 /**
  * Compras: mercadería recibida (suma stock si el negocio lo lleva) y
  * proveedores. Corte de la Fase 6: envoltorio sobre lib/pos.php, mismo
- * criterio que el resto de los Modelos del POS — ver web/docs/01-plan-migracion.md.
+ * criterio que el resto de los Modelos del POS — ver web/docs/bitacora-migracion.md.
  */
 final class Compra
 {

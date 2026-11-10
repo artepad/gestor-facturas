@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * Tabla de rutas de todo el panel (Fase 19 de la migración, ver
- * web/docs/01-plan-migracion.md). Cada ruta es exactamente la misma
+ * web/docs/bitacora-migracion.md). Cada ruta es exactamente la misma
  * dirección que antes atendía un archivo "puente" en la raíz de web/ (ej.
  * "/herramienta_caja.php") — acá solo se registra a qué Controlador y
  * método va cada una. index.php (el único archivo real que queda en la

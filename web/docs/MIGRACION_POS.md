@@ -1,5 +1,10 @@
 # Pasar de Eleventa al POS propio
 
+> **Ya se hizo una vez** (El Maitén y Minimark Prueba, 2026-11-08 — ver
+> `docs/bitacora-migracion.md`, Fase 6/9). Esta guía queda como **plantilla
+> reutilizable** para el próximo negocio que se sume al POS propio, no
+> describe algo pendiente de los negocios actuales.
+
 Guía del cambio. La idea central: **no se apaga Eleventa hasta que el POS haya
 cuadrado varios días seguidos**. Mientras tanto los dos conviven y el negocio
 nunca depende de algo sin probar.
@@ -15,7 +20,8 @@ nunca depende de algo sin probar.
 - Promociones automáticas ("4 por $1.000")
 - Anular ventas del turno
 - Caja: abrir, entradas/salidas, cerrar con arqueo y diferencia
-- Pago de cuentas (Klap) con saldo, recargas y comisiones
+- Pago de cuentas (convenios — hoy "Mercado Pago" por defecto, pero es
+  genérico para cualquier proveedor) con saldo, recargas y comisiones
 - Al cerrar caja se genera el **corte**, que alimenta Ingresos
 - Catálogo compartido entre los dos negocios, con historial de cambios
 - Vender sin internet, con la venta subiendo sola al reconectar
@@ -29,18 +35,19 @@ cajón de dinero, balanza integrada, y devoluciones de un producto suelto
 
 ## Paso 1 — Subir al servidor
 
-Ver la lista de archivos y el procedimiento en `DESPLIEGUE.md`. En resumen:
+Si el código del POS todavía no está en el servidor (negocio nuevo sobre una
+instalación vieja), seguir "Actualizar el servidor" en `DESPLIEGUE.md` —
+resumen: respaldo de la base, subir todo `web/` menos `config.php`, correr
+`migrar.php` (aditivo, nunca borra nada; **no se borra del servidor**, se
+reutiliza en cada cambio de esquema).
 
-1. **Respaldo de la base** desde cPanel. Sin respaldo no se sube nada.
-2. Subir los archivos por el Administrador de archivos.
-3. Entrar a `migrar.php` como administrador. Es **aditivo**: crea lo que falta
-   y no borra nada. La única parte no aditiva (unificar el catálogo entre los
-   dos negocios) **verifica primero** que sean idénticos y **aborta sin tocar
-   nada** si encuentra diferencias.
-4. **Borrar `migrar.php` del servidor** cuando termine.
+Si ya está (caso normal hoy: el POS ya está en producción), este paso no
+aplica — pasar directo al Paso 2.
 
-> El POS queda **invisible para las vendedoras**: el permiso `ventas` está solo
-> en `admin`. Eso se cambia recién en el Paso 5.
+> El permiso `ventas` ya está habilitado para el rol `vendedor` desde la
+> primera vez que se hizo este cambio (ver Paso 5) — es una configuración
+> por **rol**, no por negocio, así que no hace falta tocarla de nuevo para
+> un negocio nuevo.
 
 ---
 
@@ -91,22 +98,21 @@ señal, no un accidente.
 
 ---
 
-## Paso 5 — Habilitar a las vendedoras
+## Paso 5 — Preparar a las vendedoras de este negocio
 
-Cuando el POS haya cuadrado varios días seguidos:
+Cuando el POS haya cuadrado varios días seguidos (el permiso `ventas` del rol
+`vendedor` ya está activo desde la primera vez que se hizo esta migración —
+no hay que tocar `lib/permisos.php` de nuevo):
 
-1. En `lib/permisos.php`, agregar `'ventas'` a la fila `'vendedor'`:
+1. Crear o editar a cada vendedora en **Administración → Usuarios**, con el
+   rol **Vendedor** y este negocio asignado.
+2. Ponerle **PIN** a cada una (4 a 6 números).
+3. Mostrarles la pantalla y las teclas (la tabla está en `INSTALAR_POS.md`).
 
-```php
-'vendedor' => ['ventas', 'facturas', 'fiados', 'precios', 'productos', 'herramientas'],
-```
-
-2. Subir ese archivo al servidor.
-3. Ponerle **PIN a cada vendedora** en Usuarios (4 a 6 números).
-4. Mostrarles la pantalla y las teclas (la tabla está en `INSTALAR_POS.md`).
-
-> **Para volver atrás basta con quitar `'ventas'` de esa fila y volver a subir
-> el archivo.** El POS desaparece de su vista al instante.
+> Si alguna vez hay que **sacarle el acceso al POS a todo el rol vendedor**
+> (no solo a un negocio), eso sí es editar `lib/permisos.php` y quitar
+> `'ventas'` de la fila `'vendedor'` — afecta a todas las vendedoras de todos
+> los negocios a la vez, así que es una decisión poco común.
 
 ---
 
@@ -141,19 +147,20 @@ Ingresos y ahí siguen, junto a los nuevos.
 
 | Problema | Qué hacer |
 |----------|-----------|
-| Una pantalla del POS falla | Quitar `'ventas'` del rol vendedor: vuelven a Eleventa al instante |
+| Una pantalla del POS falla para ESTE negocio | Desactivar a sus vendedoras del rol o quitarles el negocio asignado en Usuarios: siguen pudiendo usar Eleventa mientras se revisa |
 | El arqueo no cuadra | Revisar si hay pagos de cuentas sin registrar (F9) o entradas/salidas sin anotar |
 | Una venta quedó mal | Anularla desde "Ventas del día" (solo si la caja sigue abierta) |
 | La caja no sube las ventas | Mirar el contador naranja; se reintenta solo cada 45 s y al volver internet |
-| Hay que volver todo atrás | Restaurar el respaldo de la base y quitar los archivos nuevos |
+| Hay que volver todo atrás | Restaurar el respaldo de la base (ver "Rollback" en `DESPLIEGUE.md`) |
 
 ---
 
 ## Pendientes conocidos
 
-- **Revisar el módulo Gastos**: si alguna vez se registraron **recargas de saldo
-  Klap como gasto**, hay que depurarlas. No son un gasto (es plata propia
-  cambiando de bolsillo) y distorsionan el balance histórico.
+- **Revisar el módulo Gastos**: si alguna vez se registraron **recargas de
+  saldo del convenio (Mercado Pago u otro) como gasto**, hay que depurarlas.
+  No son un gasto (es plata propia cambiando de bolsillo) y distorsionan el
+  balance histórico.
 - **Abonos de fiado en efectivo**: hoy hay que anotarlos como *entrada de
   efectivo* (F7) para que el arqueo cuadre. La integración automática con
   Fiados queda pendiente.

@@ -8,8 +8,18 @@ del diseño cambie, se actualiza acá primero.
 > **Idioma:** todo en español (código, UI, comentarios, commits), igual que el resto
 > de la web.
 >
-> **Ámbito:** vive **dentro de `web/`** (PHP 8.4 plano + MySQL, sin frameworks, sin
+> **Ámbito:** vive **dentro de `web/`** (PHP 8.4 + MySQL, sin frameworks, sin
 > npm/Composer, despliegue manual por cPanel). No toca `src/` (la app de escritorio).
+
+> **Vigencia (2026-11-09):** el POS está **en producción** desde el
+> 2026-11-08 (ver `docs/bitacora-migracion.md`). Este documento sigue siendo
+> la referencia de **diseño y decisiones de negocio** (por qué existe cada
+> regla: convenios, stock, offline, UX heredada de Eleventa) — para la
+> **arquitectura técnica vigente** (qué Controlador/Modelo atiende cada
+> pantalla, cómo arma la ruta el Router, dónde va CSRF) la fuente de verdad
+> es `web/CLAUDE.md`, no este documento: varias secciones de acá (sobre
+> todo la 6, "estructura de archivos") describen un diseño anterior al
+> Router de punto único de entrada.
 
 ---
 
@@ -187,7 +197,18 @@ sin darse cuenta:
 - Ventas pendientes de subir → indicador siempre visible con el contador
   (ej. `3 ventas por sincronizar`).
 
-## 6. Estructura de archivos (en `web/`)
+## 6. Estructura de archivos (en `web/`) — plan original
+
+> Esta tabla es el **plan original**, de antes de construir nada: varios
+> archivos que lista acá (`ventas.php`/`venta.php`, `boleta_imprimir.php`,
+> `proveedores.php`/`compra_form.php`, `convenios.php`) terminaron
+> integrados dentro de Controladores existentes en vez de ser pantallas
+> propias (ej. el historial de ventas vive en `pos_api.php`, los convenios
+> se administran desde `servicios.php`), y desde la Fase 19 de la
+> migración **ninguna dirección es ya un archivo físico** — todas pasan
+> por el Router (ver `web/CLAUDE.md`). Se deja la tabla tal cual quedó
+> planeada, como referencia de la intención original; para la estructura
+> real, `web/CLAUDE.md`.
 
 | Archivo | Rol |
 |---------|-----|
@@ -198,10 +219,10 @@ sin darse cuenta:
 | `boleta_imprimir.php` | Boleta imprimible (patrón `*_imprimir.php` ya existente). |
 | `caja.php` | Estado de caja: apertura, cierre, arqueo, diferencias, historial de turnos. |
 | `inventario.php` | *(Etapa 4, opcional)* Stock actual, ajustes, mermas, alertas de stock bajo, kardex por producto. Solo visible si el negocio tiene `control_stock = 1`. |
-| `producto_form.php` | Crear/editar un producto a mano (hoy solo se carga por Excel). |
+| `producto_form.php` | Crear/editar un producto a mano. |
 | `proveedores.php`, `compras.php`, `compra_form.php` | Proveedores y recepción de mercadería que **suma stock**. |
 | `promociones.php` | Promos y descuentos con vigencia. |
-| `servicios.php` | **Recaudación (Klap u otro convenio)**: historial de pagos de cuentas, recargas/liquidaciones y comisiones; saldo estimado + alerta. Solo si el negocio tiene algún `convenio` activo. (El registro rápido de un pago de cuenta se hace desde `pos.php`.) |
+| `servicios.php` | **Recaudación (convenios: Mercado Pago u otro)**: historial de pagos de cuentas, recargas/liquidaciones y comisiones; saldo estimado + alerta. Solo si el negocio tiene algún `convenio` activo. (El registro rápido de un pago de cuenta se hace desde `pos.php`.) |
 | `convenios.php` | Alta/edición de convenios de recaudación (nombre, modalidad prepago/postpago, umbral de alerta). Permite cambiar de proveedor sin tocar código. |
 | **Reportes** | Se reutilizan `ingresos.php` y `negocio_panel.php` (ya existen), alimentados por los `corte` que genera el POS. |
 
@@ -742,11 +763,12 @@ de caja/corte funciona exactamente igual.
 
 Cada etapa es **usable por sí sola** (no hay que esperar al final para vender).
 
-> **Estado (ago-2026): etapas 1 a 5 construidas y verificadas en desarrollo.**
-> Lo que queda es del usuario: subir a producción (`DESPLIEGUE.md`, anexo del POS),
-> hacer el cambio desde Eleventa (`MIGRACION_POS.md`) y confirmar en su propio
-> Chrome las dos cosas que no se pudieron probar acá: el **modo kiosco** (que
-> libera F12) y **vender con el wifi realmente desconectado**.
+> **Estado (actualizado 2026-11-09): en producción desde el 2026-11-08** —
+> todas las etapas construidas, verificadas y subidas (ver
+> `docs/bitacora-migracion.md`, Fase 9). El cambio desde Eleventa para
+> El Maitén y Minimark Prueba ya se hizo (`MIGRACION_POS.md`, que ahora es
+> la plantilla reutilizable para el próximo negocio); modo kiosco y venta
+> sin internet confirmados funcionando en el Chrome real del negocio.
 >
 > Cambios sobre el plan original, todos por preguntarle al usuario antes de
 > construir: el **2D (descuentos manuales) se descartó** —no los usa, resuelve las

@@ -12,7 +12,7 @@ use App\Models\Venta;
 
 /**
  * Endpoints JSON de la pantalla de venta. Corte 2b de la Fase 6 (el más
- * delicado: acá está el dinero), ver web/docs/01-plan-migracion.md.
+ * delicado: acá está el dinero), ver web/docs/bitacora-migracion.md.
  *
  * web/pos_api.php sigue intacto y es al que la vista (/public/pos/) le
  * sigue hablando hasta que CADA una de estas 13 acciones se verifique por

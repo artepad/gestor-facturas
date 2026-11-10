@@ -90,8 +90,7 @@ Comportamiento del servidor (`api/facturas.php`):
   factura ya existía con un PDF en otra carpeta (por ejemplo, el cliente
   editó la fecha y volvió a sincronizar), el servidor guarda el nuevo y
   borra el archivo viejo — el cliente Python no necesita saber nada de
-  esto, solo manda el PDF como siempre.
-  El cliente Python no necesita ningún cambio — siempre manda PDFs reales.
+  esto ni cambiar nada: siempre manda el PDF real, igual que hoy.
 - El `detalle` (si viene) **reemplaza completo** el detalle previo de esa factura.
 - Cada operación deja una fila en `sync_log` y actualiza `maquinas.ultima_sync`.
 
@@ -158,7 +157,8 @@ Hacé los cambios **en este orden, idealmente en un solo commit**:
 2. Local: incluirla en el payload de `Database.factura_para_sync()`.
 3. Web: agregar la columna en `web/lib/esquema.sql` + `web/migrar.php`.
 4. Web: aceptarla en el upsert de `web/api/facturas.php`.
-5. Web: mostrarla donde corresponda (`panel.php`, etc.).
+5. Web: mostrarla donde corresponda (`App\Models\Factura` + las vistas de
+   `app/views/facturas/`, servidas por `panel_facturas.php`/`factura.php`).
 6. Actualizar este `CONTRATO.md`.
 7. Avisar al usuario que corra `migrar.php` en el servidor y suba los archivos.
 

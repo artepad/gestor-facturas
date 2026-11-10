@@ -1277,7 +1277,7 @@ function convenios_de(PDO $pdo, int $negocioId): array
  * llega en la Etapa 2; esto solo evita que el paso 1D quede bloqueado.
  *
  * Nota (migración de arquitectura, Fase 6): el negocio dejó Klap por Mercado
- * Pago (ver web/docs/01-plan-migracion.md). Esto solo cambia el nombre que se
+ * Pago (ver web/docs/bitacora-migracion.md). Esto solo cambia el nombre que se
  * crea por defecto cuando un negocio no tiene NINGÚN convenio todavía — los
  * negocios que ya tienen uno (aunque se siga llamando "Klap") no se tocan
  * solos; el dueño lo desactiva y crea el nuevo desde Servicios cuando quiera.

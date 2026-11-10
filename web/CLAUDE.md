@@ -10,7 +10,7 @@ lados puede romperlo sin coordinar con el otro.
 > Modelo → Vista, en `app/`): POS, Fiados, Gastos, Sistema, Usuarios,
 > Facturas, Negocios, Ingresos y Herramientas migraron pantalla por
 > pantalla entre 2026-11-08 y 2026-11-09 (bitácora completa en
-> `web/docs/01-plan-migracion.md`). Lo único fuera de este patrón son los
+> `web/docs/bitacora-migracion.md`). Lo único fuera de este patrón son los
 > scripts de infraestructura sin sesión: `api/facturas.php`, `migrar.php` y
 > `procesar_cortes.php`.
 >
@@ -25,9 +25,7 @@ lados puede romperlo sin coordinar con el otro.
 > misma URL, solo que ya no hay un `herramienta_caja.php` físico: lo
 > resuelve el Router. Ver «Arquitectura del POS (capas)» más abajo para el
 > patrón de Controlador/Modelo/Vista, y la sección «El Router (punto de
-> entrada único)» para cómo agregar o tocar una ruta. El estándar general
-> que se siguió en la migración original está en
-> `web/docs/prompt-migracion-arquitectura.md`.
+> entrada único)» para cómo agregar o tocar una ruta.
 
 ## Contexto
 
@@ -59,7 +57,7 @@ Por eso, cuando termines un cambio, **dile al usuario exactamente qué archivos
 subir** (ruta relativa dentro de `web/`). No asumas que un cambio está "en
 producción" hasta que el usuario lo confirme.
 
-Detalle completo de instalación inicial en `web/docs/README_SERVIDOR.md`.
+Detalle completo (archivos a subir, migraciones, verificación) en `web/docs/DESPLIEGUE.md`.
 
 ## Arquitectura de archivos
 
@@ -136,19 +134,18 @@ web/
 ├── logs/                log de errores de PHP (app/bootstrap.php y lib/db.php escriben acá:
 │                        logs/app.log, gitignored). Bloqueado por .htaccess
 │
-├── docs/                 toda la documentación que no es código: bitácora de la migración
-│   │                     + guías operativas y de referencia (nada de esto se ejecuta ni se
-│   │                     sirve por la web — FilesMatch "\.md$" en .htaccess las bloquea igual)
-│   ├── 00-auditoria.md             auditoría de seguridad previa a migrar
-│   ├── 01-plan-migracion.md        plan y bitácora fase por fase (la fuente de verdad del historial)
-│   ├── 02-linea-base.md            comportamiento "antes" para comparar durante la migración
-│   ├── 03-cierre.md                cierre de la Fase 10 (revisión final + pendientes del POS)
-│   ├── prompt-migracion-arquitectura.md   el estándar general que se siguió
+├── docs/                 toda la documentación que no es código (nada de esto se ejecuta ni
+│   │                     se sirve por la web — FilesMatch "\.md$" en .htaccess las bloquea
+│   │                     igual). Solo 6 documentos a propósito (ver «Documentación» abajo):
+│   ├── bitacora-migracion.md       registro fase por fase de la migración a capas — el
+│   │                               "cómo y por qué" se llegó a la arquitectura actual
 │   ├── CONTRATO.md                 formato exacto de sincronización con la app de Python (ver también
 │   │                               la raíz del repo, CLAUDE.md, y lib/auth.php/pos.php que la referencian)
-│   ├── DESPLIEGUE.md                guía de despliegue manual por cPanel
-│   ├── README_SERVIDOR.md          instalación inicial del servidor (BD, config.php, cron)
-│   ├── POS_DISENO.md                diseño completo del módulo Ventas/POS — leer antes de tocar nada ahí
+│   ├── DESPLIEGUE.md                guía de despliegue manual por cPanel (única fuente de
+│   │                               verdad operativa; MIGRACION_POS.md la referencia, no la repite)
+│   ├── POS_DISENO.md                diseño y decisiones de negocio del módulo Ventas/POS — leer
+│   │                               antes de tocar nada ahí (la arquitectura técnica vigente
+│   │                               está en CLAUDE.md, no acá, para no tener dos fuentes)
 │   ├── INSTALAR_POS.md             instalación del POS en un PC (modo kiosco incluido)
 │   └── MIGRACION_POS.md            guía para migrar un negocio desde Eleventa al POS propio
 │
@@ -201,11 +198,13 @@ Lista exacta y siempre actualizada: `app/routes.php`.
 ## Arquitectura del POS (capas)
 
 **Todo** `web/` sigue el patrón Router → Controlador → Modelo → Vista
-(estándar completo en `web/docs/prompt-migracion-arquitectura.md`), salvo
-los scripts de infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
-`procesar_cortes.php` — ver el banner del principio de este archivo). El
-nombre de la sección quedó de cuando solo era el POS; el patrón que
-describe aplica igual a cualquier pantalla.
+descrito en esta sección y en «El Router (punto de entrada único)» más
+abajo, salvo los scripts de infraestructura sin sesión
+(`api/facturas.php`, `migrar.php`, `procesar_cortes.php` — ver el banner
+del principio de este archivo). El nombre de la sección quedó de cuando
+solo era el POS; el patrón que describe aplica igual a cualquier
+pantalla. El cómo y por qué se llegó acá, fase por fase, está en
+`web/docs/bitacora-migracion.md`.
 
 **Una visita a `pos.php` (o cualquiera de las otras):**
 el navegador pide `pos.php` (misma dirección de siempre) → el `.htaccess` ve
@@ -301,7 +300,7 @@ no), el método o rama `accion` al Controlador, y el formulario con
 no hace falta tocar `app/routes.php`. **La migración a capas terminó**
 (2026-11-09): todo `web/` sigue este patrón salvo los scripts de
 infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
-`procesar_cortes.php`). Bitácora completa en `web/docs/01-plan-migracion.md`.
+`procesar_cortes.php`). Bitácora completa en `web/docs/bitacora-migracion.md`.
 
 ## El Router (punto de entrada único)
 

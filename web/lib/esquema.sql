@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS negocios (
   correo    VARCHAR(150) NULL,
   activo    TINYINT(1)   NOT NULL DEFAULT 1,     -- desactivar sin borrar
   -- POS: el control de inventario es opcional y por negocio. Nace APAGADO:
-  -- se puede vender sin stock (ver web/POS_DISENO.md seccion 4.0).
+  -- se puede vender sin stock (ver web/docs/POS_DISENO.md seccion 4.0).
   control_stock TINYINT(1) NOT NULL DEFAULT 0,
   creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -265,7 +265,7 @@ CREATE TABLE IF NOT EXISTS corte_departamentos (
 
 -- Catalogo de productos por negocio. Lo usa el Gestor de Etiquetas para buscar
 -- por codigo de barra o por nombre. Se reemplaza completo en cada carga de Excel.
--- CATALOGO COMPARTIDO entre los negocios (ver web/POS_DISENO.md 7.1): agregar
+-- CATALOGO COMPARTIDO entre los negocios (ver web/docs/POS_DISENO.md 7.1): agregar
 -- un producto o cambiar un precio se refleja en los dos locales. Mismo criterio
 -- que precios_fv y categorias_gasto. El STOCK no se comparte: vive en
 -- producto_stock, una fila por producto y negocio.
@@ -389,7 +389,7 @@ CREATE TABLE IF NOT EXISTS precios_fv (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ===== Modulo Ventas / POS (reemplazo de Eleventa) =====
--- Diseno completo en web/POS_DISENO.md. Web-nativo: la web es la fuente de
+-- Diseno completo en web/docs/POS_DISENO.md. Web-nativo: la web es la fuente de
 -- verdad. Las tablas se crean desde la Etapa 1 aunque algunas columnas (stock)
 -- recien se usen cuando se active el control de inventario (Etapa 4).
 

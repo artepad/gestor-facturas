@@ -12,7 +12,7 @@ use App\Core\Database;
  * PROPOSITO un envoltorio sobre las funciones que ya existen en
  * web/lib/pos.php, no una reimplementacion. Mover 1500 lineas de logica de
  * negocio de una sola vez es el tipo de cambio grande que este proyecto
- * decidio evitar (ver web/docs/01-plan-migracion.md). Lo que gana esta
+ * decidio evitar (ver web/docs/bitacora-migracion.md). Lo que gana esta
  * clase es la ESTRUCTURA nueva (Modelo -> Controlador -> Vista) probada de
  * punta a punta sobre una pantalla real; el dia que la pantalla vieja
  * (web/caja.php) se retire, el SQL se puede mover aca adentro sin que nadie

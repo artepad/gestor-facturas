@@ -9,7 +9,7 @@ use App\Core\Database;
  * Inventario opcional por negocio (existencias, ajustes, mermas, kardex).
  * Corte de la Fase 6 (migracion de arquitectura): envoltorio sobre
  * lib/pos.php, mismo criterio que el resto de los Modelos del POS — ver
- * web/docs/01-plan-migracion.md.
+ * web/docs/bitacora-migracion.md.
  */
 final class Inventario
 {
