@@ -304,7 +304,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
 
         <!-- ================= Historial de turnos ================= -->
         <div class="panel">
-            <h2>Últimos turnos cerrados</h2>
+            <h2><?= $esAdmin ? 'Últimos turnos cerrados' : 'Tus últimos turnos cerrados' ?></h2>
             <?php if (!$historial): ?>
                 <p class="vacio">Aún no hay turnos cerrados.</p>
             <?php else: ?>

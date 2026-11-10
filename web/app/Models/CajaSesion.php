@@ -38,10 +38,10 @@ final class CajaSesion
         return \sesiones_abiertas(Database::pdo(), $idsNegocios);
     }
 
-    public static function cerradasEn(array $idsNegocios, int $limite = 30): array
+    public static function cerradasEn(array $idsNegocios, int $limite = 30, ?int $usuarioId = null): array
     {
         self::cargar();
-        return \sesiones_cerradas(Database::pdo(), $idsNegocios, $limite);
+        return \sesiones_cerradas(Database::pdo(), $idsNegocios, $limite, $usuarioId);
     }
 
     public static function abrir(array $usuario, int $negocioId, string $caja, float $fondo): int

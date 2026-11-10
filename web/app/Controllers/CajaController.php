@@ -41,7 +41,10 @@ final class CajaController extends BaseController
         $recaudado     = $sesion ? CajaSesion::recaudacionesDelTurno((int)$sesion['id']) : [];
         $enEspera      = $sesion ? CajaSesion::ticketsEnEspera((int)$sesion['id']) : 0;
         $otrasAbiertas = $esAdmin ? CajaSesion::abiertasEn($idsVisibles) : [];
-        $historial     = CajaSesion::cerradasEn($idsVisibles, 15);
+        // Una vendedora solo ve su propio historial de cierres (no el de sus
+        // compañeras); el admin sigue viendo el de todos — mismo criterio
+        // que "Cajas abiertas de otros" arriba.
+        $historial     = CajaSesion::cerradasEn($idsVisibles, 15, $esAdmin ? null : (int)$usuario['id']);
         $avisoLarga    = $sesion ? CajaSesion::avisoSiLlevaMuchoAbierta($sesion) : null;
 
         View::render('caja/index', compact(

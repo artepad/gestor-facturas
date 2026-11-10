@@ -1506,19 +1506,26 @@ function recaudaciones_del_turno(PDO $pdo, int $sesionId, int $limite = 50): arr
 }
 
 /** Turnos ya cerrados de los negocios dados (historial). */
-function sesiones_cerradas(PDO $pdo, array $idsNegocios, int $limite = 30): array
+/**
+ * Turnos cerrados de los negocios dados. $usuarioId acota el historial a los
+ * turnos de ESE usuario (una vendedora solo ve los suyos); null (el admin)
+ * trae los de todos — mismo criterio que ya usa sesiones_abiertas() para
+ * "Cajas abiertas de otros".
+ */
+function sesiones_cerradas(PDO $pdo, array $idsNegocios, int $limite = 30, ?int $usuarioId = null): array
 {
     if (!$idsNegocios) return [];
     $ph = implode(',', array_fill(0, count($idsNegocios), '?'));
+    $condUsuario = $usuarioId !== null ? 'AND s.usuario_apertura = ?' : '';
     $st = $pdo->prepare(
         "SELECT s.*, n.nombre AS negocio_nombre, u.nombre AS cajero
            FROM caja_sesiones s
            JOIN negocios n ON n.id = s.negocio_id
            LEFT JOIN usuarios u ON u.id = s.usuario_apertura
-          WHERE s.estado = 'cerrada' AND s.negocio_id IN ($ph)
+          WHERE s.estado = 'cerrada' AND s.negocio_id IN ($ph) $condUsuario
           ORDER BY s.cerrado_en DESC
           LIMIT " . (int)$limite
     );
-    $st->execute($idsNegocios);
+    $st->execute($usuarioId !== null ? [...$idsNegocios, $usuarioId] : $idsNegocios);
     return $st->fetchAll();
 }
