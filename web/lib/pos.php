@@ -99,15 +99,71 @@ function sesiones_abiertas(PDO $pdo, array $idsNegocios): array
     return $st->fetchAll();
 }
 
-/** Abre un turno de caja y devuelve su id. */
-function abrir_caja(PDO $pdo, array $usuario, int $negocioId, string $caja, float $fondo): int
+/** Una sesión de caja por id, con negocio y cajero (null si no existe). */
+function sesion_por_id(PDO $pdo, int $sesionId): ?array
 {
     $st = $pdo->prepare(
-        "INSERT INTO caja_sesiones (uuid, negocio_id, caja, usuario_apertura, fondo_inicial, abierto_en)
-         VALUES (?,?,?,?,?,NOW())"
+        "SELECT s.*, n.nombre AS negocio_nombre, u.nombre AS cajero
+           FROM caja_sesiones s
+           JOIN negocios n ON n.id = s.negocio_id
+           LEFT JOIN usuarios u ON u.id = s.usuario_apertura
+          WHERE s.id = ?"
     );
-    $st->execute([uuid4(), $negocioId, ($caja !== '' ? $caja : null),
-                  $usuario['id'] ?? null, $fondo]);
+    $st->execute([$sesionId]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * true si el corte fue generado por un turno que ESE usuario abrió. Es la
+ * base para que una vendedora pueda ver (corte.php) el corte de su propio
+ * turno sin tener el permiso 'ingresos' (que es solo de admin) — antes
+ * "Ver corte" la mandaba siempre a home.php, aunque el turno fuera suyo.
+ */
+function corte_es_propio(PDO $pdo, int $corteId, int $usuarioId): bool
+{
+    $st = $pdo->prepare(
+        "SELECT 1 FROM caja_sesiones WHERE corte_id = ? AND usuario_apertura = ? LIMIT 1"
+    );
+    $st->execute([$corteId, $usuarioId]);
+    return (bool)$st->fetchColumn();
+}
+
+/**
+ * Abre un turno de caja y devuelve su id.
+ *
+ * La BD impide (uq_caja_sesion_abierta, columna generada caja_abierta_clave
+ * en caja_sesiones — ver migrar.php) que dos sesiones con el mismo negocio +
+ * nombre de caja queden ambas en estado 'abierta' a la vez. Esto es la
+ * traba real contra la carrera de dos clics simultáneos: el aviso que ve la
+ * vendedora en caja.php es solo informativo y se calcula ANTES del clic, así
+ * que por sí solo no alcanza para evitar que dos personas abran "Principal"
+ * en el mismo instante.
+ */
+function abrir_caja(PDO $pdo, array $usuario, int $negocioId, string $caja, float $fondo,
+                    string $tipo = 'fisica'): int
+{
+    // Express nunca maneja efectivo: el fondo inicial no tiene sentido ahí.
+    // Se fuerza acá (no solo en el formulario) para que no se pueda abrir
+    // una Express con plata adentro aunque alguien manipule el POST.
+    if ($tipo === 'express') {
+        $fondo = 0.0;
+    }
+    $st = $pdo->prepare(
+        "INSERT INTO caja_sesiones (uuid, negocio_id, caja, tipo, usuario_apertura, fondo_inicial, abierto_en)
+         VALUES (?,?,?,?,?,?,NOW())"
+    );
+    try {
+        $st->execute([uuid4(), $negocioId, ($caja !== '' ? $caja : null), $tipo,
+                      $usuario['id'] ?? null, $fondo]);
+    } catch (PDOException $e) {
+        if ($e->getCode() === '23000' && str_contains($e->getMessage(), 'uq_caja_sesion_abierta')) {
+            throw new RuntimeException(
+                'Justo ahora se abrió otra caja "' . ($caja !== '' ? $caja : 'sin nombre')
+                . '" en este negocio (otra vendedora fue más rápida). Elige otro nombre o espera a que esa caja se cierre.'
+            );
+        }
+        throw $e;
+    }
     return (int)$pdo->lastInsertId();
 }
 
@@ -258,6 +314,13 @@ function departamentos_del_turno(PDO $pdo, int $sesionId): array
  *
  * Es idempotente por (negocio, cerrado_en, cajero), como el de los correos.
  * Devuelve el id del corte.
+ *
+ * $usuario es quien EJECUTA el cierre (normalmente el mismo que abrió el
+ * turno, pero puede ser un admin cerrando una caja ajena — ver
+ * CajaController::cerrarAjena()). El "cajero" del corte SIEMPRE debe ser
+ * quien realmente atendió el turno (usuario_apertura), no quien lo cierra:
+ * si no fuera así, un cierre a distancia dejaría el corte de Ingresos a
+ * nombre del admin en vez de la vendedora que de verdad vendió ese día.
  */
 function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
                                  array $r, float $contado, float $diferencia): int
@@ -266,7 +329,14 @@ function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
         require_once __DIR__ . '/eleventa.php';
     }
     $negocioId = (int)$sesion['negocio_id'];
-    $cajero = trim((string)($usuario['nombre'] ?? '')) ?: 'Cajero';
+    $usuarioAperturaId = $sesion['usuario_apertura'] ?? null;
+    $cajero = null;
+    if ($usuarioAperturaId) {
+        $st = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = ?");
+        $st->execute([$usuarioAperturaId]);
+        $cajero = $st->fetchColumn() ?: null;
+    }
+    $cajero = $cajero ?: (trim((string)($usuario['nombre'] ?? '')) ?: 'Cajero');
 
     $movs = [];
     foreach (movimientos_caja($pdo, (int)$sesion['id']) as $m) {
@@ -305,11 +375,12 @@ function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
     ]);
 
     // Vincula el cajero con el usuario web si aún no lo estaba: permite
-    // reportes "por vendedor de la plataforma".
+    // reportes "por vendedor de la plataforma". Se vincula con quien ABRIÓ
+    // el turno (el cajero real), no con quien ejecutó el cierre.
     $pdo->prepare(
         "UPDATE cajeros SET usuario_id = ?
           WHERE negocio_id = ? AND nombre = ? AND usuario_id IS NULL"
-    )->execute([$usuario['id'] ?? null, $negocioId, $cajero]);
+    )->execute([$usuarioAperturaId ?: ($usuario['id'] ?? null), $negocioId, $cajero]);
 
     return $corteId;
 }
@@ -903,6 +974,17 @@ function registrar_venta(PDO $pdo, array $usuario, array $sesion, string $uuid,
     if (!$items) {
         throw new RuntimeException('La venta no tiene productos.');
     }
+    // Caja Express no maneja efectivo. PosApiController ya filtra "efectivo"
+    // de los medios permitidos antes de llegar acá, pero se revalida también
+    // en este punto (igual que las promociones): nunca se confía en que el
+    // navegador respetó la regla, por si alguien manipula la petición.
+    if (($sesion['tipo'] ?? 'fisica') === 'express') {
+        foreach ($pagos as $p) {
+            if (($p['medio'] ?? '') === 'efectivo') {
+                throw new RuntimeException('La Caja Express no acepta pagos en efectivo.');
+            }
+        }
+    }
 
     // Normaliza las líneas y calcula los totales del lado del servidor.
     // Las promociones se recalculan ACÁ: nunca se confía en el descuento que
@@ -1129,8 +1211,11 @@ function anular_venta(PDO $pdo, array $usuario, int $ventaId, string $motivo): a
             $pdo->prepare("DELETE FROM fiados WHERE venta_id = ?")->execute([$ventaId]);
         }
 
-        // Devuelve al stock lo que la venta habia descontado.
+        // Devuelve al stock lo que la venta habia descontado. Los articulos que
+        // ya se hubieran devuelto sueltos (ver devolver_articulo_venta) se
+        // saltan: su stock ya volvio en ese momento, re-sumarlo lo duplicaria.
         foreach (items_de_venta($pdo, $ventaId) as $i) {
+            if ($i['devuelto_en'] !== null) continue;
             mover_stock($pdo, $usuario, (int)$v['negocio_id'], $i['producto_id'],
                         (float)$i['cantidad'], 'devolucion', 'venta', $ventaId,
                         'Anulacion de la venta N° ' . $v['folio']);
@@ -1165,19 +1250,172 @@ function pagos_de_venta(PDO $pdo, int $ventaId): array
     return $st->fetchAll();
 }
 
-/** Ventas del turno, de la más nueva a la más vieja. */
-function ventas_del_turno(PDO $pdo, int $sesionId, int $limite = 50): array
+/**
+ * Ventas de un día completo del negocio (pantalla "Ventas del día"): de
+ * CUALQUIER vendedora y CUALQUIER caja, no solo el turno actual — a
+ * diferencia de ultima_venta_del_turno()/resumen_caja(), que sí se acotan al
+ * turno. El "Artículos" y el "Total" ya reflejan las devoluciones parciales
+ * (ver devolver_articulo_venta): son el saldo vigente de la venta, no el
+ * original. Usa el rango de fecha (no DATE(v.fecha)=?) para aprovechar el
+ * índice idx_venta_negocio_fecha.
+ */
+function ventas_del_dia(PDO $pdo, int $negocioId, string $fecha, int $limite = 300): array
 {
     $st = $pdo->prepare(
-        "SELECT v.*, (SELECT COUNT(*) FROM venta_items i WHERE i.venta_id = v.id) AS n_items,
-                (SELECT GROUP_CONCAT(p.medio) FROM venta_pagos p WHERE p.venta_id = v.id) AS medios
+        "SELECT v.id, v.folio, v.total, v.fecha, v.estado, v.motivo_anulacion,
+                u.nombre AS vendedor,
+                (SELECT COUNT(*) FROM venta_items i
+                  WHERE i.venta_id = v.id AND i.devuelto_en IS NULL) AS n_items,
+                s.estado AS estado_caja
            FROM ventas v
-          WHERE v.caja_sesion_id = ?
+           LEFT JOIN usuarios u       ON u.id = v.usuario_id
+           LEFT JOIN caja_sesiones s  ON s.id = v.caja_sesion_id
+          WHERE v.negocio_id = ? AND v.fecha >= ? AND v.fecha < ? + INTERVAL 1 DAY
           ORDER BY v.id DESC
           LIMIT " . (int)$limite
     );
-    $st->execute([$sesionId]);
+    $st->execute([$negocioId, $fecha, $fecha]);
     return $st->fetchAll();
+}
+
+/**
+ * Detalle completo de una venta (panel derecho de "Ventas del día"): sus
+ * artículos (items_de_venta, incluye los ya devueltos, marcados) y sus pagos
+ * (pagos_de_venta). Null si no existe o no es de ese negocio.
+ */
+function venta_detalle(PDO $pdo, int $negocioId, int $ventaId): ?array
+{
+    $st = $pdo->prepare(
+        "SELECT v.*, u.nombre AS vendedor, s.estado AS estado_caja
+           FROM ventas v
+           LEFT JOIN usuarios u      ON u.id = v.usuario_id
+           LEFT JOIN caja_sesiones s ON s.id = v.caja_sesion_id
+          WHERE v.id = ? AND v.negocio_id = ?"
+    );
+    $st->execute([$ventaId, $negocioId]);
+    $v = $st->fetch();
+    if (!$v) return null;
+    $v['items'] = items_de_venta($pdo, $ventaId);
+    $v['pagos'] = pagos_de_venta($pdo, $ventaId);
+    return $v;
+}
+
+/**
+ * Devuelve UN artículo suelto de una venta (no la venta completa — para eso
+ * está anular_venta()). Pensado para corregir un error puntual ("se cobró un
+ * producto de más") sin anular todo el ticket.
+ *
+ * Reglas (ver análisis con el dueño antes de programar esto):
+ *  - La caja de esa venta debe seguir ABIERTA (mismo motivo que anular_venta:
+ *    una vez cerrada, su corte ya está en Ingresos).
+ *  - La venta debe tener un ÚNICO medio de pago: si fue mixta o repartida
+ *    entre varios medios, no hay forma no ambigua de decidir de cuál se
+ *    descuenta el artículo devuelto — para esos casos se usa "Cancelar venta"
+ *    completa en vez de un artículo suelto.
+ *  - No se puede devolver el ÚLTIMO artículo que le queda a la venta: eso es,
+ *    en los hechos, anular la venta completa — se pide usar ese botón.
+ *
+ * Devuelve el stock de ese producto, resta su importe del total/subtotal de
+ * la venta, y ajusta el único pago que tenía (le quita la deuda al cliente si
+ * era fiado; si no, reduce el monto de ese medio). Queda marcado con
+ * devuelto_en/devuelto_por — items_de_venta() lo sigue devolviendo (para que
+ * el detalle lo muestre tachado), pero anular_venta() ya sabe saltarlo.
+ */
+function devolver_articulo_venta(PDO $pdo, array $usuario, int $itemId): array
+{
+    $propia = !$pdo->inTransaction();
+    if ($propia) $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare(
+            "SELECT i.*, v.folio, v.negocio_id, v.estado AS estado_venta,
+                    s.estado AS estado_caja
+               FROM venta_items i
+               JOIN ventas v             ON v.id = i.venta_id
+               LEFT JOIN caja_sesiones s ON s.id = v.caja_sesion_id
+              WHERE i.id = ? FOR UPDATE"
+        );
+        $st->execute([$itemId]);
+        $i = $st->fetch();
+
+        if (!$i) throw new RuntimeException('Ese artículo ya no existe.');
+        if (!puede_ver_negocio($usuario, (int)$i['negocio_id'])) {
+            throw new RuntimeException('No tienes acceso a esa venta.');
+        }
+        if ($i['estado_venta'] === 'anulada') {
+            throw new RuntimeException('Esa venta ya está anulada.');
+        }
+        if ($i['devuelto_en'] !== null) {
+            throw new RuntimeException('Ese artículo ya había sido devuelto.');
+        }
+        if (($i['estado_caja'] ?? '') !== 'abierta') {
+            throw new RuntimeException(
+                'No se puede devolver un artículo de una venta de una caja ya cerrada: '
+                . 'su corte ya quedó registrado. Para devolverle la plata al cliente, '
+                . 'registra una salida de efectivo (F8) indicando la venta N° ' . $i['folio'] . '.'
+            );
+        }
+
+        $pagos = pagos_de_venta($pdo, (int)$i['venta_id']);
+        if (count($pagos) !== 1) {
+            throw new RuntimeException(
+                'Esta venta tiene más de un medio de pago: usa "Cancelar venta" completa.'
+            );
+        }
+
+        $stRestantes = $pdo->prepare(
+            "SELECT COUNT(*) FROM venta_items WHERE venta_id = ? AND devuelto_en IS NULL"
+        );
+        $stRestantes->execute([$i['venta_id']]);
+        if ((int)$stRestantes->fetchColumn() <= 1) {
+            throw new RuntimeException(
+                'Es el único artículo que queda en la venta: usa "Cancelar venta" completa.'
+            );
+        }
+
+        // Devuelve el stock de este producto (mismo patrón que anular_venta()).
+        mover_stock($pdo, $usuario, (int)$i['negocio_id'], $i['producto_id'],
+                    (float)$i['cantidad'], 'devolucion', 'venta', (int)$i['venta_id'],
+                    'Devolución del artículo "' . $i['nombre'] . '" de la venta N° ' . $i['folio']);
+
+        // Ajusta los totales de la venta: el nuevo total sigue siendo
+        // subtotal - descuento_total, solo que con esta línea afuera.
+        $montoLinea = (float)$i['total'];
+        $pdo->prepare(
+            "UPDATE ventas
+                SET subtotal = subtotal - ?,
+                    descuento_total = descuento_total - ?,
+                    total = total - ?,
+                    costo_total = CASE WHEN costo_total IS NOT NULL
+                                       THEN GREATEST(costo_total - ?, 0) ELSE NULL END
+              WHERE id = ?"
+        )->execute([
+            (float)$i['cantidad'] * (float)$i['precio_unitario'],
+            (float)$i['descuento'],
+            $montoLinea,
+            $i['costo_unitario'] !== null ? (float)$i['costo_unitario'] * (float)$i['cantidad'] : 0,
+            $i['venta_id'],
+        ]);
+
+        // Ajusta el único pago que tenía: si era fiado, le quita esa plata de
+        // la deuda al cliente (igual que anular_venta(), pero solo esta
+        // porción); si no, reduce el monto de ese medio.
+        if ($pagos[0]['medio'] === 'credito') {
+            $pdo->prepare("UPDATE fiados SET monto = monto - ? WHERE venta_id = ?")
+                ->execute([$montoLinea, $i['venta_id']]);
+        }
+        $pdo->prepare("UPDATE venta_pagos SET monto = monto - ? WHERE id = ?")
+            ->execute([$montoLinea, $pagos[0]['id']]);
+
+        $pdo->prepare(
+            "UPDATE venta_items SET devuelto_en = NOW(), devuelto_por = ? WHERE id = ?"
+        )->execute([$usuario['id'] ?? null, $itemId]);
+
+        if ($propia) $pdo->commit();
+        return ['folio' => (int)$i['folio'], 'nombre' => $i['nombre'], 'monto' => $montoLinea];
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
 }
 
 /** Última venta del turno (para el panel "Total / Pagó con / Cambio"). */

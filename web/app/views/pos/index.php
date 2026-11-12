@@ -8,7 +8,7 @@
  * "caja.php", "pos_api.php"), igual que el archivo original.
  *
  * Variables disponibles (ver PosController): $usuario, $sesion, $pinHash,
- * $espera, $ultima, $ventas, $resumen, $avisoLarga, $promos, $csrfToken.
+ * $espera, $ultima, $resumen, $avisoLarga, $promos, $csrfToken, $esExpress.
  *
  * Se usa h() en vez de e() a proposito, para que el resto del archivo quede
  * IDENTICO al original y minimizar el riesgo de un copy-paste de 1700 lineas.
@@ -89,10 +89,14 @@ $rutaWeb = dirname(__DIR__, 3);
 <div class="pos-acciones">
     <button type="button" class="pos-tecla" data-accion="comun"><b>Ctrl+P</b> Producto común</button>
     <button type="button" class="pos-tecla" data-accion="buscar"><b>F10</b> Buscar</button>
+    <?php if (!$esExpress): ?>
     <button type="button" class="pos-tecla" data-accion="entrada"><b>F7</b> Entradas</button>
     <button type="button" class="pos-tecla" data-accion="salida"><b>F8</b> Salidas</button>
+    <?php endif; ?>
     <button type="button" class="pos-tecla" data-accion="borrar"><b>Supr</b> Borrar art.</button>
+    <?php if (!$esExpress): ?>
     <button type="button" class="pos-tecla pos-tecla-cuenta" data-accion="cuenta"><b>F9</b> Pago de cuenta</button>
+    <?php endif; ?>
 </div>
 
 <!-- Aviso de que se está trabajando con una copia local del catálogo -->
@@ -170,11 +174,17 @@ $rutaWeb = dirname(__DIR__, 3);
     <h2>Cobrar</h2>
     <div class="cobrar-total" id="cobrarTotal">$0</div>
     <div class="cobrar-medios">
+        <?php if (!$esExpress): ?>
         <button type="button" class="medio activo" data-medio="efectivo">Efectivo</button>
         <button type="button" class="medio" data-medio="tarjeta">Tarjeta</button>
+        <?php else: ?>
+        <button type="button" class="medio activo" data-medio="tarjeta">Tarjeta</button>
+        <?php endif; ?>
         <button type="button" class="medio" data-medio="transferencia">Transferencia</button>
         <button type="button" class="medio" data-medio="credito">Fiado</button>
+        <?php if (!$esExpress): ?>
         <button type="button" class="medio medio-mixto" data-medio="mixto">Mixto</button>
+        <?php endif; ?>
     </div>
 
     <!-- Pago mixto: un monto por medio; el sistema avisa cuánto falta -->
@@ -206,7 +216,7 @@ $rutaWeb = dirname(__DIR__, 3);
         <div class="cliente-saldo" id="clienteSaldo"></div>
     </div>
 
-    <div class="cobrar-efectivo" id="bloqueEfectivo">
+    <div class="cobrar-efectivo" id="bloqueEfectivo" <?= $esExpress ? 'hidden' : '' ?>>
         <label for="pagoCon">Pagó con</label>
         <input type="text" id="pagoCon" inputmode="numeric" autocomplete="off" placeholder="0">
         <div class="cobrar-vuelto">Su cambio: <b id="vuelto">$0</b></div>
@@ -339,10 +349,30 @@ $rutaWeb = dirname(__DIR__, 3);
     </div>
 </section>
 
-<!-- Ventas del día -->
-<section class="pos-modal pos-modal-ancho" id="modalVentas" hidden aria-label="Ventas del turno">
-    <h2>Ventas de este turno</h2>
-    <div class="espera-lista" id="ventasLista"></div>
+<!-- Ventas del día: todas las cajas y vendedoras del negocio, un día a la vez -->
+<section class="pos-modal pos-modal-ventasdia" id="modalVentas" hidden aria-label="Ventas del día">
+    <h2>Ventas del día</h2>
+    <div class="ventasdia-layout">
+        <div class="ventasdia-izq">
+            <div class="tabla-wrap ventasdia-tabla-wrap">
+                <table class="pos-tabla">
+                    <thead><tr>
+                        <th>Folio</th><th>Vendedor</th><th class="c-num">Art.</th><th class="c-num">Total</th>
+                    </tr></thead>
+                    <tbody id="ventasDiaTbody"></tbody>
+                </table>
+            </div>
+            <div class="ventasdia-fecha">
+                <label for="ventasDiaFecha">Día</label>
+                <input type="date" id="ventasDiaFecha">
+            </div>
+        </div>
+        <div class="ventasdia-der-wrap">
+            <div class="ventasdia-der" id="ventasDiaDetalle">
+                <p class="pos-vacio">Selecciona una venta para ver el detalle.</p>
+            </div>
+        </div>
+    </div>
     <div class="pos-modal-btns">
         <button type="button" class="btn gris" data-cerrar>Cerrar (Esc)</button>
     </div>
@@ -409,9 +439,13 @@ $rutaWeb = dirname(__DIR__, 3);
 'use strict';
 
 // ---------- Estado ----------
+// Caja Express: celular/tablet sin efectivo. El servidor rechaza igual
+// cualquier intento (PosApiController/lib/pos.php); esto solo evita
+// ofrecer algo que de todas formas se va a rechazar.
+var ES_EXPRESS = <?= $esExpress ? 'true' : 'false' ?>;
 var carrito = [];          // líneas de la venta actual
 var sel = -1;              // índice de la línea seleccionada (para Supr)
-var medio = 'efectivo';
+var medio = ES_EXPRESS ? 'tarjeta' : 'efectivo';
 var cobrando = false;      // evita cobrar dos veces con doble clic/tecla
 var ticketNum = 1;         // número del ticket en curso (solo visual, como Eleventa)
 var clientes = null;       // clientes de fiado (se cargan al elegir Fiado o Mixto)
@@ -420,12 +454,6 @@ var espera = <?= json_encode($espera, JSON_UNESCAPED_UNICODE) ?>;
 // El servidor las RECALCULA al cobrar: esto es solo para que la vendedora vea
 // el precio correcto mientras arma la venta.
 var promos = <?= json_encode($promos, JSON_UNESCAPED_UNICODE) ?>;
-var ventas = <?= json_encode(array_map(fn($v) => [
-        'id' => (int)$v['id'], 'folio' => (int)$v['folio'], 'total' => (float)$v['total'],
-        'hora' => substr((string)$v['fecha'], 11, 5),
-        'n' => (int)$v['n_items'], 'medios' => $v['medios'],
-        'estado' => $v['estado'], 'motivo' => $v['motivo_anulacion'],
-    ], $ventas), JSON_UNESCAPED_UNICODE) ?>;
 
 var $ = function (id) { return document.getElementById(id); };
 
@@ -1031,7 +1059,7 @@ $('modalFondo').addEventListener('click', cerrarModal);
 // ---------- Cobrar ----------
 function abrirCobrar() {
     if (!carrito.length) { toast('No hay productos en la venta.', true); return; }
-    elegirMedio('efectivo');
+    elegirMedio(ES_EXPRESS ? 'tarjeta' : 'efectivo');
     $('cobrarTotal').textContent = clp(totalCarrito());
     $('pagoCon').value = '';
     $('clienteFiado').value = '';
@@ -1206,10 +1234,6 @@ function cobrar() {
                 $('uPago').textContent = clp(pago || 0);
                 $('uVuelto').textContent = clp(vueltoLocal);
                 $('uTitulo').textContent = 'Última venta (sin subir):';
-                ventas.unshift({ id: null, folio: '—', total: t,
-                                 hora: new Date().toTimeString().slice(0, 5),
-                                 n: carrito.length, estado: 'pendiente',
-                                 medios: pagos.map(function (x) { return x.medio; }).join('+') });
                 ticketNum++;
                 vaciar();
                 cerrarModal();
@@ -1232,10 +1256,6 @@ function cobrar() {
             $('uPago').textContent = clp(v.pago_con || 0);
             $('uVuelto').textContent = clp(v.vuelto || 0);
             $('uTitulo').textContent = 'Última venta · N° ' + v.folio + ':';
-            ventas.unshift({ id: v.id, folio: v.folio, total: v.total,
-                             hora: new Date().toTimeString().slice(0, 5),
-                             n: carrito.length, estado: 'completada',
-                             medios: (v.medios || medio) });
             ticketNum++;                 // el siguiente cliente parte con un ticket nuevo
             vaciar();
             cerrarModal();
@@ -1454,51 +1474,223 @@ $('btnMovOk').addEventListener('click', guardarMov);
     });
 });
 
-// ---------- Ventas del turno ----------
-function pintarVentas() {
-    var c = $('ventasLista');
-    c.innerHTML = '';
-    if (!ventas.length) {
-        c.innerHTML = '<p class="pos-vacio">Aún no hay ventas en este turno.</p>';
+// ---------- Ventas del día ----------
+// A diferencia del resto de la pantalla (acotada SIEMPRE al turno actual),
+// este panel muestra TODO el negocio: cualquier caja, cualquier vendedora,
+// un día a la vez (por defecto, hoy). "Cancelar venta" reutiliza el mismo
+// anular_venta() de siempre (abrirAnular/confirmarAnular, más abajo); lo
+// único nuevo es "Devolver artículo", que resta un producto suelto sin
+// anular el ticket completo — ver devolver_articulo_venta() en lib/pos.php
+// para las reglas (un solo medio de pago, caja todavía abierta).
+var ventasDiaLista = [];     // filas de la izquierda, para el día elegido
+var ventaDiaId = null;       // venta seleccionada (resalta su fila)
+var ventaDiaItemSel = null;  // artículo marcado para devolver
+
+function hoyISO() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function textoMedio(m) {
+    return { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', credito: 'Fiado' }[m] || m;
+}
+
+function pintarVentasDia() {
+    var tbody = $('ventasDiaTbody');
+    tbody.innerHTML = '';
+    if (!ventasDiaLista.length) {
+        var tr0 = document.createElement('tr'), td0 = document.createElement('td');
+        td0.colSpan = 4; td0.className = 'pos-vacio'; td0.textContent = 'No hay ventas ese día.';
+        tr0.appendChild(td0); tbody.appendChild(tr0);
         return;
     }
-    ventas.forEach(function (v) {
+    ventasDiaLista.forEach(function (v) {
         var anulada = v.estado === 'anulada';
-        var f = document.createElement('div');
-        f.className = 'espera-fila' + (anulada ? ' fila-anulada' : '');
-        var i = document.createElement('div');
-        i.className = 'espera-info';
-        i.innerHTML = '<b></b><span></span>';
-        i.querySelector('b').textContent = 'N° ' + v.folio + ' · ' + v.hora +
-            (anulada ? '  (ANULADA)' : '');
-        i.querySelector('span').textContent = anulada
-            ? ('Motivo: ' + (v.motivo || '—'))
-            : (v.n + ' producto(s) · ' + (v.medios || ''));
-        var m = document.createElement('div');
-        m.className = 'espera-monto';
-        m.textContent = clp(v.total);
-        f.appendChild(i); f.appendChild(m);
-        if (!anulada) {
-            var b = document.createElement('button');
-            b.type = 'button'; b.className = 'btn rojo sm'; b.textContent = 'Anular';
-            b.addEventListener('click', function () { abrirAnular(v); });
-            f.appendChild(b);
-        }
-        c.appendChild(f);
+        var tr = document.createElement('tr');
+        tr.className = (anulada ? 'fila-anulada' : '') + (v.id === ventaDiaId ? ' sel' : '');
+        var tdFolio = document.createElement('td');
+        tdFolio.textContent = 'N° ' + v.folio + (anulada ? ' (anulada)' : '');
+        var tdVendedor = document.createElement('td');
+        tdVendedor.textContent = v.vendedor;
+        var tdArts = document.createElement('td');
+        tdArts.className = 'c-num'; tdArts.textContent = v.n_items;
+        var tdTotal = document.createElement('td');
+        tdTotal.className = 'c-num'; tdTotal.textContent = clp(v.total);
+        tr.appendChild(tdFolio); tr.appendChild(tdVendedor); tr.appendChild(tdArts); tr.appendChild(tdTotal);
+        tr.addEventListener('click', function () { seleccionarVentaDia(v.id); });
+        tbody.appendChild(tr);
     });
 }
 
-function cargarVentas() {
-    return api('ventas_turno', null, 'GET').then(function (j) {
-        ventas = j.ventas || [];
-        pintarVentas();
+function pintarDetalleVentaDia(v) {
+    var c = $('ventasDiaDetalle');
+    c.innerHTML = '';
+    if (!v) {
+        var vacio = document.createElement('p');
+        vacio.className = 'pos-vacio'; vacio.textContent = 'Selecciona una venta para ver el detalle.';
+        c.appendChild(vacio);
+        return;
+    }
+    var anulada = v.estado === 'anulada';
+
+    var cab = document.createElement('div');
+    cab.className = 'ventasdia-cab';
+    var h3 = document.createElement('h3');
+    h3.textContent = 'Venta N° ' + v.folio;
+    cab.appendChild(h3);
+    if (anulada) {
+        var badge = document.createElement('span');
+        badge.className = 'ventasdia-estado-anulada';
+        badge.textContent = 'ANULADA';
+        cab.appendChild(badge);
+    }
+    c.appendChild(cab);
+
+    if (anulada && v.motivo) {
+        var pMotivo = document.createElement('p');
+        pMotivo.className = 'ventasdia-motivo';
+        pMotivo.textContent = 'Motivo: ' + v.motivo;
+        c.appendChild(pMotivo);
+    }
+
+    // Vendedor y forma de pago: lo primero que hay que poder leer de un
+    // vistazo — la forma de pago lleva además su propio color por medio.
+    var chips = document.createElement('div');
+    chips.className = 'ventasdia-chips';
+    var chipVend = document.createElement('div');
+    chipVend.className = 'vd-chip';
+    chipVend.innerHTML = '<span class="vd-chip-lbl">Vendedor</span><span class="vd-chip-val"></span>';
+    chipVend.querySelector('.vd-chip-val').textContent = v.vendedor;
+    var medios = v.pagos.map(function (p) { return p.medio; });
+    var claseMedio = medios.length > 1 ? 'medio-mixto' : 'medio-' + (medios[0] || '');
+    var chipMedio = document.createElement('div');
+    chipMedio.className = 'vd-chip vd-chip-medio ' + claseMedio;
+    chipMedio.innerHTML = '<span class="vd-chip-lbl">Forma de pago</span><span class="vd-chip-val"></span>';
+    chipMedio.querySelector('.vd-chip-val').textContent =
+        v.pagos.map(function (p) { return textoMedio(p.medio); }).join(' + ') || '—';
+    chips.appendChild(chipVend); chips.appendChild(chipMedio);
+    c.appendChild(chips);
+
+    var tablaWrap = document.createElement('div');
+    tablaWrap.className = 'tabla-wrap';
+    var tabla = document.createElement('table');
+    tabla.className = 'pos-tabla';
+    var thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>Descripción</th><th class="c-num">Cant.</th><th class="c-num">Importe</th></tr>';
+    tabla.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    v.items.forEach(function (i) {
+        var tr = document.createElement('tr');
+        tr.className = (i.devuelto ? 'fila-anulada' : '') + (ventaDiaItemSel === i.id ? ' sel' : '');
+        var tdN = document.createElement('td');
+        tdN.textContent = i.nombre + (i.devuelto ? ' (devuelto)' : '');
+        var tdC = document.createElement('td'); tdC.className = 'c-num';
+        tdC.textContent = (i.cantidad % 1 === 0 ? i.cantidad : i.cantidad.toFixed(3));
+        var tdI = document.createElement('td'); tdI.className = 'c-num'; tdI.textContent = clp(i.total);
+        tr.appendChild(tdN); tr.appendChild(tdC); tr.appendChild(tdI);
+        if (!i.devuelto && !anulada) {
+            tr.addEventListener('click', function () {
+                ventaDiaItemSel = (ventaDiaItemSel === i.id ? null : i.id);
+                pintarDetalleVentaDia(v);
+            });
+        }
+        tbody.appendChild(tr);
+    });
+    tabla.appendChild(tbody);
+    tablaWrap.appendChild(tabla);
+    c.appendChild(tablaWrap);
+
+    var btnDevolver = document.createElement('button');
+    btnDevolver.type = 'button';
+    btnDevolver.className = 'btn gris sm ventasdia-btn-devolver';
+    btnDevolver.textContent = 'Devolver artículo seleccionado';
+    btnDevolver.disabled = !ventaDiaItemSel || anulada || !v.caja_abierta;
+    btnDevolver.addEventListener('click', function () { confirmarDevolverArticulo(v); });
+    c.appendChild(btnDevolver);
+
+    var pago = document.createElement('div');
+    pago.className = 'ventasdia-pago';
+    if (v.pago_con !== null) {
+        var filaPC = document.createElement('div');
+        var lblPC = document.createElement('span'); lblPC.textContent = 'Pagó con:';
+        var valPC = document.createElement('b'); valPC.textContent = clp(v.pago_con);
+        filaPC.appendChild(lblPC); filaPC.appendChild(valPC);
+        pago.appendChild(filaPC);
+    }
+    var filaTotal = document.createElement('div');
+    filaTotal.className = 'ventasdia-total';
+    var lblTotal = document.createElement('span'); lblTotal.textContent = 'Total:';
+    var valTotal = document.createElement('b'); valTotal.textContent = clp(v.total);
+    filaTotal.appendChild(lblTotal); filaTotal.appendChild(valTotal);
+    pago.appendChild(filaTotal);
+    c.appendChild(pago);
+
+    if (!anulada) {
+        var btnCancelar = document.createElement('button');
+        btnCancelar.type = 'button';
+        btnCancelar.className = 'btn rojo ventasdia-btn-cancelar';
+        btnCancelar.textContent = 'Cancelar venta';
+        btnCancelar.disabled = !v.caja_abierta;
+        btnCancelar.addEventListener('click', function () {
+            abrirAnular({ id: v.id, folio: v.folio, total: v.total });
+        });
+        c.appendChild(btnCancelar);
+    }
+    if (!v.caja_abierta && !anulada) {
+        var avisoCerrada = document.createElement('p');
+        avisoCerrada.className = 'ventasdia-aviso-cerrada';
+        avisoCerrada.textContent = 'La caja de esta venta ya está cerrada: su corte ya quedó '
+            + 'registrado en Ingresos, así que no se puede devolver ni cancelar desde acá.';
+        c.appendChild(avisoCerrada);
+    }
+}
+
+function cargarVentasDia() {
+    var fecha = $('ventasDiaFecha').value || hoyISO();
+    return api('ventas_dia&fecha=' + encodeURIComponent(fecha), null, 'GET').then(function (j) {
+        ventasDiaLista = j.ventas || [];
+        if (ventasDiaLista.length) {
+            // La más reciente (primera de la lista, que viene de más nueva a
+            // más vieja) queda seleccionada sola, con su detalle ya a la vista.
+            seleccionarVentaDia(ventasDiaLista[0].id);
+        } else {
+            ventaDiaId = null;
+            pintarVentasDia();
+            pintarDetalleVentaDia(null);
+        }
     }).catch(function (e) { toast(e.message, true); });
 }
 
+function seleccionarVentaDia(id) {
+    ventaDiaId = id;
+    ventaDiaItemSel = null;
+    pintarVentasDia();
+    api('venta_detalle&id=' + encodeURIComponent(id), null, 'GET').then(function (j) {
+        pintarDetalleVentaDia(j.venta);
+    }).catch(function (e) { toast(e.message, true); });
+}
+
+function confirmarDevolverArticulo(v) {
+    if (!ventaDiaItemSel) return;
+    var item = v.items.filter(function (i) { return i.id === ventaDiaItemSel; })[0];
+    if (!item) return;
+    if (!confirm('¿Devolver "' + item.nombre + '" (' + clp(item.total) + ')?')) return;
+    api('devolver_articulo', { item_id: ventaDiaItemSel }).then(function () {
+        toast('Artículo devuelto.');
+        seleccionarVentaDia(v.id);   // refresca el detalle con el nuevo total
+        cargarVentasDia();           // y la fila de la izquierda (arts./total)
+    }).catch(function (e) { toast(e.message, true); });
+}
+
+$('ventasDiaFecha').addEventListener('change', cargarVentasDia);
+
 $('btnVentas').addEventListener('click', function () {
-    pintarVentas();               // muestra lo que ya se sabe
+    ventaDiaId = null;
+    ventaDiaItemSel = null;
+    $('ventasDiaFecha').value = hoyISO();
+    pintarVentasDia();
+    pintarDetalleVentaDia(null);
     abrirModal('modalVentas');
-    cargarVentas();               // y lo refresca del servidor
+    cargarVentasDia();
 });
 
 // ---------- Frutas y Verduras ----------
@@ -1632,7 +1824,7 @@ var ventaAnular = null;
 function abrirAnular(v) {
     ventaAnular = v;
     $('anularQue').textContent = 'Venta N° ' + v.folio + ' de ' + clp(v.total) +
-        ' (' + v.hora + ').';
+        (v.hora ? ' (' + v.hora + ').' : '.');
     $('anularMotivo').value = '';
     $('anularErr').hidden = true;
     abrirModal('modalAnular', 'anularMotivo');
@@ -1653,7 +1845,6 @@ function confirmarAnular() {
         toast('Venta N° ' + j.folio + ' anulada' +
               (j.fiado_revertido > 0
                  ? ' · se le quitó ' + clp(j.fiado_revertido) + ' de deuda al cliente' : ''));
-        cargarVentas();
     }).catch(function (e) {
         $('anularErr').textContent = e.message;
         $('anularErr').hidden = false;
@@ -1674,6 +1865,10 @@ $('codigo').addEventListener('keydown', function (e) {
 });
 
 function accion(a) {
+    if (ES_EXPRESS && (a === 'entrada' || a === 'salida' || a === 'cuenta')) {
+        toast('La Caja Express no maneja efectivo.', true);
+        return;
+    }
     if (a === 'comun')     return abrirComun();
     if (a === 'buscar')    return abrirBuscar($('codigo').value.trim());
     if (a === 'entrada')   return abrirMov('entrada');

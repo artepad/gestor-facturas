@@ -115,10 +115,11 @@ $ambos('/caja.php', function (): void {
     $c = new CajaController();
     if (Request::metodo() === 'POST') {
         match (Request::post('accion')) {
-            'abrir'      => $c->abrir([]),
-            'movimiento' => $c->movimiento([]),
-            'cerrar'     => $c->cerrar([]),
-            default      => $c->index([]),
+            'abrir'        => $c->abrir([]),
+            'movimiento'   => $c->movimiento([]),
+            'cerrar'       => $c->cerrar([]),
+            'cerrar_ajena' => $c->cerrarAjena([]),
+            default        => $c->index([]),
         };
     } else {
         $c->index([]);

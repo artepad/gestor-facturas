@@ -52,6 +52,17 @@ function tiene_tabla(PDO $pdo, string $tabla): bool
     return (int)$st->fetchColumn() > 0;
 }
 
+/** Devuelve true si la tabla ya tiene ese índice (por nombre). */
+function tiene_indice(PDO $pdo, string $tabla, string $indice): bool
+{
+    $st = $pdo->prepare(
+        "SELECT COUNT(*) FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?"
+    );
+    $st->execute([$tabla, $indice]);
+    return (int)$st->fetchColumn() > 0;
+}
+
 /** Nombre de la clave foránea de una columna, o null si no tiene. */
 function nombre_fk(PDO $pdo, string $tabla, string $col): ?string
 {
@@ -819,6 +830,89 @@ if (is_dir($carpetaPdfVieja)) {
     }
 } else {
     echo "  - no existe almacen_pdf/, nada que reubicar\n";
+}
+
+echo "\n[Caja: evitar abrir el mismo nombre dos veces a la vez]\n";
+// El combo Principal/Secundaria/Express (ver CLAUDE.md, modulo Ventas/POS)
+// solo avisa en pantalla si ese nombre ya esta abierto en ese negocio — es
+// informativo, se calcula ANTES del clic y no alcanza para impedir que dos
+// vendedoras aprieten "Abrir caja" al mismo tiempo. Esta columna generada +
+// su indice UNIQUE es la traba real, a nivel de base de datos: mientras una
+// fila de caja_sesiones tenga estado='abierta', no puede existir otra fila
+// abierta con el mismo negocio_id + caja. Las filas cerradas (o con estado
+// distinto de 'abierta') valen NULL en la columna, y MySQL permite cualquier
+// cantidad de NULL en un indice UNIQUE, asi que el historial no se ve
+// afectado. abrir_caja() en lib/pos.php ya sabe traducir el choque en un
+// mensaje claro para la vendedora.
+if (!tiene_indice($pdo, 'caja_sesiones', 'uq_caja_sesion_abierta')) {
+    // Antes de crear el indice UNIQUE hay que asegurarse de que HOY no
+    // existan ya dos sesiones ABIERTAS con el mismo negocio + nombre de caja
+    // (facil que pase: antes de este cambio nadie llenaba el nombre, asi que
+    // dos cajas abiertas a la vez en el mismo negocio bien pueden tener
+    // ambas el nombre en blanco) — si existieran, el ALTER de mas abajo
+    // fallaria de golpe con "duplicate entry" y la migracion quedaria a
+    // medias. Se renombra automaticamente la sesion mas nueva de cada grupo
+    // duplicado (la mas antigua conserva su nombre tal cual) para que la
+    // migracion nunca se corte; el dueño puede corregir el nombre despues
+    // desde la propia pantalla si quiere, no se pierde ningun dato.
+    $duplicados = $pdo->query(
+        "SELECT negocio_id, COALESCE(caja,'') AS caja, COUNT(*) total
+           FROM caja_sesiones WHERE estado = 'abierta'
+          GROUP BY negocio_id, COALESCE(caja,'') HAVING COUNT(*) > 1"
+    )->fetchAll();
+    foreach ($duplicados as $d) {
+        $st = $pdo->prepare(
+            "SELECT id FROM caja_sesiones
+              WHERE estado = 'abierta' AND negocio_id = ? AND COALESCE(caja,'') = ?
+              ORDER BY abierto_en ASC"
+        );
+        $st->execute([$d['negocio_id'], $d['caja']]);
+        $ids = $st->fetchAll(PDO::FETCH_COLUMN);
+        array_shift($ids); // la mas antigua conserva su nombre tal cual
+        $n = 2;
+        foreach ($ids as $id) {
+            $nuevoNombre = ($d['caja'] !== '' ? $d['caja'] : 'Caja') . " ($n)";
+            $pdo->prepare("UPDATE caja_sesiones SET caja = ? WHERE id = ?")->execute([$nuevoNombre, $id]);
+            echo "  ! sesion abierta #$id renombrada a \"$nuevoNombre\" (tenia el mismo nombre que otra sesion ya abierta en el mismo negocio)\n";
+            $n++;
+        }
+    }
+
+    agregar_columna(
+        $pdo, 'caja_sesiones', 'caja_abierta_clave',
+        "VARCHAR(100) GENERATED ALWAYS AS (
+            CASE WHEN estado = 'abierta' THEN CONCAT(negocio_id, '|', COALESCE(caja, '')) ELSE NULL END
+         ) STORED"
+    );
+    $pdo->exec("ALTER TABLE caja_sesiones ADD UNIQUE KEY uq_caja_sesion_abierta (caja_abierta_clave)");
+    echo "  + indice uq_caja_sesion_abierta agregado\n";
+} else {
+    echo "  - indice uq_caja_sesion_abierta ya existe\n";
+}
+
+echo "\n[Caja Express: celular/tablet, sin efectivo]\n";
+// 'tipo' distingue una caja normal (cajon con efectivo) de una Express (solo
+// tarjeta/transferencia/fiado, pensada para vender desde un celular en horas
+// punta). Ver lib/pos.php (registrar_venta, abrir_caja) y
+// app/Controllers/PosApiController (rechaza efectivo/movimientos/recaudacion
+// si la sesion es 'express'). Todas las sesiones existentes quedan 'fisica'
+// (el valor por defecto), que es exactamente como se comportaban antes.
+agregar_columna($pdo, 'caja_sesiones', 'tipo', "VARCHAR(10) NOT NULL DEFAULT 'fisica' AFTER caja");
+
+echo "\n[Ventas del día: devolver un artículo suelto]\n";
+// Devolver UN artículo (no la venta completa) de "Ventas del día". Ver
+// devolver_articulo_venta() en lib/pos.php: solo si la venta tiene un único
+// medio de pago y su caja sigue abierta (misma regla que anular_venta()).
+agregar_columna($pdo, 'venta_items', 'devuelto_en', "DATETIME NULL");
+agregar_columna($pdo, 'venta_items', 'devuelto_por', "INT NULL");
+if (!nombre_fk($pdo, 'venta_items', 'devuelto_por')) {
+    $pdo->exec(
+        "ALTER TABLE venta_items ADD CONSTRAINT fk_vitem_devuelto_por
+           FOREIGN KEY (devuelto_por) REFERENCES usuarios(id) ON DELETE SET NULL"
+    );
+    echo "  + fk venta_items.devuelto_por agregada\n";
+} else {
+    echo "  - fk venta_items.devuelto_por ya existe\n";
 }
 
 echo "\nListo. Migraciones aplicadas.\n";

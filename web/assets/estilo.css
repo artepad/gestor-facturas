@@ -860,6 +860,7 @@ details.bloque > summary { cursor: pointer; padding: 14px 18px; font-weight: 600
 details.bloque > summary::-webkit-details-marker { display: none; }
 details.bloque > summary::before { content: '\203A'; font-size: 18px; line-height: 1;
   color: var(--texto-sec); transition: transform .15s; }
+details.bloque > summary .ic { width: 16px; height: 16px; flex: none; }
 details.bloque[open] > summary::before { transform: rotate(90deg); }
 details.bloque > summary:hover { color: var(--azul); }
 details.bloque[open] > summary { border-bottom: 1px solid var(--borde); }
@@ -1038,11 +1039,84 @@ th.col-num { text-align: right; }
   padding: 3px 9px; border-radius: 10px; }
 .badge-mov.b-entrada { background: #e8f8ef; color: #1e7e44; }
 .badge-mov.b-salida  { background: #fdecea; color: #a93226; }
+/* Caja Express: celular/tablet sin efectivo — mismo look que los demás badges. */
+.badge-express { display: inline-block; font-size: 11.5px; font-weight: 700;
+  padding: 3px 9px; border-radius: 10px; background: #eaf3fb; color: var(--azul);
+  vertical-align: middle; margin-left: 4px; }
 /* Resultado del arqueo: faltante (rojo), sobrante (naranjo) o cuadrado (verde) */
 .dif { font-weight: 700; }
 .dif.dif-ok    { color: var(--verde-ok); }
 .dif.dif-falta { color: var(--rojo); }
 .dif.dif-sobra { color: #e67e22; }
+
+/* ===== Caja: rediseño de la pantalla de turno (2026-11-11) =====
+   Cabecera del turno con ícono, el efectivo esperado como cifra propia (la
+   que de verdad importa de un vistazo), y "Cerrar caja" como panel propio
+   y destacado — es la acción más importante de la pantalla. */
+.turno-cab { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.turno-cab-ic { flex: none; width: 44px; height: 44px; border-radius: 10px;
+  background: #e8f6ef; color: var(--verde-ok); display: flex;
+  align-items: center; justify-content: center; }
+.turno-cab-ic .ic { width: 23px; height: 23px; }
+.turno-cab-tit h2 { margin: 0; font-size: 18px; text-transform: none;
+  letter-spacing: 0; color: var(--texto); font-weight: 700; }
+.turno-cab-tit .ec-intro { margin: 2px 0 0; }
+
+/* Efectivo esperado: una cifra sola, grande, antes de la grilla de detalle */
+.stat-destacado-solo { background: #eafaf1; border: 1px solid #cfead9;
+  border-radius: 10px; padding: 14px 18px; margin: 14px 0 16px;
+  display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.stat-destacado-solo .stat-label { font-size: 13px; color: #1b7a4b; font-weight: 600; }
+.stat-destacado-solo .stat-valor { font-size: 30px; font-weight: 800; color: #1b7a4b; }
+
+/* Resumen del turno: siempre 2 filas de 3 tarjetas parejas (el auto-fit
+   genérico de .ingresos-stats las acomodaba en filas desiguales según el
+   ancho disponible — 5 arriba y 1 sola abajo). Son 6 tarjetas fijas acá
+   (Fondo inicial, Ventas del turno, Ventas en efectivo, Pagos de cuentas,
+   Entradas, Salidas), así que una grilla explícita queda siempre pareja. */
+.panel-turno .ingresos-stats { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 700px) {
+  .panel-turno .ingresos-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 460px) {
+  .panel-turno .ingresos-stats { grid-template-columns: 1fr; }
+}
+
+/* Cerrar caja: la prioridad de la pantalla — borde de color y más aire */
+.panel-cerrar { border: 1px solid var(--borde); border-left: 5px solid var(--rojo);
+  padding: 22px 24px; }
+.cerrar-cab { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cerrar-cab-ic { display: inline-flex; color: var(--rojo); }
+.cerrar-cab-ic .ic { width: 22px; height: 22px; }
+.panel-cerrar h2 { margin: 0; font-size: 17px; text-transform: none;
+  letter-spacing: 0; color: var(--texto); font-weight: 700; }
+.btn-grande { padding: 12px 22px; font-size: 15px; }
+.cerrar-form { margin-top: 14px; }
+.mov-form { margin-top: 14px; }
+
+/* El contador embebido ocupa su propio desplegable (abierto por defecto)
+   dentro de Cerrar caja. Los paneles de billetes/monedas que trae el
+   partial quedan "planos" acá (sin borde propio) para no anidar tarjeta
+   dentro de tarjeta — en Herramientas, su pantalla propia, se ven con su
+   borde normal. */
+.contador-en-cierre { margin: 4px 0 18px; }
+.contador-en-cierre .panel { border: none; background: #f8f9fa; padding: 14px 16px; }
+.contador-en-cierre .caja-total { background: #fff; border: 1px solid var(--borde); }
+/* El mínimo de 330px de .caja-cols (pensado para la pantalla ancha de
+   Herramientas) no le entra al contenedor angosto que queda acá dentro
+   (panel + desplegable + el borde de color): se salía de la pantalla en
+   celular. Un mínimo más chico sigue permitiendo 2 columnas en desktop y
+   se adapta sin desbordar en mobile. */
+.contador-en-cierre .caja-cols { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+/* ===== Historial de turnos: contraído por defecto (details.bloque) ===== */
+.chip-cuenta { background: var(--borde); color: var(--texto-sec); font-size: 11.5px;
+  font-weight: 700; border-radius: 20px; padding: 1px 8px; margin-left: 4px; }
+.btn-ver-corte { display: inline-flex; align-items: center; gap: 6px;
+  background: #eaf3fb; color: var(--azul); font-weight: 600; font-size: 13px;
+  padding: 6px 12px; border-radius: 20px; text-decoration: none; }
+.btn-ver-corte:hover { background: #d9e9f8; }
+.btn-ver-corte .ic { width: 15px; height: 15px; }
 
 /* ===================================================================
    Pantalla de venta (pos.php). Es una pantalla de trabajo: ocupa toda
@@ -1055,14 +1129,18 @@ th.col-num { text-align: right; }
 /* --- Barra superior --- */
 .pos-top { display: flex; justify-content: space-between; align-items: center;
   gap: 12px; padding: 8px 14px; background: #22313f; color: #fff; flex-wrap: wrap; }
-.pos-top-izq, .pos-top-der { display: flex; align-items: center; gap: 10px; }
+.pos-top-izq, .pos-top-der { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pos-marca { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
 .pos-marca .ic { width: 19px; height: 19px; }
 .pos-negocio { font-size: 13px; opacity: .8; }
 .pos-cajero { font-size: 13px; opacity: .8; }
 .pos-btn-top { background: rgba(255,255,255,.12); color: #fff; border: 0;
   border-radius: 7px; padding: 7px 12px; font-size: 13px; cursor: pointer;
-  text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+  text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
+  /* Sin esto, "Frutas y verduras" (el más largo de los 4) era el único que
+     partía en dos líneas cuando faltaba espacio, engordando toda la barra
+     mientras sus vecinos ("Caja", "Salir"...) seguían en una sola línea. */
+  white-space: nowrap; flex-shrink: 0; }
 .pos-btn-top:hover { background: rgba(255,255,255,.22); }
 .pos-chip { background: #0d9488; border-radius: 9px; padding: 1px 7px;
   font-size: 12px; font-weight: 700; }
@@ -1209,6 +1287,16 @@ th.col-num { text-align: right; }
   .pos-cobrar { flex: 1; justify-content: center; }
   .pos-ultima { display: none; }        /* en el celular prima el carrito */
   .pos-tabla .c-cod { display: none; }
+  /* La barra del código de barras no entraba en una pantalla angosta
+     real (celular): el botón "Enter · Agregar producto" no tiene dónde
+     achicarse más. En vez de forzarlo en una sola fila, pasa el botón a
+     una segunda línea. */
+  .pos-barra { flex-wrap: wrap; row-gap: 8px; }
+  .pos-barra #btnAgregar { flex: 1 1 100%; order: 3; }
+  /* Mismo problema en la barra superior: con todo lo que lleva (negocio,
+     cajero, botones), a 375px de ancho se salía por poco. */
+  .pos-top-der { flex-wrap: wrap; row-gap: 6px; }
+  .pos-negocio { display: none; }        /* ya se repite abajo, en pos-estado */
 }
 
 /* --- Distribucion tipo Eleventa (mismos colores de la web) --------------
@@ -1431,6 +1519,108 @@ th.col-num { text-align: right; }
 /* Venta anulada en el listado del turno */
 .espera-fila.fila-anulada { opacity: .6; }
 .espera-fila.fila-anulada .espera-monto { text-decoration: line-through; }
+/* Misma idea, pero para una fila de <table> (Ventas del día, más abajo) */
+.pos-tabla tbody tr.fila-anulada { opacity: .55; }
+.pos-tabla tbody tr.fila-anulada td { text-decoration: line-through; }
+
+/* ===== Ventas del día: listado + detalle con devolución parcial =====
+   Tamaño FIJO (ni la cantidad de ventas ni la de artículos lo cambian): el
+   modal es una columna flex de alto fijo (h2 / layout / botón "Cerrar"), y
+   el contenido que se desborda scrollea ADENTRO de cada panel, nunca estira
+   el modal. Referencia visual: la ventana de historial de Eleventa (tabla
+   oscura arriba, fila seleccionada en azul, panel de detalle a la derecha),
+   adaptada a los colores y componentes que ya usa el resto de este POS. */
+.pos-modal-ventasdia {
+  width: min(980px, 96vw); height: min(640px, 86vh);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.pos-modal-ventasdia h2 { flex: none; }
+.ventasdia-layout {
+  display: flex; gap: 22px; margin-top: 6px; flex: 1; min-height: 0;
+}
+.ventasdia-izq { flex: 1 1 52%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.ventasdia-tabla-wrap { flex: 1; min-height: 0; overflow: auto; border-radius: 8px; }
+.ventasdia-izq .pos-tabla { table-layout: fixed; }
+.ventasdia-izq .pos-tabla th:first-child,
+.ventasdia-izq .pos-tabla td:first-child { width: 30%; }
+.ventasdia-izq .pos-tabla th:last-child,
+.ventasdia-izq .pos-tabla td:last-child,
+.ventasdia-izq .pos-tabla th:nth-child(3),
+.ventasdia-izq .pos-tabla td:nth-child(3) { width: 15%; }
+.ventasdia-izq .pos-tabla td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ventasdia-izq .pos-tabla tbody tr { cursor: pointer; }
+.ventasdia-fecha { flex: none; display: flex; align-items: center; gap: 9px; }
+.ventasdia-fecha label { font-size: 13px; font-weight: 600; color: var(--texto-sec); }
+.ventasdia-fecha input[type=date] { font: inherit; padding: 7px 9px;
+  border: 1px solid var(--borde); border-radius: 6px; }
+
+.ventasdia-der-wrap {
+  flex: 1 1 48%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  border-left: 1px solid var(--borde); padding-left: 22px;
+}
+.ventasdia-der { flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
+.ventasdia-der .pos-vacio { padding: 40px 10px; }
+
+/* Cabecera del ticket: folio grande + estado a la derecha */
+.ventasdia-cab { display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px; }
+.ventasdia-cab h3 { margin: 0; font-size: 19px; }
+.ventasdia-estado-anulada { background: #fdecea; color: var(--rojo); font-weight: 700;
+  font-size: 11.5px; letter-spacing: .3px; padding: 4px 10px; border-radius: 20px; }
+
+/* Vendedor y forma de pago: los dos datos que hay que ver de un vistazo */
+.ventasdia-chips { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.vd-chip { flex: 1 1 140px; background: #f4f6f8; border-radius: 10px;
+  padding: 9px 12px; }
+.vd-chip-lbl { display: block; font-size: 11px; font-weight: 600; color: var(--texto-sec);
+  text-transform: uppercase; letter-spacing: .3px; margin-bottom: 2px; }
+.vd-chip-val { display: block; font-size: 15px; font-weight: 700; color: var(--texto); }
+/* La forma de pago lleva su propio color: el dato más importante del panel. */
+.vd-chip-medio { background: #eaf3fb; }
+.vd-chip-medio .vd-chip-val { color: var(--azul); }
+.vd-chip-medio.medio-efectivo  { background: #e8f8ef; }
+.vd-chip-medio.medio-efectivo  .vd-chip-val { color: var(--verde-ok); }
+.vd-chip-medio.medio-transferencia { background: #e7f6f5; }
+.vd-chip-medio.medio-transferencia .vd-chip-val { color: #0d9488; }
+.vd-chip-medio.medio-credito { background: #fdf3e3; }
+.vd-chip-medio.medio-credito .vd-chip-val { color: #b5700a; }
+.vd-chip-medio.medio-mixto { background: #f2eafb; }
+.vd-chip-medio.medio-mixto .vd-chip-val { color: #7a3fc4; }
+
+.ventasdia-motivo { margin: -8px 0 14px; font-size: 12.5px; color: var(--texto-sec); }
+
+.ventasdia-der .pos-tabla { table-layout: fixed; }
+.ventasdia-der .pos-tabla td:first-child,
+.ventasdia-der .pos-tabla th:first-child { width: auto; }
+.ventasdia-der .pos-tabla th:not(:first-child),
+.ventasdia-der .pos-tabla td:not(:first-child) { width: 72px; }
+.ventasdia-der .pos-tabla tbody tr { cursor: pointer; }
+
+.ventasdia-btn-devolver { display: block; width: 100%; margin-top: 12px; }
+.ventasdia-btn-devolver:disabled { opacity: .5; cursor: not-allowed; }
+.ventasdia-pago { margin-top: 16px; border-top: 1px solid var(--borde); padding-top: 12px; }
+.ventasdia-pago > div { display: flex; justify-content: space-between;
+  font-size: 14px; padding: 4px 0; }
+.ventasdia-pago .ventasdia-total { font-size: 19px; font-weight: 800; }
+.ventasdia-btn-cancelar { display: block; width: 100%; margin-top: 16px; }
+.ventasdia-btn-cancelar:disabled { opacity: .5; cursor: not-allowed; }
+.ventasdia-aviso-cerrada { margin-top: 12px; background: #fff6e5; color: #8a5a00;
+  border: 1px solid #f0c674; border-left-width: 4px; border-radius: 8px;
+  padding: 9px 11px; font-size: 12.5px; line-height: 1.4; }
+
+@media (max-width: 700px) {
+  .pos-modal-ventasdia { height: min(640px, 92vh); }
+  .ventasdia-layout { flex-direction: column; gap: 14px; }
+  .ventasdia-izq { flex: 1 1 42%; }
+  .ventasdia-der-wrap { flex: 1 1 58%; border-left: none; border-top: 1px solid var(--borde);
+    padding-left: 0; padding-top: 14px; }
+  .ventasdia-tabla-wrap { max-height: none; }
+  /* Con poco ancho, los porcentajes fijos cortaban la columna Total */
+  .ventasdia-izq .pos-tabla,
+  .ventasdia-der .pos-tabla { table-layout: auto; }
+  .ventasdia-izq .pos-tabla td { white-space: normal; }
+  .ventasdia-chips { gap: 8px; }
+}
 
 /* ===== App instalable / estado de conexion (Etapa 3A) ===== */
 /* Aviso rojo en la barra superior cuando se cae internet */
@@ -1548,3 +1738,52 @@ a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translate
   background: #eafaf1; color: #1b7a4b; font-weight: 700;
 }
 .cta-vuelto.falta { background: #fdecea; color: #b3261e; }
+
+/* ---------- Pop-up de confirmación (reemplaza a confirm() nativo) ----------
+   Mismo lenguaje visual que los .pos-modal de la caja, pero sin depender de
+   .pos-body: se usa también dentro del layout normal del dashboard (caja.php
+   fuera del modo kiosco). Genérico a propósito (modal-confirmar), para poder
+   reusarlo en otras confirmaciones sensibles además de abrir caja. */
+.modal-fondo {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, .5);
+  z-index: 60; backdrop-filter: blur(1px);
+}
+.modal-confirmar {
+  position: fixed; z-index: 61; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); background: #fff; border-radius: 16px;
+  padding: 28px 26px 24px; width: min(420px, 92vw); max-height: 90vh;
+  overflow: auto; box-shadow: 0 24px 60px rgba(0,0,0,.28); text-align: center;
+}
+.modal-confirmar-icono {
+  width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 50%;
+  background: #e8f6ef; color: var(--verde-ok);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-confirmar-icono svg { width: 26px; height: 26px; }
+.modal-confirmar h2 { margin: 0 0 8px; font-size: 18px; }
+.modal-confirmar-ayuda {
+  margin: 0 0 18px; font-size: 13.5px; color: var(--texto-sec); line-height: 1.45;
+}
+.modal-confirmar-datos {
+  margin: 0 0 6px; border: 1px solid var(--borde); border-radius: 10px;
+  overflow: hidden; text-align: left;
+}
+.modal-confirmar-datos > div {
+  display: flex; justify-content: space-between; gap: 14px;
+  padding: 11px 14px; font-size: 14px;
+}
+.modal-confirmar-datos > div + div { border-top: 1px solid var(--borde); }
+.modal-confirmar-datos dt { color: var(--texto-sec); font-weight: 500; }
+.modal-confirmar-datos dd { margin: 0; font-weight: 700; text-align: right; }
+/* Aviso de nombre de caja repetido en el negocio: no bloquea, solo informa
+   (mismo criterio y mismo look que .aviso-caja-larga). */
+.modal-confirmar-aviso {
+  margin: 14px 0 0; padding: 10px 12px; text-align: left;
+  background: #fff6e5; border: 1px solid #f0c674; border-left-width: 4px;
+  border-radius: 8px; color: #8a5a00; font-weight: 600; font-size: 13px;
+  line-height: 1.4;
+}
+.modal-confirmar-btns {
+  display: flex; gap: 10px; margin-top: 20px;
+}
+.modal-confirmar-btns .btn { flex: 1; justify-content: center; }

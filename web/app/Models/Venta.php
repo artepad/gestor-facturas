@@ -32,10 +32,16 @@ final class Venta
         return \ultima_venta_del_turno(Database::pdo(), $sesionId);
     }
 
-    public static function delTurno(int $sesionId, int $limite = 50): array
+    public static function delDia(int $negocioId, string $fecha, int $limite = 300): array
     {
         self::cargar();
-        return \ventas_del_turno(Database::pdo(), $sesionId, $limite);
+        return \ventas_del_dia(Database::pdo(), $negocioId, $fecha, $limite);
+    }
+
+    public static function detalle(int $negocioId, int $ventaId): ?array
+    {
+        self::cargar();
+        return \venta_detalle(Database::pdo(), $negocioId, $ventaId);
     }
 
     // ---------- Corte 2b: lo que necesita pos_api.php ----------
@@ -77,6 +83,12 @@ final class Venta
     {
         self::cargar();
         return \anular_venta(Database::pdo(), $usuario, $ventaId, $motivo);
+    }
+
+    public static function devolverArticulo(array $usuario, int $itemId): array
+    {
+        self::cargar();
+        return \devolver_articulo_venta(Database::pdo(), $usuario, $itemId);
     }
 
     public static function guardarEspera(array $usuario, array $sesion, array $items, string $etiqueta, float $total): array

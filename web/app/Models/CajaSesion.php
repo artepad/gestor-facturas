@@ -38,16 +38,29 @@ final class CajaSesion
         return \sesiones_abiertas(Database::pdo(), $idsNegocios);
     }
 
+    public static function porId(int $sesionId): ?array
+    {
+        self::cargar();
+        return \sesion_por_id(Database::pdo(), $sesionId);
+    }
+
+    public static function corteEsPropio(int $corteId, int $usuarioId): bool
+    {
+        self::cargar();
+        return \corte_es_propio(Database::pdo(), $corteId, $usuarioId);
+    }
+
     public static function cerradasEn(array $idsNegocios, int $limite = 30, ?int $usuarioId = null): array
     {
         self::cargar();
         return \sesiones_cerradas(Database::pdo(), $idsNegocios, $limite, $usuarioId);
     }
 
-    public static function abrir(array $usuario, int $negocioId, string $caja, float $fondo): int
+    public static function abrir(array $usuario, int $negocioId, string $caja, float $fondo,
+                                 string $tipo = 'fisica'): int
     {
         self::cargar();
-        return \abrir_caja(Database::pdo(), $usuario, $negocioId, $caja, $fondo);
+        return \abrir_caja(Database::pdo(), $usuario, $negocioId, $caja, $fondo, $tipo);
     }
 
     public static function registrarMovimiento(array $usuario, int $sesionId, string $tipo, float $monto, string $motivo): void

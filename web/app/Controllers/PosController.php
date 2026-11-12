@@ -39,15 +39,18 @@ final class PosController extends BaseController
 
         $espera   = Venta::listarEspera((int)$sesion['id']);
         $ultima   = Venta::ultimaDelTurno((int)$sesion['id']);
-        $ventas   = Venta::delTurno((int)$sesion['id'], 50);
         $resumen  = CajaSesion::resumen((int)$sesion['id']);
         $avisoLarga = CajaSesion::avisoSiLlevaMuchoAbierta($sesion);
         $promos   = Promocion::vigentes((int)$sesion['negocio_id']);
         $csrfToken = Session::tokenCsrf();
+        // Caja Express: celular/tablet sin efectivo (ver CLAUDE.md, módulo
+        // Ventas/POS). La vista oculta todo lo que implique efectivo; el
+        // rechazo real vive en el servidor (PosApiController/lib/pos.php).
+        $esExpress = ($sesion['tipo'] ?? 'fisica') === 'express';
 
         View::render('pos/index', compact(
-            'usuario', 'sesion', 'pinHash', 'espera', 'ultima', 'ventas', 'resumen',
-            'avisoLarga', 'promos', 'csrfToken'
+            'usuario', 'sesion', 'pinHash', 'espera', 'ultima', 'resumen',
+            'avisoLarga', 'promos', 'csrfToken', 'esExpress'
         ));
     }
 }

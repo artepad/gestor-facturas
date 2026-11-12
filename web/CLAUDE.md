@@ -111,6 +111,9 @@ web/
 │                          gastos/, auth/, home/, usuarios/, facturas/, negocios/, ingresos/,
 │                          herramientas/, productos/, etiquetas/, ofertas/, catalogo/).
 │                          ver_pdf.php no tiene vista (responde el PDF directo)
+│   └── partials/           fragmentos sin Controlador propio, incluidos con require
+│                          directo desde más de una vista (ver "Contador de Caja" en
+│                          «Arquitectura del POS» más abajo — el único que hay hoy)
 ├── public/
 │   └── index.php          diagnóstico del esqueleto (autoload+BD+sesión), un entorno
 │                          aislado del panel real. No atiende ninguna pantalla
@@ -404,7 +407,11 @@ POS migrado a capas (2026-11-09): `ingresos.php`/`corte.php`/
 (métodos `panel()`, `detalle()`, `pegar()`), con `App\Models\Corte` y las
 vistas en `app/views/ingresos/`. `procesar_cortes.php` (el worker de
 cron/IMAP, más abajo) quedó fuera, a propósito — ver su entrada en el árbol
-de archivos más arriba.
+de archivos más arriba. `IngresosController::detalle()` (`corte.php`) tiene
+una excepción al permiso `ingresos` (solo admin): una vendedora puede ver el
+corte de un turno que **ella misma abrió** (`CajaSesion::corteEsPropio()`,
+cruza `caja_sesiones.corte_id` con `usuario_apertura`) — así "Ver corte" en
+su propio historial de `caja.php` funciona sin darle el módulo completo.
 - **`correos_corte`** — cada correo crudo recibido (`cuerpo` MEDIUMTEXT,
   `message_id` UNIQUE para idempotencia, `origen` imap|manual, `estado`
   pendiente|procesado|error). Se guarda SIEMPRE el crudo: si Eleventa cambia el
@@ -435,8 +442,13 @@ correcto en el servidor.
 **Módulo Herramientas** (utilidades operativas, web-nativo). Tablero de tarjetas
 (`herramientas.php`) gateado por el permiso `herramientas` (lo tienen `admin` y
 `vendedor`). Incluye el contador de caja, el gestor de etiquetas de precio, el
-creador de etiquetas de oferta y la Base de Datos de Productos. Las páginas
-`*_imprimir.php` son "desnudas" (sin layout) para imprimir limpio vía
+creador de etiquetas de oferta y la Base de Datos de Productos. El contador de
+caja (billetes y monedas, todo calculado en el navegador) vive en
+`app/views/partials/contador_caja.php` — un `require` directo, sin Modelo ni
+Controlador propio, que comparten `herramienta_caja.php` (pantalla standalone)
+y `caja.php` (embebido dentro de "Cerrar caja", con un botón extra "Usar este
+total" que llena el campo de efectivo contado — ver «Arquitectura del POS»
+abajo). Las páginas `*_imprimir.php` son "desnudas" (sin layout) para imprimir limpio vía
 `window.print()`. Último módulo migrado a capas (Fase 18, 2026-11-09): 5
 Controladores (`HerramientasController`, `ProductosController`,
 `EtiquetasController`, `OfertasController`, `CatalogoController`) + un único
@@ -561,6 +573,15 @@ incluido el modo kiosco) y `docs/MIGRACION_POS.md` (el cambio desde Eleventa).
   aparecen en reportes. Bloquean el cierre de caja.
 - **`caja_sesiones` / `caja_movimientos`** — el turno y el efectivo que entra o
   sale. **Un turno abierto por usuario**: dos cajas simultáneas son dos personas.
+  `caja_sesiones.tipo` (`fisica` | `express`) distingue una caja con cajón de
+  efectivo de la **Caja Express** (pensada para vender desde un celular/tablet en
+  horas punta): al abrirla no se pide fondo inicial, y tanto `PosApiController`
+  (acciones `cobrar`/`movimiento`/`recaudacion`) como `registrar_venta()` en
+  `lib/pos.php` rechazan cualquier intento de pago en efectivo, movimiento de
+  caja o pago de cuenta en una sesión `express` — la vista (`pos/index.php`,
+  `caja/index.php`) solo oculta esas opciones para no ofrecer algo que el
+  servidor igual va a rechazar. El arqueo de una Express siempre da $0 (nunca
+  tocó efectivo), así que su cierre no pide contar nada.
 - **Al cerrar caja se genera un `corte`** reutilizando `registrar_corte()` de
   `lib/eleventa.php`, así el módulo Ingresos y los reportes siguen igual pero con
   datos propios. `cortes` ganó `recaudado_efectivo` y `diferencia` (los cortes que
@@ -572,6 +593,24 @@ incluido el modo kiosco) y `docs/MIGRACION_POS.md` (el cambio desde Eleventa).
 - **Anular** solo se puede en una caja **todavía abierta**: cerrada, su corte ya
   está en Ingresos y anular reescribiría historia (además de ser la vía clásica de
   robo hormiga). Anular revierte el fiado y devuelve el stock.
+- **"Ventas del día"** (botón del pie de `pos.php`) muestra **todo el negocio**:
+  cualquier caja, cualquier vendedora, un día a la vez (selector de fecha, hoy por
+  defecto) — a diferencia del resto de la pantalla, siempre acotada al turno
+  actual. Panel izquierdo: folio/vendedor/artículos/total (`ventas_del_dia()` en
+  `lib/pos.php`). Panel derecho, al elegir una fila: folio/vendedor/forma de
+  pago, el detalle de artículos y, abajo, **Devolver artículo seleccionado** y
+  **Cancelar venta** (este último reutiliza el `anular_venta()` de siempre, sin
+  cambios). Ambos botones respetan la misma regla que anular: si la caja de esa
+  venta ya está cerrada, quedan deshabilitados con una explicación. **Devolver
+  artículo** (`devolver_articulo_venta()`) es nuevo: resta ese producto del
+  total/stock y deja la venta parcial, pero **solo si la venta tuvo un único
+  medio de pago** (si fue mixta o repartida, no hay forma no ambigua de decidir
+  de cuál se descuenta — para esos casos se usa Cancelar venta completa) ni es
+  el último artículo que le queda (eso ya es anular la venta completa). Marca el
+  artículo con `venta_items.devuelto_en`/`devuelto_por` — `anular_venta()` ya
+  sabe saltar los artículos que llegaran marcados así, para no devolver el mismo
+  stock dos veces si a una venta ya devuelta parcialmente se la termina
+  cancelando entera.
 
 **Recaudación de convenios** (`convenios`, `servicio_operaciones`) — **crítico para
 que el balance sea real** (ver docs/POS_DISENO.md 7.7): la plata que el cliente paga por

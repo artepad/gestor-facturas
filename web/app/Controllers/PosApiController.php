@@ -50,6 +50,11 @@ final class PosApiController
         if (!\puede_ver_negocio($usuario, $negocioId)) {
             \responder_json(['error' => 'No tienes acceso a ese negocio.'], 403);
         }
+        // Caja Express: celular/tablet sin efectivo (ver CLAUDE.md, módulo
+        // Ventas/POS). No se confía en lo que oculte el navegador: estas
+        // acciones se rechazan acá, en el servidor, para cualquier sesión
+        // marcada 'express', la haya abierto quien la haya abierto.
+        $esExpress = ($sesion['tipo'] ?? 'fisica') === 'express';
 
         $accion = Request::get('accion');
         $esPost = Request::metodo() === 'POST';
@@ -93,18 +98,51 @@ final class PosApiController
                 ]);
             }
 
-            if ($accion === 'ventas_turno') {
+            // ---------- Ventas del día (todas las cajas, todas las vendedoras) ----------
+            if ($accion === 'ventas_dia') {
+                $fecha = (string)Request::get('fecha');
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+                    $fecha = date('Y-m-d');
+                }
                 $out = array_map(fn($v) => [
-                    'id'     => (int)$v['id'],
-                    'folio'  => (int)$v['folio'],
-                    'total'  => (float)$v['total'],
-                    'hora'   => substr((string)$v['fecha'], 11, 5),
-                    'n'      => (int)$v['n_items'],
-                    'medios' => $v['medios'],
-                    'estado' => $v['estado'],
-                    'motivo' => $v['motivo_anulacion'],
-                ], Venta::delTurno((int)$sesion['id'], 50));
-                \responder_json(['ok' => true, 'ventas' => $out]);
+                    'id'           => (int)$v['id'],
+                    'folio'        => (int)$v['folio'],
+                    'vendedor'     => $v['vendedor'] ?: '—',
+                    'n_items'      => (int)$v['n_items'],
+                    'total'        => (float)$v['total'],
+                    'hora'         => substr((string)$v['fecha'], 11, 5),
+                    'estado'       => $v['estado'],
+                    'motivo'       => $v['motivo_anulacion'],
+                    'caja_abierta' => ($v['estado_caja'] ?? '') === 'abierta',
+                ], Venta::delDia($negocioId, $fecha));
+                \responder_json(['ok' => true, 'fecha' => $fecha, 'ventas' => $out]);
+            }
+
+            // ---------- Detalle de una venta (panel derecho) ----------
+            if ($accion === 'venta_detalle') {
+                $v = Venta::detalle($negocioId, (int)Request::get('id'));
+                if (!$v) \responder_json(['error' => 'Esa venta ya no existe.'], 404);
+                \responder_json(['ok' => true, 'venta' => [
+                    'id'           => (int)$v['id'],
+                    'folio'        => (int)$v['folio'],
+                    'vendedor'     => $v['vendedor'] ?: '—',
+                    'total'        => (float)$v['total'],
+                    'pago_con'     => $v['pago_con'] !== null ? (float)$v['pago_con'] : null,
+                    'estado'       => $v['estado'],
+                    'motivo'       => $v['motivo_anulacion'],
+                    'caja_abierta' => ($v['estado_caja'] ?? '') === 'abierta',
+                    'items'        => array_map(fn($i) => [
+                        'id'        => (int)$i['id'],
+                        'nombre'    => $i['nombre'],
+                        'cantidad'  => (float)$i['cantidad'],
+                        'precio'    => (float)$i['precio_unitario'],
+                        'total'     => (float)$i['total'],
+                        'devuelto'  => $i['devuelto_en'] !== null,
+                    ], $v['items']),
+                    'pagos' => array_map(fn($p) => [
+                        'medio' => $p['medio'], 'monto' => (float)$p['monto'],
+                    ], $v['pagos']),
+                ]]);
             }
 
             if ($accion === 'clientes') {
@@ -128,7 +166,12 @@ final class PosApiController
                 if ($uuid === '') \responder_json(['error' => 'Falta el identificador de la venta.'], 400);
 
                 $items = $datos['items'] ?? [];
-                $MEDIOS = ['efectivo', 'tarjeta', 'transferencia', 'credito'];
+                // Sin "efectivo" en la lista, cualquier intento de pagar en
+                // efectivo cae solo en el "Medio de pago desconocido" de más
+                // abajo — mismo mensaje, sin duplicar la validación.
+                $MEDIOS = $esExpress
+                        ? ['tarjeta', 'transferencia', 'credito']
+                        : ['efectivo', 'tarjeta', 'transferencia', 'credito'];
 
                 // Total CON promociones, igual que registrar_venta(): si se usara
                 // el precio de lista, los pagos no cuadrarían con lo que el
@@ -141,16 +184,20 @@ final class PosApiController
                         $m = (string)($p['medio'] ?? '');
                         $mo = round((float)($p['monto'] ?? 0), 2);
                         if (!in_array($m, $MEDIOS, true)) {
-                            \responder_json(['error' => 'Medio de pago desconocido: ' . $m], 400);
+                            \responder_json(['error' => $esExpress && $m === 'efectivo'
+                                ? 'La Caja Express no acepta efectivo.'
+                                : 'Medio de pago desconocido: ' . $m], 400);
                         }
                         if ($mo <= 0) continue;
                         $pagos[] = ['medio' => $m, 'monto' => $mo,
                                     'referencia' => trim((string)($p['referencia'] ?? ''))];
                     }
                 } else {
-                    $medio = (string)($datos['medio'] ?? 'efectivo');
+                    $medio = (string)($datos['medio'] ?? ($esExpress ? 'tarjeta' : 'efectivo'));
                     if (!in_array($medio, $MEDIOS, true)) {
-                        \responder_json(['error' => 'Medio de pago desconocido: ' . $medio], 400);
+                        \responder_json(['error' => $esExpress && $medio === 'efectivo'
+                            ? 'La Caja Express no acepta efectivo.'
+                            : 'Medio de pago desconocido: ' . $medio], 400);
                     }
                     $pagos = [['medio' => $medio, 'monto' => $total]];
                 }
@@ -220,6 +267,15 @@ final class PosApiController
                 ]);
             }
 
+            // ---------- Devolver UN artículo de una venta (no la venta completa) ----------
+            if ($accion === 'devolver_articulo') {
+                $r = Venta::devolverArticulo($usuario, (int)($datos['item_id'] ?? 0));
+                \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', 'devolver_articulo', null,
+                    'Devolvió "' . $r['nombre'] . '" de la venta N° ' . $r['folio']
+                    . ' (' . \clp($r['monto']) . ')');
+                \responder_json(['ok' => true, 'folio' => $r['folio'], 'monto' => $r['monto']]);
+            }
+
             // ---------- Tickets en espera ----------
             if ($accion === 'espera_guardar') {
                 $items = $datos['items'] ?? [];
@@ -248,6 +304,9 @@ final class PosApiController
 
             // ---------- Entrada / salida de efectivo (F7 / F8) ----------
             if ($accion === 'movimiento') {
+                if ($esExpress) {
+                    \responder_json(['error' => 'La Caja Express no maneja efectivo: no hay movimientos que registrar.'], 400);
+                }
                 $tipo = ($datos['tipo'] ?? '') === 'entrada' ? 'entrada' : 'salida';
                 $monto = \parsear_monto((string)($datos['monto'] ?? ''));
                 if ($monto === null || $monto <= 0) {
@@ -265,6 +324,9 @@ final class PosApiController
 
             // ---------- Pago de cuenta (recaudación de un convenio) ----------
             if ($accion === 'recaudacion') {
+                if ($esExpress) {
+                    \responder_json(['error' => 'La Caja Express no puede registrar pagos de cuenta. Usa una caja Principal o Secundaria.'], 400);
+                }
                 $uuid = trim((string)($datos['uuid'] ?? ''));
                 if ($uuid === '') \responder_json(['error' => 'Falta el identificador de la operación.'], 400);
 

@@ -1,18 +1,22 @@
 <?php
 /**
  * Vista de app/Controllers/IngresosController::detalle().
- * Variables disponibles: $usuario, $corte, $movimientos, $departamentos, $correo.
+ * Variables disponibles: $usuario, $esAdmin, $corte, $movimientos, $departamentos, $correo.
  */
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
 
 $fmtFH = fn($v) => $v ? date('d-m-Y H:i', strtotime($v)) : '—';
+// Una vendedora no tiene el módulo Ingresos: "Volver" la manda a Caja (de
+// donde en la práctica siempre llega), no al dashboard de Ingresos que no
+// puede abrir.
+$volverA = $esAdmin ? 'ingresos.php' : 'caja.php';
 ?>
-<?php cabecera_dashboard($usuario, 'ingresos', 'Detalle del corte'); ?>
+<?php cabecera_dashboard($usuario, $esAdmin ? 'ingresos' : 'ventas', 'Detalle del corte'); ?>
     <div class="contenido">
         <div class="cab-acciones">
             <h2>Corte del <?= e($fmtFH($corte['cerrado_en'])) ?></h2>
-            <a class="btn gris" href="ingresos.php">Volver</a>
+            <a class="btn gris" href="<?= h($volverA) ?>">Volver</a>
         </div>
 
         <div class="panel">

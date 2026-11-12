@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Core\Request;
 use App\Core\View;
+use App\Models\CajaSesion;
 use App\Models\Corte;
 
 /**
@@ -90,21 +91,34 @@ final class IngresosController extends BaseController
 
     public function detalle(array $parametros = []): void
     {
-        $usuario = $this->exigirPermiso('ingresos');
-        require_once dirname(__DIR__, 2) . '/lib/auth.php'; // puede_ver_negocio()
+        require_once dirname(__DIR__, 2) . '/lib/auth.php'; // exigir_login(), puede(), puede_ver_negocio()
         require_once dirname(__DIR__, 2) . '/lib/ui.php';   // clp(), icono(), fecha_dmy()
+
+        $usuario = \exigir_login();
+        $esAdmin = ($usuario['rol'] ?? '') === 'admin';
 
         $id = Request::entero('id');
         $corte = Corte::porId($id);
-        if (!$corte || !\puede_ver_negocio($usuario, (int)$corte['negocio_id'])) {
-            \redirigir('ingresos.php');
+
+        // El admin ve cualquier corte de sus negocios (como siempre, con el
+        // permiso 'ingresos'). Una vendedora NO tiene ese permiso, pero puede
+        // ver el corte de un turno que ELLA MISMA abrió — es su propia
+        // información, igual que ya ve su propio historial en caja.php. Antes
+        // de esto, "Ver corte" exigía 'ingresos' sin excepción y una
+        // vendedora terminaba siempre en home.php, aunque fuera su turno.
+        $puedeVer = $corte && \puede_ver_negocio($usuario, (int)$corte['negocio_id']) && (
+            ($esAdmin && \puede($usuario, 'ingresos'))
+            || (!$esAdmin && \puede($usuario, 'ventas') && CajaSesion::corteEsPropio($id, (int)$usuario['id']))
+        );
+        if (!$puedeVer) {
+            \redirigir($esAdmin ? 'ingresos.php' : 'caja.php');
         }
 
         $movimientos = Corte::movimientosDe($id);
         $departamentos = Corte::departamentosDe($id);
         $correo = $corte['correo_id'] ? Corte::correoDe((int)$corte['correo_id']) : null;
 
-        View::render('ingresos/detalle', compact('usuario', 'corte', 'movimientos', 'departamentos', 'correo'));
+        View::render('ingresos/detalle', compact('usuario', 'esAdmin', 'corte', 'movimientos', 'departamentos', 'correo'));
     }
 
     public function pegar(array $parametros = []): void

@@ -399,6 +399,11 @@ CREATE TABLE IF NOT EXISTS caja_sesiones (
   uuid              CHAR(36) NOT NULL UNIQUE,
   negocio_id        INT NOT NULL,
   caja              VARCHAR(80) NULL,                 -- nombre del terminal ("Caja 1")
+  -- 'fisica' (Principal/Secundaria: cajón con efectivo) | 'express' (celular/
+  -- tablet, sin efectivo — ver lib/pos.php y app/views/pos/index.php). El tipo
+  -- NO se adivina del nombre "caja": si mañana se renombra la opción del
+  -- combo, el comportamiento no debe cambiar solo por eso.
+  tipo              VARCHAR(10) NOT NULL DEFAULT 'fisica',
   usuario_apertura  INT NULL,
   fondo_inicial     DECIMAL(14,2) NOT NULL DEFAULT 0,
   abierto_en        DATETIME NOT NULL,
@@ -412,11 +417,21 @@ CREATE TABLE IF NOT EXISTS caja_sesiones (
   nota              VARCHAR(255) NULL,
   creado_en         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   actualizado_en    TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- Columna generada: solo vale algo mientras la sesion esta 'abierta' (si
+  -- no, NULL). Junto al UNIQUE de abajo, impide que dos sesiones con el
+  -- mismo negocio + nombre de caja queden abiertas a la vez — la traba real
+  -- contra la carrera de dos clics simultaneos (el aviso en pantalla es solo
+  -- informativo). MySQL permite cualquier cantidad de NULL en un indice
+  -- UNIQUE, asi que las sesiones ya cerradas no se ven afectadas.
+  caja_abierta_clave VARCHAR(100) GENERATED ALWAYS AS (
+      CASE WHEN estado = 'abierta' THEN CONCAT(negocio_id, '|', COALESCE(caja, '')) ELSE NULL END
+  ) STORED,
   FOREIGN KEY (negocio_id)       REFERENCES negocios(id) ON DELETE CASCADE,
   FOREIGN KEY (usuario_apertura) REFERENCES usuarios(id) ON DELETE SET NULL,
   FOREIGN KEY (usuario_cierre)   REFERENCES usuarios(id) ON DELETE SET NULL,
   FOREIGN KEY (corte_id)         REFERENCES cortes(id)   ON DELETE SET NULL,
-  INDEX idx_sesion_negocio (negocio_id, estado)
+  INDEX idx_sesion_negocio (negocio_id, estado),
+  UNIQUE KEY uq_caja_sesion_abierta (caja_abierta_clave)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Entradas/salidas de efectivo del turno (F7/F8 en la pantalla de venta).
@@ -484,8 +499,14 @@ CREATE TABLE IF NOT EXISTS venta_items (
   costo_unitario  DECIMAL(14,2) NULL,
   afecto_iva      TINYINT(1) NOT NULL DEFAULT 1,
   promocion_id    INT NULL,                          -- que promo rebajo esta linea
+  -- Devolución de UN artículo suelto (no de la venta completa — eso es
+  -- ventas.estado='anulada'). Ver devolver_articulo_venta() en lib/pos.php:
+  -- solo en ventas de un único medio de pago y con la caja todavía abierta.
+  devuelto_en     DATETIME NULL,
+  devuelto_por    INT NULL,
   FOREIGN KEY (venta_id)    REFERENCES ventas(id)    ON DELETE CASCADE,
   FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
+  FOREIGN KEY (devuelto_por) REFERENCES usuarios(id) ON DELETE SET NULL,
   INDEX idx_vitem_venta (venta_id),
   INDEX idx_vitem_producto (producto_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
