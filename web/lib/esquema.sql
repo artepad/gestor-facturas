@@ -72,10 +72,13 @@ CREATE TABLE IF NOT EXISTS facturas (
   confianza      DOUBLE,
   notas          TEXT,
   ruta_pdf       VARCHAR(255),
+  origen         VARCHAR(10) NOT NULL DEFAULT 'sync', -- 'sync' (app de escritorio) | 'web' (subida directa con IA)
+  creada_por     INT NULL,                            -- usuario que la subió (solo origen='web')
   creada_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   actualizada_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   eliminada_en   TIMESTAMP NULL,
   FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (creada_por) REFERENCES usuarios(id) ON DELETE SET NULL,
   INDEX idx_negocio (negocio_id),
   INDEX idx_fecha (fecha),
   INDEX idx_rut (rut_emisor)

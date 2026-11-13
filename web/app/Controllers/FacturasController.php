@@ -4,16 +4,23 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Request;
+use App\Core\Session;
 use App\Core\View;
 use App\Models\Factura;
 
 /**
- * Facturas (espejo de las sincronizadas desde la app de escritorio).
- *   panel_facturas.php     -> panel()    (listado + filtros)
+ * Facturas: espejo de las sincronizadas desde la app de escritorio, más
+ * (desde 2026-11-12) la subida directa con IA, integrada en la misma
+ * pantalla del listado (sin navegar a otra página — ver "Agregar factura"
+ * en app/views/facturas/panel.php).
+ *   panel_facturas.php     -> panel()    (listado + filtros + agregar factura)
  *   factura.php?id=N       -> detalle()  (cabecera + líneas de producto + Ver PDF)
  *
- * Ambas pantallas son de solo lectura (sin POST, sin formularios con
- * estado) — no hay nada que proteger con CSRF.
+ * Las dos son de solo lectura en el sentido de no tener un POST propio (sin
+ * formulario con estado que vuelva a esta misma pantalla) — el guardado real
+ * de "Agregar factura" ocurre por fetch() contra FacturaIaController (JSON),
+ * por eso panel() igual pasa un $csrfToken a la vista (mismo criterio que
+ * PosController con pos_api.php).
  */
 final class FacturasController extends BaseController
 {
@@ -48,9 +55,11 @@ final class FacturasController extends BaseController
             $viendo = 'Todos los negocios';
         }
 
+        $csrfToken = Session::tokenCsrf();
+
         View::render('facturas/panel', compact(
             'usuario', 'negocios', 'fNegocio', 'fProveedor', 'fDesde', 'fHasta', 'fTexto',
-            'facturas', 'proveedores', 'viendo'
+            'facturas', 'proveedores', 'viendo', 'csrfToken'
         ));
     }
 

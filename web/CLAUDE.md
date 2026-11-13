@@ -84,6 +84,10 @@ web/
 │   │                    única fuente de verdad del SQL del POS; los Modelos de app/ son
 │   │                    envoltorios sobre estas funciones, no una reescritura (ver abajo)
 │   ├── auditoria.php    registrar_auditoria() + cambios_json() (antes/después)
+│   ├── factura_ia.php   lectura de cabecera de una factura con IA (Claude), llamada
+│   │                    directo por curl/streams desde "Agregar factura" — puerto de
+│   │                    src/classifier.py+validacion.py del lado Python (ver «Facturas:
+│   │                    subida directa con IA» más abajo)
 │   └── esquema.sql      definición de todas las tablas MySQL
 │
 ├── api/
@@ -98,7 +102,8 @@ web/
 │   ├── Controllers/       un Controlador por pantalla migrada, o por grupo de pantallas
 │   │                      relacionadas (POS + Fiados + Gastos + Sistema + Usuarios +
 │   │                      Facturas + Negocios + Ingresos + Herramientas — esta última con
-│   │                      5: Herramientas, Productos, Etiquetas, Ofertas, Catalogo)
+│   │                      5: Herramientas, Productos, Etiquetas, Ofertas, Catalogo) +
+│   │                      FacturaIaController (JSON, "Agregar factura": ver más abajo)
 │   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
 │   │                      Inventario, Compra) + PrecioFV, Cliente, Home, Usuario, Factura,
 │   │                      Negocio y Producto (SQL propio, salvo Producto que además envuelve
@@ -128,10 +133,15 @@ web/
 ├── documentos/           todo lo que no es código: facturas sincronizadas + sus respaldos
 │                        (Fase 21 de la migración). Una sola regla en su .htaccess
 │                        (Require all denied) protege las dos subcarpetas de adentro
-│   ├── facturas/          PDFs sincronizados, en {slug del negocio}/{año}/{mes}/{uuid}.pdf
-│   │                      — el año/mes son los de la FECHA DE LA FACTURA, no de cuándo
-│   │                      se sincronizó (api/facturas.php arma la ruta; gitignored salvo
-│   │                      .gitkeep)
+│   ├── facturas/          PDFs sincronizados (+ los subidos por "Agregar factura"), en
+│   │                      {slug del negocio}/{año}/{mes}/{uuid}.pdf — el año/mes son los
+│   │                      de la FECHA DE LA FACTURA, no de cuándo se sincronizó/subió
+│   │                      (api/facturas.php y FacturaIaController arman la ruta igual;
+│   │                      gitignored salvo .gitkeep)
+│   │   └── _tmp/           PDFs recién subidos a "Agregar factura", mientras la vendedora
+│   │                      revisa el pop-up antes de confirmar — FacturaIaController los
+│   │                      mueve a su carpeta final al guardar, o los borra solo si pasan
+│   │                      24h sin confirmarse (no se versiona, se crea solo)
 │   └── respaldos/         zips de respaldo de documentos/facturas/ (scripts/respaldo_pdfs.php,
 │                          gitignored salvo .gitkeep)
 ├── logs/                log de errores de PHP (app/bootstrap.php y lib/db.php escriben acá:
@@ -182,6 +192,7 @@ web/
 | `ver_pdf.php` | `VerPdfController::index` |
 | `usuarios.php` | `UsuariosController::index` |
 | `panel_facturas.php` / `factura.php` | `FacturasController::panel` / `detalle` |
+| `factura_ia.php` | `FacturaIaController::index` (JSON: `accion=analizar`\|`guardar` — llamado desde el panel "Agregar factura" de `panel_facturas.php`, sin pantalla propia) |
 | `negocios.php` / `negocio_form.php` / `negocio_tokens.php` / `negocio_panel.php` | `NegociosController::index` / `formulario` / `tokens` / `panel` |
 | `fiados.php` / `cliente_form.php` / `cliente.php` / `estado_cuenta_imprimir.php` | `FiadosController::listado` / `formulario` / `ficha` / `estadoCuenta` |
 | `gastos.php` / `gasto_form.php` / `categorias_gasto.php` / `gastos_fijos.php` | `GastosController::panel` / `formulario` / `categorias` / `fijos` |
@@ -357,12 +368,82 @@ Definición canónica en `lib/esquema.sql`. Tablas:
 - **`maquinas`** — cada PC que sincroniza. `token_hash` = **sha256 del token**
   (el token en claro NUNCA se guarda), `negocio_id`, `ultima_sync`. Un negocio
   puede tener varias máquinas, pero normalmente escanea solo el PC principal.
-- **`facturas`** — el espejo de cada factura. `uuid_local` (CHAR(36) **UNIQUE**)
-  es la clave de idempotencia: es el mismo UUID que generó el PC. **Soft-delete**
-  vía `eliminada_en` (no se borra físicamente). Ver docs/CONTRATO.md para los campos.
+- **`facturas`** — el espejo de cada factura sincronizada, más (desde
+  2026-11-12) las subidas directo en la web. `uuid_local` (CHAR(36) **UNIQUE**)
+  es la clave de idempotencia: para una sincronizada es el mismo UUID que
+  generó el PC; para una subida web lo genera la propia web (`Factura::crearDesdeWeb()`),
+  no viene de ningún PC. **Soft-delete** vía `eliminada_en` (no se borra
+  físicamente). `origen` (`sync` | `web`) distingue el camino de llegada;
+  `creada_por` (FK→usuarios, NULL en las sincronizadas) guarda qué usuario la
+  subió. Ver docs/CONTRATO.md para los campos de la sincronización, y
+  «Facturas: subida directa con IA» más abajo para el camino nuevo.
 - **`detalle_factura`** — líneas de producto de una factura (relación con
-  `ON DELETE CASCADE`). Se reemplaza completo en cada sync.
+  `ON DELETE CASCADE`). Se reemplaza completo en cada sync; las facturas
+  subidas por web no llenan esta tabla todavía (ver más abajo, "queda para
+  una segunda etapa").
 - **`sync_log`** — bitácora de cada operación de sincronización (auditoría).
+
+**Facturas: subida directa con IA** (botón "Agregar factura" en
+`panel_facturas.php` + `factura_ia.php`, 2026-11-12). Pensado como reemplazo
+futuro del programa de escritorio para capturar facturas (ver la discusión
+con el dueño, que decidió avanzar así): por ahora **conviven** los dos
+caminos — el programa de escritorio sigue sincronizando igual que siempre, y
+la web suma esta vía adicional para subir un PDF desde cualquier lado
+(celular, otro PC) sin pasar por el escaneo automático.
+- **Todo pasa dentro de `panel_facturas.php`, sin navegar a otra pantalla**
+  (pedido explícito del dueño: no quiere que agregar una factura signifique
+  cambiar de página). El botón "Agregar factura" de la cabecera
+  (`.btn-agregar-factura`) despliega un panel propio
+  (`#panelAgregarFactura`, con su botón de cerrar) con el selector de negocio
+  y la zona de arrastrar/elegir el PDF; al terminar de leer la IA aparece el
+  mismo pop-up de verificación de siempre (`.modal-confirmar.modal-confirmar-ancho`)
+  encima de la pantalla. Al guardar, `window.location.reload()` refresca el
+  listado (conservando los filtros de la URL) — no hace falta una vista
+  aparte. Todo esto vive en `app/views/facturas/panel.php`;
+  `FacturasController::panel()` solo agrega `$csrfToken` (`Session::tokenCsrf()`,
+  mismo criterio que `PosController` con `pos_api.php`) a las variables de
+  siempre.
+- **`FacturaIaController`** (`factura_ia.php`, POST, JSON — mismo criterio que
+  `PosApiController`/`PreciosFvController`: no extiende `BaseController`, cualquier
+  falla de sesión/permiso/CSRF responde JSON con su código HTTP) tiene dos
+  acciones:
+  - `accion=analizar` — sube el PDF a una carpeta temporal
+    (`documentos/facturas/_tmp/`, con limpieza propia de archivos de más de
+    24h en cada llamada) y le pide a la IA los datos de cabecera. No toca la
+    tabla `facturas` todavía.
+  - `accion=guardar` — recibe los datos ya revisados/corregidos por la
+    vendedora en el pop-up + el token del PDF temporal: vuelve a validar todo
+    en el servidor (nunca confía en lo que ya se mostró), mueve el PDF a su
+    carpeta final (mismo patrón de `api/facturas.php`:
+    `documentos/facturas/{slug}/{año}/{mes}/{uuid}.pdf`, año/mes de la fecha
+    de la factura) e inserta la fila con `Factura::crearDesdeWeb()`.
+- **`lib/factura_ia.php`** — toda la lógica de IA: arma el PDF como bloque
+  `document` nativo de la API de Mensajes de Anthropic (no hace falta
+  renderizar páginas a imagen en PHP, a diferencia de `src/extractor.py` en
+  el programa de escritorio — Claude lee el PDF completo solo). Usa
+  `file_get_contents()` con un contexto HTTP en vez de `ext-curl` (no
+  depender de que el hosting tenga curl habilitado; además en este XAMPP
+  local Apache no la carga aunque la CLI sí). El prompt, el esquema de la
+  herramienta forzada (`registrar_factura`) y la lógica de doble lectura
+  enfocada cuando el total sale sospechosamente bajo o la fecha queda en el
+  futuro son un **puerto directo** de `src/classifier.py` +
+  `src/validacion.py` + `src/main.py` (mismo umbral de confianza 0.75 para
+  aceptar la segunda lectura) — mantener los dos lados coherentes si se
+  ajusta el prompt en cualquiera de los dos idiomas.
+- **Duplicados**: `Factura::buscarDuplicada()` compara folio + RUT del
+  emisor dentro del negocio (misma regla que `db.buscar_duplicado` del
+  programa de escritorio), pero ahora contra **todas** las facturas del
+  negocio en la web, no solo lo escaneado en un PC. No bloquea: solo avisa
+  en el pop-up: la vendedora decide si guarda igual (`confirmar_duplicada=1`).
+- **Alcance de esta primera versión, a propósito**: solo cabecera
+  (proveedor/razón social/RUT/folio/fecha/total/notas). El detalle de
+  productos línea por línea queda para una segunda etapa — es la parte menos
+  confiable de la IA, por eso en el programa de escritorio también es un paso
+  manual aparte (`AnalizadorProductos`). Tampoco hay todavía "aprendizaje" de
+  instrucciones por proveedor ni de alias de marca: la vendedora revisa cada
+  dato igual, así que no hace falta de entrada.
+- **Config**: clave nueva `anthropic` en `config.php` (`api_key` + `modelo`,
+  mismo modelo que usa el programa de escritorio) — ver `config.ejemplo.php`.
 
 **Módulo Fiados** (web-nativo, NO participa de la sincronización; la web es la
 fuente de verdad). Primer módulo fuera del POS migrado a capas (2026-11-08):

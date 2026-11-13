@@ -38,4 +38,13 @@ return [
         'clave'   => '',
         'carpeta' => 'INBOX',
     ],
+
+    // --- IA para "Nueva factura" (subida directa en la web) ---
+    // Misma cuenta/clave que usa el programa de escritorio (ver .env en la
+    // raíz del repo, ANTHROPIC_API_KEY), solo que acá la web la llama directo
+    // por su cuenta vía curl. Ver web/lib/factura_ia.php.
+    'anthropic' => [
+        'api_key' => 'PON_AQUI_TU_ANTHROPIC_API_KEY',
+        'modelo'  => 'claude-haiku-4-5-20251001',
+    ],
 ];

@@ -99,4 +99,58 @@ final class Factura
     {
         return Database::todos('SELECT * FROM detalle_factura WHERE factura_id = ? ORDER BY id', [$facturaId]);
     }
+
+    /**
+     * Busca una posible factura duplicada por folio + RUT del emisor dentro
+     * de un negocio — misma regla que usa el programa de escritorio
+     * (db.buscar_duplicado), ahora comparando contra TODO el negocio en la
+     * web, no solo lo escaneado en un PC. Null si falta folio o RUT (no hay
+     * forma confiable de comparar).
+     */
+    public static function buscarDuplicada(int $negocioId, ?string $numeroFactura, ?string $rutEmisor): ?array
+    {
+        $numeroFactura = trim((string)$numeroFactura);
+        $rutEmisor = trim((string)$rutEmisor);
+        if ($numeroFactura === '' || $rutEmisor === '') {
+            return null;
+        }
+        return Database::uno(
+            "SELECT id, proveedor, fecha, total FROM facturas
+              WHERE negocio_id = ? AND numero_factura = ? AND rut_emisor = ? AND eliminada_en IS NULL
+              ORDER BY id DESC LIMIT 1",
+            [$negocioId, $numeroFactura, $rutEmisor]
+        );
+    }
+
+    /**
+     * Crea una factura subida directo desde la web (origen='web'), con un
+     * uuid propio (no viene de ningún PC) para mantener el mismo esquema que
+     * las sincronizadas. Devuelve el id nuevo.
+     */
+    public static function crearDesdeWeb(array $campos, int $negocioId, int $creadaPor): int
+    {
+        $pdo = Database::pdo();
+        $uuid = self::generarUuid4();
+        $st = $pdo->prepare(
+            "INSERT INTO facturas
+               (uuid_local, negocio_id, proveedor, razon_social, rut_emisor, numero_factura,
+                fecha, total, moneda, confianza, notas, ruta_pdf, origen, creada_por)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'web', ?)"
+        );
+        $st->execute([
+            $uuid, $negocioId,
+            $campos['proveedor'], $campos['razon_social'], $campos['rut_emisor'], $campos['numero_factura'],
+            $campos['fecha'], $campos['total'], $campos['moneda'], $campos['confianza'], $campos['notas'],
+            $campos['ruta_pdf'], $creadaPor,
+        ]);
+        return (int)$pdo->lastInsertId();
+    }
+
+    private static function generarUuid4(): string
+    {
+        $b = random_bytes(16);
+        $b[6] = chr((ord($b[6]) & 0x0f) | 0x40);
+        $b[8] = chr((ord($b[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($b), 4));
+    }
 }

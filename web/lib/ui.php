@@ -45,6 +45,7 @@ function icono(string $nombre, string $extra = ''): string
         'servicios' => '<path d="M4 21V8a1 1 0 0 1 1-1h5V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17"/><path d="M2 21h20"/><path d="M14 7h3M14 11h3M14 15h3"/><path d="M7 11h1M7 15h1"/>',
         'ventas'    => '<circle cx="9" cy="20" r="1.6" fill="currentColor" stroke="none"/><circle cx="18" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M2 3h3l2.7 12.4a1.5 1.5 0 0 0 1.5 1.1h8.4a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/>',
         'caja'      => '<path d="M3 9l1.5-4.5A1.5 1.5 0 0 1 6 3.5h12a1.5 1.5 0 0 1 1.5 1L21 9"/><rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M9 13h6"/>',
+        'subir'     => '<path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/>',
     ];
     $d = $svg[$nombre] ?? '';
     $clase = 'ic' . ($extra !== '' ? ' ' . $extra : '');

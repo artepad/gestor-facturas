@@ -1787,3 +1787,66 @@ a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translate
   display: flex; gap: 10px; margin-top: 20px;
 }
 .modal-confirmar-btns .btn { flex: 1; justify-content: center; }
+
+/* ====== Agregar factura (subida con IA): botón de cabecera + panel
+   desplegable + pop-up editable — todo dentro de panel_facturas.php, sin
+   cambiar de pantalla (ver app/views/facturas/panel.php). El pop-up reusa el
+   mismo lenguaje visual que .modal-confirmar (arriba), pero más ancho y con
+   texto a la izquierda porque adentro hay un formulario, no solo datos de
+   lectura. */
+.cab-modulo-der { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.btn-agregar-factura {
+  display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer;
+  background: #e67e22; color: #fff; font: inherit; font-weight: 600; font-size: 13.5px;
+  padding: 10px 16px; border-radius: 22px; box-shadow: 0 2px 6px rgba(230,126,34,.35);
+  transition: background .15s, transform .1s;
+}
+.btn-agregar-factura:hover { background: #ca6510; }
+.btn-agregar-factura:active { transform: scale(.97); }
+.btn-agregar-factura .ic { width: 17px; height: 17px; }
+
+.panel-agregar-factura { border: 1px solid #f0cda0; background: #fffaf3; }
+.panel-agregar-cab { display: flex; justify-content: space-between; align-items: flex-start; }
+.panel-agregar-cab h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 4px; }
+.panel-agregar-cab h2 .ic { width: 18px; height: 18px; color: #e67e22; }
+.btn-cerrar-panel {
+  background: none; border: none; cursor: pointer; color: var(--texto-sec);
+  font-size: 22px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+}
+.btn-cerrar-panel:hover { background: #f1e3cf; color: var(--texto); }
+
+.factura-dropzone {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 36px 20px; border: 2px dashed var(--borde); border-radius: 12px;
+  text-align: center; cursor: pointer; color: var(--texto-sec); transition: .15s;
+}
+.factura-dropzone:hover, .factura-dropzone.sobre { border-color: var(--azul); background: #f3f8fe; }
+.factura-dropzone.deshabilitado { pointer-events: none; opacity: .6; }
+.factura-dropzone .ic { width: 34px; height: 34px; color: var(--azul); }
+.factura-dropzone p { margin: 0; font-size: 14px; }
+.factura-dropzone p strong { color: var(--texto); }
+
+.factura-cargando {
+  display: flex; align-items: center; gap: 10px; margin-top: 16px;
+  font-size: 14px; color: var(--texto-sec);
+}
+.spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 3px solid var(--borde); border-top-color: var(--azul);
+  animation: factura-girar .7s linear infinite; flex: none;
+}
+@keyframes factura-girar { to { transform: rotate(360deg); } }
+
+.modal-confirmar-ancho {
+  width: min(560px, 94vw); text-align: left;
+}
+.modal-confirmar-ancho .modal-confirmar-icono,
+.modal-confirmar-ancho h2,
+.modal-confirmar-ancho .modal-confirmar-ayuda { text-align: center; }
+.factura-campos {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+@media (max-width: 520px) {
+  .factura-campos { grid-template-columns: 1fr; }
+}

@@ -24,6 +24,7 @@ use App\Controllers\CajaController;
 use App\Controllers\CatalogoController;
 use App\Controllers\ComprasController;
 use App\Controllers\EtiquetasController;
+use App\Controllers\FacturaIaController;
 use App\Controllers\FacturasController;
 use App\Controllers\FiadosController;
 use App\Controllers\GastosController;
@@ -67,6 +68,7 @@ $ambos('/usuarios.php', [UsuariosController::class, 'index']);
 // --- Facturas ---
 $ambos('/panel_facturas.php', [FacturasController::class, 'panel']);
 $ambos('/factura.php', [FacturasController::class, 'detalle']);
+$ambos('/factura_ia.php', [FacturaIaController::class, 'index']);
 
 // --- Negocios ---
 $ambos('/negocios.php', [NegociosController::class, 'index']);

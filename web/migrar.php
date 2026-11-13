@@ -915,4 +915,21 @@ if (!nombre_fk($pdo, 'venta_items', 'devuelto_por')) {
     echo "  - fk venta_items.devuelto_por ya existe\n";
 }
 
+echo "\n[Facturas: subida directa en la web con IA]\n";
+// 'origen' distingue una factura que llego por la sincronizacion del programa
+// de escritorio ('sync', valor de siempre) de una subida directo en la web
+// con el nuevo flujo de IA ('web'). 'creada_por' guarda que usuario la subio
+// (solo tiene sentido para origen='web'; las sincronizadas quedan NULL).
+agregar_columna($pdo, 'facturas', 'origen', "VARCHAR(10) NOT NULL DEFAULT 'sync' AFTER ruta_pdf");
+agregar_columna($pdo, 'facturas', 'creada_por', "INT NULL AFTER origen");
+if (!nombre_fk($pdo, 'facturas', 'creada_por')) {
+    $pdo->exec(
+        "ALTER TABLE facturas ADD CONSTRAINT fk_factura_creada_por
+           FOREIGN KEY (creada_por) REFERENCES usuarios(id) ON DELETE SET NULL"
+    );
+    echo "  + fk facturas.creada_por agregada\n";
+} else {
+    echo "  - fk facturas.creada_por ya existe\n";
+}
+
 echo "\nListo. Migraciones aplicadas.\n";
