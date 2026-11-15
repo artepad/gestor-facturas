@@ -12,8 +12,8 @@ use App\Core\Database;
  * A diferencia del resto de los Modelos del POS, este NO envuelve una función
  * vieja de lib/pos.php: la pantalla se reescribió desde cero (decisión del
  * dueño, 2026-11-08) al mudarla de su propio ítem de menú a un botón dentro
- * de la pantalla de Venta. El SQL vive directo acá, como ya hacían Convenio y
- * Promocion para lo que no tenía equivalente viejo.
+ * de la pantalla de Venta. El SQL vive directo acá, como en `App\Models\Cliente`
+ * (Fiados), para lo que no tenía equivalente viejo en el POS.
  */
 final class PrecioFV
 {

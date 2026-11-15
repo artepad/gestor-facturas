@@ -278,19 +278,6 @@ $tablasGastos = [
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_categoria_gasto (nombre)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-    'gastos_fijos' => "CREATE TABLE IF NOT EXISTS gastos_fijos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        negocio_id INT NOT NULL,
-        categoria_id INT NOT NULL,
-        descripcion VARCHAR(255) NULL,
-        monto_estimado DECIMAL(14,2) NOT NULL,
-        dia_mes TINYINT NULL,
-        activo TINYINT(1) NOT NULL DEFAULT 1,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
-        FOREIGN KEY (categoria_id) REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
-        INDEX idx_gfijo_negocio (negocio_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     'gastos' => "CREATE TABLE IF NOT EXISTS gastos (
         id INT AUTO_INCREMENT PRIMARY KEY,
         negocio_id INT NOT NULL,
@@ -298,12 +285,10 @@ $tablasGastos = [
         fecha DATE NOT NULL,
         monto DECIMAL(14,2) NOT NULL,
         descripcion VARCHAR(255) NULL,
-        gasto_fijo_id INT NULL,
         creado_por INT NULL,
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
         FOREIGN KEY (categoria_id) REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
-        FOREIGN KEY (gasto_fijo_id) REFERENCES gastos_fijos(id) ON DELETE SET NULL,
         FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
         INDEX idx_gasto_negocio_fecha (negocio_id, fecha)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -351,8 +336,7 @@ agregar_columna($pdo, 'cortes', 'recaudado_efectivo', "DECIMAL(14,2) NULL");
 agregar_columna($pdo, 'cortes', 'diferencia',         "DECIMAL(14,2) NULL");
 
 // Tablas del POS. El orden importa por las claves foraneas:
-// caja_sesiones -> ventas -> venta_items/venta_pagos/ventas_espera,
-// convenios -> servicio_operaciones.
+// caja_sesiones -> ventas -> venta_items/venta_pagos/ventas_espera.
 $tablasPos = [
     'caja_sesiones' => "CREATE TABLE IF NOT EXISTS caja_sesiones (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -463,43 +447,6 @@ $tablasPos = [
         FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE CASCADE,
         FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
         INDEX idx_espera_sesion (caja_sesion_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-    'convenios' => "CREATE TABLE IF NOT EXISTS convenios (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        negocio_id INT NOT NULL,
-        nombre VARCHAR(80) NOT NULL,
-        modalidad VARCHAR(10) NOT NULL DEFAULT 'prepago',
-        saldo_minimo DECIMAL(14,2) NULL,
-        saldo_ajuste DECIMAL(14,2) NOT NULL DEFAULT 0,
-        activo TINYINT(1) NOT NULL DEFAULT 1,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
-        UNIQUE KEY uq_convenio (negocio_id, nombre)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-    'servicio_operaciones' => "CREATE TABLE IF NOT EXISTS servicio_operaciones (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        uuid CHAR(36) NOT NULL UNIQUE,
-        negocio_id INT NOT NULL,
-        convenio_id INT NOT NULL,
-        caja_sesion_id INT NULL,
-        usuario_id INT NULL,
-        tipo VARCHAR(14) NOT NULL,
-        servicio VARCHAR(80) NULL,
-        monto DECIMAL(14,2) NOT NULL,
-        medio_pago VARCHAR(15) NULL,
-        comision DECIMAL(14,2) NULL,
-        origen_fondos VARCHAR(10) NULL,
-        referencia VARCHAR(120) NULL,
-        fecha DATETIME NOT NULL,
-        nota VARCHAR(255) NULL,
-        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
-        FOREIGN KEY (convenio_id) REFERENCES convenios(id) ON DELETE RESTRICT,
-        FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE SET NULL,
-        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
-        INDEX idx_servop_negocio_fecha (negocio_id, fecha),
-        INDEX idx_servop_convenio (convenio_id, fecha),
-        INDEX idx_servop_sesion (caja_sesion_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 ];
 foreach ($tablasPos as $nombre => $ddl) {
@@ -755,12 +702,11 @@ echo "\n[Fase 7 migracion: columnas de auditoria faltantes]\n";
 // "actualizado_en" en toda tabla de negocio que se edita despues de creada.
 // Puro agregado (no cambia ninguna consulta ni pantalla): MySQL la llena
 // solo en cada UPDATE, asi que desde ahora queda registrado cuando se
-// edito por ultima vez un cliente, un fiado, un abono, un convenio, una
-// caja, un corte o una compra (antes no quedaba rastro de eso).
+// edito por ultima vez un cliente, un fiado, un abono, una caja, un corte
+// o una compra (antes no quedaba rastro de eso).
 agregar_columna($pdo, 'clientes',      'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 agregar_columna($pdo, 'fiados',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 agregar_columna($pdo, 'abonos',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
-agregar_columna($pdo, 'convenios',     'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 agregar_columna($pdo, 'caja_sesiones', 'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 agregar_columna($pdo, 'cortes',        'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 agregar_columna($pdo, 'compras',       'actualizado_en', "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
@@ -894,7 +840,7 @@ echo "\n[Caja Express: celular/tablet, sin efectivo]\n";
 // 'tipo' distingue una caja normal (cajon con efectivo) de una Express (solo
 // tarjeta/transferencia/fiado, pensada para vender desde un celular en horas
 // punta). Ver lib/pos.php (registrar_venta, abrir_caja) y
-// app/Controllers/PosApiController (rechaza efectivo/movimientos/recaudacion
+// app/Controllers/PosApiController (rechaza efectivo/movimientos
 // si la sesion es 'express'). Todas las sesiones existentes quedan 'fisica'
 // (el valor por defecto), que es exactamente como se comportaban antes.
 agregar_columna($pdo, 'caja_sesiones', 'tipo', "VARCHAR(10) NOT NULL DEFAULT 'fisica' AFTER caja");

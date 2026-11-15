@@ -87,12 +87,6 @@ final class CajaSesion
         return \resumen_caja(Database::pdo(), $sesionId);
     }
 
-    public static function recaudacionesDelTurno(int $sesionId, int $limite = 50): array
-    {
-        self::cargar();
-        return \recaudaciones_del_turno(Database::pdo(), $sesionId, $limite);
-    }
-
     public static function cerrar(array $usuario, int $sesionId, float $contado, string $nota = ''): array
     {
         self::cargar();

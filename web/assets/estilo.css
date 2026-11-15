@@ -227,6 +227,10 @@ body { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
   background: #fff; border: 1px solid var(--borde); border-radius: 20px;
   padding: 7px 14px; font-size: 13.5px; color: var(--texto-sec); }
 .badge-negocio strong { color: var(--texto); }
+/* Badge de saldo en la cabecera de la ficha de cliente (fiados/ficha.php):
+   más específico para ganarle al color por defecto de arriba. */
+.badge-negocio strong.saldo-deuda { color: var(--rojo); }
+.badge-negocio strong.saldo-ok { color: var(--verde-ok); }
 .badge-negocio .ic { width: 16px; height: 16px; color: var(--azul); }
 
 .contenido { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
@@ -243,6 +247,21 @@ body { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
   font-size: 14px; color: var(--texto-sec); margin: 0 0 14px;
   text-transform: uppercase; letter-spacing: .5px;
 }
+
+/* Panel de Filtros: plegable (colapsado por defecto, ver panel.php) */
+.panel-filtros-cab {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; text-align: left;
+}
+.panel-filtros-cab h2 { margin: 0; }
+.panel-filtros-cab .chevron { color: var(--texto-sec); display: flex; transition: transform .15s; }
+.panel-filtros-cab .chevron .ic { width: 18px; height: 18px; }
+.panel-filtros.colapsado .panel-filtros-cab .chevron { transform: rotate(-90deg); }
+.panel-filtros.colapsado .panel-filtros-cab { margin-bottom: 0; }
+.panel-filtros:not(.colapsado) .panel-filtros-cab { margin-bottom: 14px; }
+.panel-filtros.colapsado .filtros { display: none; }
+
 .filtros { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 /* Campo de búsqueda: es el principal, más grande y ancho */
 .campo-busqueda input { min-width: 340px; padding: 11px 14px; font-size: 15px; }
@@ -825,6 +844,97 @@ tr:hover td { background: #eef5ff; }
 /* Filas de la tabla que llevan al detalle */
 .fila-click { cursor: pointer; }
 
+/* Tabla del listado de Facturas (2026-11-13) y de Fiados (2026-11-14): un
+   poco de color para que no se vean tan planas, cada una con una clase
+   propia (en vez de un estilo genérico de <table>) para no afectar las
+   demás pantallas que también usan la tabla base (Gastos, Usuarios,
+   Negocios...). Mismo patrón en las dos: línea de acento del color del
+   módulo bajo el encabezado + la primera columna "de identidad" en
+   negrita + la columna de plata destacada. */
+.tabla-facturas thead tr { border-bottom: 3px solid #e67e22; }
+.tabla-facturas td:nth-child(2) { font-weight: 600; } /* Proveedor */
+.tabla-facturas td.total { font-weight: 700; color: #1a7a3a; } /* Total, en verde (plata) */
+.tabla-facturas .punto.verde ~ .estado-txt { color: #1a7a3a; font-weight: 600; }
+.tabla-facturas .punto.amarillo ~ .estado-txt { color: #8a5a00; font-weight: 600; }
+.tabla-facturas .punto.rojo ~ .estado-txt { color: var(--rojo); font-weight: 600; }
+
+.tabla-fiados thead tr { border-bottom: 3px solid #8e44ad; } /* morado, el color del módulo Fiados */
+.tabla-fiados td:first-child { font-weight: 600; } /* Cliente */
+.tabla-fiados td.monto-col { font-weight: 700; } /* Saldo: ya trae su color de .saldo-deuda/.saldo-ok */
+
+/* Aviso de error fuera de un modal (ej. "editar" falló la validación) */
+.aviso-pagina { margin: 0 0 20px; }
+
+/* ===== Factura: detalle (2026-11-13) — más color, jerarquía y aire, sin
+   sobrecargar la pantalla: un solo acento (naranjo, el color del módulo) +
+   los colores de estado que ya existían (verde/amarillo/rojo). ===== */
+.factura-stats { display: grid; gap: 14px; margin-bottom: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.factura-stats .stat-card {
+  position: relative; padding: 18px 20px 16px; box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  transition: box-shadow .15s ease;
+}
+.factura-stats .stat-card:hover { box-shadow: 0 4px 14px rgba(15,23,42,.08); }
+.fs-icono {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 9px; margin-bottom: 2px;
+  background: #f1f4f8; color: var(--texto-sec);
+}
+.fs-icono .ic { width: 16px; height: 16px; }
+.fs-icono .punto { width: 11px; height: 11px; }
+.fs-total .fs-icono { background: #fdeee0; color: #e67e22; }
+.fs-total .stat-valor { color: #e67e22; }
+.fs-fecha .fs-icono { background: #e8f0fb; color: var(--azul); }
+.fs-estado .fs-icono { background: #f1f4f8; }
+.factura-stats .stat-estado { font-size: 19px; font-weight: 700; }
+.fs-estado-verde .stat-estado { color: #1a7a3a; }
+.fs-estado-amarillo .stat-estado { color: #8a5a00; }
+.fs-estado-rojo .stat-estado { color: var(--rojo); }
+.factura-stats .stat-fecha { font-size: 19px; }
+.factura-stats .stat-valor small { font-size: 13px; font-weight: 600; color: var(--texto-sec); }
+
+/* Barra de acciones (Editar/Eliminar) al pie de la ficha, en vez de la cabecera */
+.fd-acciones { display: flex; gap: 10px; justify-content: flex-end; margin: 22px 0; }
+.fd-acciones .btn, .fd-acciones .btn-icono { display: inline-flex; align-items: center; gap: 7px; }
+.fd-acciones .ic { width: 16px; height: 16px; }
+
+@media (max-width: 600px) {
+  /* Tarjetas Total/Estado/Fecha más compactas en el celular: dos por fila
+     y menos relleno, para que no ocupen tanto espacio antes del contenido. */
+  .factura-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .factura-stats .stat-card { padding: 12px 14px 10px; }
+  .factura-stats .stat-card.stat-destacado { grid-column: 1 / -1; }
+  .fs-icono { width: 24px; height: 24px; margin-bottom: 0; }
+  .fs-icono .ic { width: 13px; height: 13px; }
+  .fs-icono .punto { width: 9px; height: 9px; }
+  .factura-stats .stat-label { font-size: 11.5px; }
+  .factura-stats .stat-estado, .factura-stats .stat-fecha { font-size: 16px; }
+  .factura-stats .stat-card.stat-destacado .stat-valor { font-size: 26px; }
+  .fd-acciones { flex-direction: column; }
+  .fd-acciones form { display: contents; }
+  .fd-acciones .btn { width: 100%; justify-content: center; }
+}
+
+/* Paneles de la ficha: encabezado con ícono + línea de acento, un poco más
+   de aire y una sombra sutil para que no se vean "planos". */
+.fd-panel { box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+.fd-panel-tit {
+  display: flex; align-items: center; gap: 9px; color: var(--texto);
+  font-size: 15px; text-transform: none; letter-spacing: normal;
+  padding-bottom: 12px; margin-bottom: 18px !important;
+  border-bottom: 2px solid #f4e3d0;
+}
+.fd-panel-tit .ic { width: 18px; height: 18px; color: #e67e22; }
+.fd-grid .dg-label { color: #9a7b55; }
+.fd-grid .dg-valor { font-size: 16px; font-weight: 700; color: var(--texto); }
+/* Notas: en un recuadro aparte, para que no compita con los datos "duros" */
+.fd-notas {
+  margin-top: 18px; padding: 12px 14px; background: #f8f9fb;
+  border-left: 3px solid #e67e22; border-radius: 0 8px 8px 0;
+}
+.fd-notas .dg-label { display: block; margin-bottom: 4px; }
+.fd-notas p { margin: 0; font-size: 14px; color: var(--texto); line-height: 1.5; }
+
 /* ===== Detalle de factura (pares etiqueta/valor) ===== */
 .detalle-grid { display: grid; gap: 14px 24px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
@@ -835,6 +945,10 @@ tr:hover td { background: #eef5ff; }
 .dg-valor { font-size: 15px; color: var(--texto); }
 /* Variante con los valores en negrita (ej. cabecera del detalle de un corte) */
 .detalle-grid.dg-bold .dg-valor { font-weight: 700; }
+/* Detalle de un corte: Datos del corte / Dinero en caja / Ventas por medio de
+   pago en tres tarjetas parejas (mismo criterio que .ingresos-stats). */
+.cortes-detalle-grid { display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); grid-auto-rows: 1fr; }
 
 /* Datos de contacto: dos columnas, valores en negrita */
 .contacto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
@@ -887,13 +1001,30 @@ details.bloque[open] > summary { border-bottom: 1px solid var(--borde); }
 .btn-icono:hover { background: #eef2f7; color: var(--azul); }
 .btn-icono.peligro:hover { background: #fdecea; color: var(--rojo); }
 .btn-icono .ic { width: 18px; height: 18px; }
+.btn-icono.deshabilitado { color: var(--borde); cursor: not-allowed; }
 .acciones-fila { display: inline-flex; gap: 4px; align-items: center; }
 .col-accion { text-align: center; width: 1%; white-space: nowrap; }
+
+/* Tabla de Categorías de gasto (2026-11-14): mismo acento rojo del módulo,
+   nombre en negrita y la insignia de Estado con ancho fijo para que la
+   columna Acciones no "salte" de una fila a otra (antes alternaba entre un
+   botón de texto ancho y uno angosto, además de aparecer/desaparecer el
+   ícono de eliminar — ahora los 3 íconos son siempre del mismo tamaño y el
+   de eliminar queda atenuado, no oculto, cuando la categoría tiene gastos). */
+.tabla-categorias thead tr { border-bottom: 3px solid var(--rojo); }
+.tabla-categorias td:first-child { font-weight: 600; }
+.tabla-categorias .badge-estado { display: inline-block; min-width: 62px; text-align: center; }
 
 /* Tabla de movimientos: Detalle flexible, las demás columnas compactas
    (evita que los montos queden empujados muy a la derecha). */
 .tabla-mov th, .tabla-mov td { white-space: nowrap; }
 .tabla-mov .col-detalle { white-space: normal; width: 99%; }
+/* Mismo acento del módulo que .tabla-facturas/.tabla-fiados (ver esos
+   comentarios más abajo): línea de color bajo el encabezado + Detalle y
+   Monto con más peso. */
+.tabla-mov thead tr { border-bottom: 3px solid #8e44ad; }
+.tabla-mov .col-detalle { font-weight: 600; }
+.tabla-mov .monto-col { font-weight: 700; }
 /* Fecha compacta: día-mes arriba, año pequeño debajo */
 .tabla-mov .fecha-col { line-height: 1.15; }
 .fc-dm { display: block; font-weight: 600; }
@@ -917,6 +1048,8 @@ details.bloque[open] > summary { border-bottom: 1px solid var(--borde); }
 .tabla-corte td { padding: 8px 4px; font-size: 14px; border-bottom: 1px solid var(--borde); }
 .tabla-corte td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tabla-corte .fila-total td { font-weight: 700; border-bottom: none; }
+.tabla-corte td.tc-mas { color: var(--verde-ok); }
+.tabla-corte td.tc-menos { color: var(--rojo); }
 /* Tabla dentro de un panel/details (sin doble recuadro) */
 .tabla-plana { border: none; border-radius: 0; box-shadow: none; }
 /* Correo original crudo */
@@ -982,6 +1115,17 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
   .cat-fila { grid-template-columns: 100px 1fr auto; gap: 8px; }
   .cat-nombre { font-size: 12.5px; }
 }
+/* Tabla de cortes (2026-11-14): mismo acento azul del módulo Ingresos que
+   ya usan .ingresos-stats/.valor-azul, identidad del corte en negrita y
+   Ventas (la cifra principal) en negrita + azul, igual criterio que el
+   Total/Monto de las demás tablas del sistema. */
+.tabla-cortes thead tr { border-bottom: 3px solid var(--azul); }
+.tabla-movimientos-caja thead tr { border-bottom: 3px solid var(--azul); }
+.tabla-cortes td.col-cierre, .tabla-cortes td.col-cajero { font-weight: 600; }
+.tabla-cortes td.col-ventas { font-weight: 700; color: var(--azul); }
+.tabla-cortes td.col-efectivo { color: var(--verde-ok); }
+.tabla-cortes td.col-tarjeta { color: #8a5a00; }
+.tabla-cortes td.col-salidas { color: var(--rojo); }
 /* Tabla de cortes: en escritorio fecha y hora en una línea */
 .tabla-cortes .f-hora { margin-left: 5px; }
 @media (max-width: 600px) {
@@ -1048,6 +1192,22 @@ th.col-num { text-align: right; }
 .dif.dif-ok    { color: var(--verde-ok); }
 .dif.dif-falta { color: var(--rojo); }
 .dif.dif-sobra { color: #e67e22; }
+
+/* Tablas de Caja: mismo patrón que el resto del sistema (acento de color del
+   módulo + columna "identidad" en negrita). Turquesa, color de Ventas/POS. */
+.tabla-turnos thead tr, .tabla-otras-cajas thead tr { border-bottom: 3px solid #0d9488; }
+.tabla-turnos td:nth-child(2), .tabla-otras-cajas td:first-child { font-weight: 600; } /* Negocio */
+
+/* Aviso de "Cajas abiertas ahora mismo" en el panel de Abrir caja: mismo azul
+   informativo que .aviso-compartido, pero como caja propia (no es un .panel). */
+.aviso-cajas-abiertas { background: #eaf3fb; border: 1px solid #cfe0f0;
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; }
+.aviso-cajas-abiertas p { margin: 0; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 8px 10px; font-size: 13.5px; }
+.chip-caja-abierta { display: inline-flex; align-items: baseline; gap: 4px;
+  background: #fff; border: 1px solid #cfe0f0; border-radius: 20px;
+  padding: 4px 12px; font-size: 13px; font-weight: 600; color: var(--azul); }
+.chip-caja-abierta small { font-weight: 400; color: var(--texto-sec); }
 
 /* ===== Caja: rediseño de la pantalla de turno (2026-11-11) =====
    Cabecera del turno con ícono, el efectivo esperado como cifra propia (la
@@ -1444,9 +1604,6 @@ th.col-num { text-align: right; }
   .pos-total-caja { min-width: 0; padding: 6px 12px; }
 }
 
-/* Boton de pago de cuenta: no es una venta, se distingue en violeta */
-.pos-tecla-cuenta b { background: #f3e8fb; color: #8e44ad; }
-.pos-tecla-cuenta:hover { background: #f6eefc; border-color: #8e44ad; }
 /* Los selects de los modales igualan a los inputs */
 .pos-modal select { width: 100%; font-size: 17px; padding: 10px 12px;
   border: 1px solid var(--borde); border-radius: 8px; background: #fff; }
@@ -1732,13 +1889,6 @@ a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translate
   background: #2f9e63; color: #fff; border-right-color: #2f9e63; font-size: 18px;
 }
 
-/* Vuelto del pago de cuenta: solo informativo, no toca la caja. */
-.cta-vuelto {
-  margin: 8px 0 0; padding: 8px 12px; border-radius: 8px;
-  background: #eafaf1; color: #1b7a4b; font-weight: 700;
-}
-.cta-vuelto.falta { background: #fdecea; color: #b3261e; }
-
 /* ---------- Pop-up de confirmación (reemplaza a confirm() nativo) ----------
    Mismo lenguaje visual que los .pos-modal de la caja, pero sin depender de
    .pos-body: se usa también dentro del layout normal del dashboard (caja.php
@@ -1806,6 +1956,30 @@ a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translate
 .btn-agregar-factura:active { transform: scale(.97); }
 .btn-agregar-factura .ic { width: 17px; height: 17px; }
 
+/* Botón "pastilla" de cabecera genérico (2026-11-14): misma estética que
+   .btn-agregar-factura de arriba, reutilizable en otros módulos con el
+   color de cada uno — por ahora Fiados ("+ Nuevo cliente"), ver
+   app/views/fiados/listado.php. No se tocó .btn-agregar-factura para no
+   arriesgar nada en Facturas. */
+.btn-pastilla {
+  display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer;
+  color: #fff; font: inherit; font-weight: 600; font-size: 13.5px; text-decoration: none;
+  padding: 10px 16px; border-radius: 22px; transition: background .15s, transform .1s;
+}
+.btn-pastilla:active { transform: scale(.97); }
+.btn-pastilla .ic { width: 17px; height: 17px; }
+.btn-pastilla-morado { background: #8e44ad; box-shadow: 0 2px 6px rgba(142,68,173,.35); }
+.btn-pastilla-morado:hover { background: #763892; }
+.btn-pastilla-rojo { background: var(--rojo); box-shadow: 0 2px 6px rgba(192,57,43,.35); }
+.btn-pastilla-rojo:hover { background: #a93226; }
+.btn-pastilla-azul { background: var(--azul); box-shadow: 0 2px 6px rgba(21,101,192,.35); }
+.btn-pastilla-azul:hover { background: #0e4a95; }
+
+/* Tabla del listado de Gastos (2026-11-14), mismo patrón que Facturas/Fiados */
+.tabla-gastos thead tr { border-bottom: 3px solid var(--rojo); }
+.tabla-gastos td:nth-child(2) { font-weight: 600; }
+.tabla-gastos td.monto-col { font-weight: 700; }
+
 .panel-agregar-factura { border: 1px solid #f0cda0; background: #fffaf3; }
 .panel-agregar-cab { display: flex; justify-content: space-between; align-items: flex-start; }
 .panel-agregar-cab h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 4px; }
@@ -1838,15 +2012,35 @@ a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translate
 }
 @keyframes factura-girar { to { transform: rotate(360deg); } }
 
+/* Componente compartido por los dos pop-ups de datos de factura: el de
+   verificación de "Agregar factura" (panel.php, campos id="f...", llenados
+   por JS) y el de "Editar factura" (detalle.php, un <form> real con
+   name="..."). Mismo HTML (factura-campos) y mismo CSS a propósito — un
+   ajuste acá se ve en los dos (2026-11-14: antes el modal quedaba angosto y
+   Proveedor/Razón social se veían cortados). */
 .modal-confirmar-ancho {
-  width: min(560px, 94vw); text-align: left;
+  width: min(640px, 94vw); text-align: left; padding: 30px 32px 26px;
 }
 .modal-confirmar-ancho .modal-confirmar-icono,
 .modal-confirmar-ancho h2,
 .modal-confirmar-ancho .modal-confirmar-ayuda { text-align: center; }
 .factura-campos {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; margin-top: 4px;
 }
-@media (max-width: 520px) {
+.factura-campos .campo-ancho { grid-column: 1 / -1; }
+.factura-campos .campo label {
+  font-size: 12.5px; font-weight: 700; color: var(--texto-sec);
+  text-transform: uppercase; letter-spacing: .3px; margin-bottom: 1px;
+}
+.factura-campos .campo input,
+.factura-campos .campo select {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 10px 12px; font-size: 14.5px;
+}
+.factura-campos .campo textarea {
+  box-sizing: border-box; min-height: 64px;
+}
+@media (max-width: 560px) {
   .factura-campos { grid-template-columns: 1fr; }
+  .factura-campos .campo { grid-column: 1 / -1; }
 }

@@ -2,7 +2,8 @@
 /**
  * Vista de app/Controllers/FacturasController::panel().
  * Variables disponibles: $usuario, $negocios, $fNegocio, $fProveedor, $fDesde,
- * $fHasta, $fTexto, $facturas, $proveedores, $viendo, $csrfToken.
+ * $fHasta, $fTexto, $facturas, $proveedores, $viendo, $csrfToken, $pagina,
+ * $porPag, $total, $paginas.
  *
  * "Agregar factura" (botón de la cabecera) pasa todo dentro de esta misma
  * pantalla — sin navegar a otra página — con un panel que se despliega y un
@@ -13,6 +14,13 @@
  */
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
+
+/** Arma la URL de la página N conservando los filtros activos. */
+function url_pagina_factura(int $n): string
+{
+    $p = $_GET; $p['p'] = $n;
+    return 'panel_facturas.php?' . http_build_query($p);
+}
 ?>
 <?php cabecera_dashboard($usuario, 'facturas', 'Facturas'); ?>
 
@@ -87,11 +95,11 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
             <input type="hidden" id="verifConfirmarDuplicada" value="0">
 
             <div class="factura-campos">
-                <div class="campo">
+                <div class="campo campo-ancho">
                     <label>Proveedor (marca)</label>
                     <input type="text" id="fProveedor">
                 </div>
-                <div class="campo">
+                <div class="campo campo-ancho">
                     <label>Razón social</label>
                     <input type="text" id="fRazonSocial">
                 </div>
@@ -111,10 +119,10 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                     <label>Total</label>
                     <input type="text" inputmode="numeric" id="fTotal" placeholder="0">
                 </div>
-            </div>
-            <div class="campo" style="margin-top:12px">
-                <label>Notas</label>
-                <textarea id="fNotas" rows="2" placeholder="Observaciones (opcional)"></textarea>
+                <div class="campo campo-ancho">
+                    <label>Notas</label>
+                    <textarea id="fNotas" rows="2" placeholder="Observaciones (opcional)"></textarea>
+                </div>
             </div>
 
             <p class="modal-confirmar-aviso" id="avisoDuplicada" hidden></p>
@@ -125,9 +133,19 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
             </div>
         </section>
 
-        <div class="panel">
-            <h2>Filtros</h2>
-            <?php $fechasActivas = ($fDesde !== '' || $fHasta !== ''); ?>
+        <?php
+        $fechasActivas = ($fDesde !== '' || $fHasta !== '');
+        // Si hay algún filtro activo (texto, negocio, proveedor o fechas), el
+        // panel arranca expandido para que se vea por qué el listado está
+        // filtrado; si no, arranca colapsado para dejar la ventana más limpia.
+        $filtrosActivos = $fechasActivas || $fTexto !== '' || $fNegocio !== 0 || $fProveedor !== '';
+        ?>
+        <div class="panel panel-filtros<?= $filtrosActivos ? '' : ' colapsado' ?>" id="panelFiltros">
+            <button type="button" class="panel-filtros-cab" id="btnToggleFiltros"
+                    aria-expanded="<?= $filtrosActivos ? 'true' : 'false' ?>">
+                <h2>Filtros</h2>
+                <span class="chevron"><?= icono('chevron') ?></span>
+            </button>
             <form class="filtros<?= $fechasActivas ? ' mostrar-fechas' : '' ?>" method="get">
                 <div class="campo campo-busqueda">
                     <label>Búsqueda</label>
@@ -184,9 +202,11 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
             </form>
         </div>
 
-        <div class="resumen"><?= count($facturas) ?> factura(s)</div>
+        <div class="resumen">
+            <?= $total ?> factura(s)<?= $paginas > 1 ? " · página $pagina de $paginas" : '' ?>
+        </div>
 
-        <div class="tabla-wrap">
+        <div class="tabla-wrap tabla-facturas">
             <table>
                 <thead>
                     <tr>
@@ -228,8 +248,33 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 </tbody>
             </table>
         </div>
+
+        <?php if ($paginas > 1): ?>
+            <div class="paginacion">
+                <?php if ($pagina > 1): ?>
+                    <a class="btn gris sm" href="<?= e(url_pagina_factura($pagina - 1)) ?>">← Anteriores</a>
+                <?php endif; ?>
+                <span class="texto-tenue">Página <?= $pagina ?> de <?= $paginas ?></span>
+                <?php if ($pagina < $paginas): ?>
+                    <a class="btn gris sm" href="<?= e(url_pagina_factura($pagina + 1)) ?>">Siguientes →</a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     </div>
     <script>
+      // Panel de Filtros: plegable para aprovechar espacio. Arranca colapsado
+      // salvo que ya haya un filtro activo (ver $filtrosActivos en panel.php).
+      (function () {
+        var panel = document.getElementById('panelFiltros');
+        var btn = document.getElementById('btnToggleFiltros');
+        if (!panel || !btn) return;
+        btn.addEventListener('click', function () {
+          var abierto = !panel.classList.contains('colapsado');
+          panel.classList.toggle('colapsado', abierto);
+          btn.setAttribute('aria-expanded', abierto ? 'false' : 'true');
+        });
+      })();
+
       // El interruptor "Filtrar por fechas" muestra/oculta los campos Desde/Hasta.
       (function () {
         var chk = document.getElementById('toggleFechas');

@@ -94,9 +94,6 @@ $rutaWeb = dirname(__DIR__, 3);
     <button type="button" class="pos-tecla" data-accion="salida"><b>F8</b> Salidas</button>
     <?php endif; ?>
     <button type="button" class="pos-tecla" data-accion="borrar"><b>Supr</b> Borrar art.</button>
-    <?php if (!$esExpress): ?>
-    <button type="button" class="pos-tecla pos-tecla-cuenta" data-accion="cuenta"><b>F9</b> Pago de cuenta</button>
-    <?php endif; ?>
 </div>
 
 <!-- Aviso de que se está trabajando con una copia local del catálogo -->
@@ -264,52 +261,6 @@ $rutaWeb = dirname(__DIR__, 3);
     <input type="text" id="pendEtiqueta" autocomplete="off" placeholder="Sra. María">
     <div class="pos-modal-btns">
         <button type="button" class="btn verde" id="btnPendOk">Dejar en espera</button>
-        <button type="button" class="btn gris" data-cerrar>Cancelar (Esc)</button>
-    </div>
-</section>
-
-<!-- Pago de cuenta (recaudación de un convenio) -->
-<section class="pos-modal" id="modalCuenta" hidden aria-label="Pago de cuenta">
-    <h2>Pago de cuenta</h2>
-    <p class="pos-modal-ayuda">
-        Luz, agua, teléfono… El dinero entra a la caja pero <b>no es una venta tuya</b>:
-        es de la empresa de servicios. Lo tuyo es la comisión.
-    </p>
-    <label for="ctaServicio">Servicio</label>
-    <select id="ctaServicio">
-        <?php foreach (SERVICIOS_RECAUDACION as $s): ?>
-            <option value="<?= h($s) ?>"><?= h($s) ?></option>
-        <?php endforeach; ?>
-    </select>
-    <label for="ctaMedio">Con qué pagó</label>
-    <select id="ctaMedio">
-        <option value="efectivo">Efectivo (entra al cajón)</option>
-        <option value="tarjeta">Tarjeta (no entra al cajón)</option>
-        <option value="transferencia">Transferencia (no entra al cajón)</option>
-    </select>
-    <!-- El monto va destacado en verde: es el dato que de verdad importa y el
-         único que, mal escrito, descuadra la caja. -->
-    <label for="ctaMonto">Monto de la cuenta</label>
-    <div class="campo-peso campo-peso-destacado">
-        <span class="campo-peso-signo">$</span>
-        <input type="text" id="ctaMonto" inputmode="numeric" autocomplete="off">
-    </div>
-    <!-- Calculadora de vuelto: NO se guarda ni afecta la caja. El vuelto sale
-         de la misma plata que acaba de entrar, así que el cajón queda con el
-         neto. Esto es solo para no equivocarse al devolver. -->
-    <div id="ctaVueltoCaja">
-        <label for="ctaPagoCon">Con cuánto pagó (opcional)</label>
-        <div class="campo-peso">
-            <span class="campo-peso-signo">$</span>
-            <input type="text" id="ctaPagoCon" inputmode="numeric" autocomplete="off">
-        </div>
-        <p class="cta-vuelto" id="ctaVuelto" hidden></p>
-    </div>
-    <label for="ctaRef">N° de comprobante (opcional)</label>
-    <input type="text" id="ctaRef" autocomplete="off">
-    <div class="pos-modal-err" id="ctaErr" hidden></div>
-    <div class="pos-modal-btns">
-        <button type="button" class="btn verde" id="btnCuentaOk">Registrar pago</button>
         <button type="button" class="btn gris" data-cerrar>Cancelar (Esc)</button>
     </div>
 </section>
@@ -1384,75 +1335,6 @@ $('pendEtiqueta').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); dejarPendiente(); }
 });
 
-// ---------- Pago de cuenta (recaudación) ----------
-// No toca el carrito: es una operación aparte de la venta. El efectivo entra
-// al cajón para que el arqueo cuadre, pero NO cuenta como venta del negocio.
-function abrirCuenta() {
-    $('ctaMonto').value = ''; $('ctaRef').value = ''; $('ctaPagoCon').value = '';
-    $('ctaMedio').value = 'efectivo';
-    $('ctaErr').hidden = true;
-    pintarVueltoCuenta();
-    abrirModal('modalCuenta', 'ctaMonto');
-}
-
-// Vuelto de un pago de cuenta. Es SOLO una calculadora: no se guarda ni entra
-// al arqueo. El vuelto sale de la misma plata que acaba de recibir, así que en
-// el cajón queda el neto (cuenta $16.500, paga con $20.000, devuelve $3.500 →
-// quedan $16.500, justo lo registrado).
-function pintarVueltoCuenta() {
-    var efectivo = $('ctaMedio').value === 'efectivo';
-    $('ctaVueltoCaja').hidden = !efectivo;      // con tarjeta no hay vuelto
-    var cuenta = num($('ctaMonto').value),
-        pago   = num($('ctaPagoCon').value),
-        caja   = $('ctaVuelto');
-    if (!efectivo || cuenta === null || pago === null) { caja.hidden = true; return; }
-    var v = pago - cuenta;
-    caja.hidden = false;
-    if (v < 0) {
-        caja.className = 'cta-vuelto falta';
-        caja.textContent = 'Faltan ' + clp(-v);
-    } else {
-        caja.className = 'cta-vuelto';
-        caja.textContent = 'Vuelto: ' + clp(v);
-    }
-}
-['ctaMonto', 'ctaPagoCon'].forEach(function (id) {
-    $(id).addEventListener('input', pintarVueltoCuenta);
-});
-$('ctaMedio').addEventListener('change', pintarVueltoCuenta);
-function guardarCuenta() {
-    var b = $('btnCuentaOk');
-    if (b.disabled) return;
-    b.disabled = true;
-    api('recaudacion', {
-        uuid: uuid4(),
-        servicio: $('ctaServicio').value,
-        monto: $('ctaMonto').value,
-        medio_pago: $('ctaMedio').value,
-        referencia: $('ctaRef').value.trim()
-    }).then(function (j) {
-        var o = j.operacion;
-        cerrarModal();
-        toast('Pago de ' + o.servicio + ' por ' + clp(o.monto) + ' registrado' +
-              (o.medio_pago === 'efectivo' ? ' · entró al cajón' : ''));
-        // Aviso de saldo bajo: mejor enterarse ahora que con un cliente esperando.
-        if (j.saldo && j.saldo.bajo) {
-            setTimeout(function () {
-                toast('⚠ Queda poco saldo en ' + j.saldo.convenio + ': ' +
-                      clp(j.saldo.monto) + '. Avísale al administrador.', true);
-            }, 2800);
-        }
-    }).catch(function (e) {
-        $('ctaErr').textContent = e.message; $('ctaErr').hidden = false;
-    }).then(function () { b.disabled = false; });
-}
-$('btnCuentaOk').addEventListener('click', guardarCuenta);
-['ctaMonto', 'ctaRef', 'ctaPagoCon'].forEach(function (id) {
-    $(id).addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); guardarCuenta(); }
-    });
-});
-
 // ---------- Entrada / salida de efectivo ----------
 var movTipo = 'salida';
 function abrirMov(tipo) {
@@ -1865,7 +1747,7 @@ $('codigo').addEventListener('keydown', function (e) {
 });
 
 function accion(a) {
-    if (ES_EXPRESS && (a === 'entrada' || a === 'salida' || a === 'cuenta')) {
+    if (ES_EXPRESS && (a === 'entrada' || a === 'salida')) {
         toast('La Caja Express no maneja efectivo.', true);
         return;
     }
@@ -1873,7 +1755,6 @@ function accion(a) {
     if (a === 'buscar')    return abrirBuscar($('codigo').value.trim());
     if (a === 'entrada')   return abrirMov('entrada');
     if (a === 'salida')    return abrirMov('salida');
-    if (a === 'cuenta')    return abrirCuenta();
     if (a === 'pendiente') return abrirPendiente();
     if (a === 'borrar') {
         if (sel >= 0 && sel < carrito.length) quitar(sel);
@@ -1906,7 +1787,6 @@ document.addEventListener('keydown', function (e) {
         case 'F10': e.preventDefault(); return accion('buscar');
         case 'F7':  e.preventDefault(); return accion('entrada');
         case 'F8':  e.preventDefault(); return accion('salida');
-        case 'F9':  e.preventDefault(); return accion('cuenta');
         case 'F6':  e.preventDefault(); return accion('pendiente');
         case 'F12': e.preventDefault(); return abrirCobrar();
         case 'Delete': e.preventDefault(); return accion('borrar');

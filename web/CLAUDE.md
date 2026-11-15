@@ -11,8 +11,7 @@ lados puede romperlo sin coordinar con el otro.
 > Facturas, Negocios, Ingresos y Herramientas migraron pantalla por
 > pantalla entre 2026-11-08 y 2026-11-09 (bitácora completa en
 > `web/docs/bitacora-migracion.md`). Lo único fuera de este patrón son los
-> scripts de infraestructura sin sesión: `api/facturas.php`, `migrar.php` y
-> `procesar_cortes.php`.
+> scripts de infraestructura sin sesión: `api/facturas.php` y `migrar.php`.
 >
 > **Un solo punto de entrada (2026-11-09, Fase 19).** Ya NO hay un archivo
 > físico por pantalla en la raíz de `web/` (se borraron los ~45 "archivos
@@ -76,13 +75,14 @@ web/
 │   ├── auth.php         login/sesión + control de acceso por negocio
 │   ├── permisos.php     matriz RBAC rol→módulos + exigir_permiso()
 │   ├── ui.php           layout compartido (sidebar, footer) + helpers de formato + íconos SVG
-│   ├── eleventa.php     parser del correo de corte de Eleventa + registrar_corte()
 │   ├── productos.php    carga del catálogo Excel de Eleventa + estado + búsqueda de productos
-│   ├── gastos.php       helpers del módulo Gastos (categorías, totales, generar fijos del mes)
+│   ├── gastos.php       helpers del módulo Gastos (categorías, totales)
 │   ├── pos.php          TODA la lógica de negocio del POS: caja, ventas, promociones,
-│   │                    recaudación de convenios, inventario y compras — sigue siendo la
+│   │                    inventario y compras — sigue siendo la
 │   │                    única fuente de verdad del SQL del POS; los Modelos de app/ son
-│   │                    envoltorios sobre estas funciones, no una reescritura (ver abajo)
+│   │                    envoltorios sobre estas funciones, no una reescritura (ver abajo).
+│   │                    También tiene registrar_corte() (venía de lib/eleventa.php,
+│   │                    retirado 2026-11-14 — ver módulo Ingresos más abajo)
 │   ├── auditoria.php    registrar_auditoria() + cambios_json() (antes/después)
 │   ├── factura_ia.php   lectura de cabecera de una factura con IA (Claude), llamada
 │   │                    directo por curl/streams desde "Agregar factura" — puerto de
@@ -104,15 +104,14 @@ web/
 │   │                      Facturas + Negocios + Ingresos + Herramientas — esta última con
 │   │                      5: Herramientas, Productos, Etiquetas, Ofertas, Catalogo) +
 │   │                      FacturaIaController (JSON, "Agregar factura": ver más abajo)
-│   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion, Convenio,
+│   ├── Models/            envoltorios sobre lib/pos.php (CajaSesion, Venta, Promocion,
 │   │                      Inventario, Compra) + PrecioFV, Cliente, Home, Usuario, Factura,
 │   │                      Negocio y Producto (SQL propio, salvo Producto que además envuelve
-│   │                      lib/productos.php) + Gasto y Corte (mixtos: envuelven
-│   │                      lib/gastos.php y lib/eleventa.php respectivamente para lo que
-│   │                      ya existía ahí, SQL propio para el resto — ver «Arquitectura
-│   │                      del POS» más abajo)
+│   │                      lib/productos.php) + Gasto (envuelve lib/gastos.php para lo que
+│   │                      ya existía ahí, SQL propio para el resto) + Corte (SQL propio;
+│   │                      ya no envuelve nada de lib/ — ver «Arquitectura del POS» abajo)
 │   └── views/             una vista PHP por pantalla (caja/, pos/, inventario/, compras/,
-│                          promociones/, servicios/, precios_fv/imprimir.php, fiados/,
+│                          promociones/, precios_fv/imprimir.php, fiados/,
 │                          gastos/, auth/, home/, usuarios/, facturas/, negocios/, ingresos/,
 │                          herramientas/, productos/, etiquetas/, ofertas/, catalogo/).
 │                          ver_pdf.php no tiene vista (responde el PDF directo)
@@ -166,19 +165,15 @@ web/
 │   ├── smoke.php                   prueba de humo: recorre las rutas clave y compara
 │   └── respaldo_pdfs.php           respalda documentos/facturas/ a documentos/respaldos/ (cron diario)
 │
-├── procesar_cortes.php  worker del cron: lee la casilla IMAP + procesa pendientes (CLI o
-│                        ?clave=setup_key). Fuera del Router a propósito: no es una
-│                        pantalla de sesión, no renderiza nada (solo texto plano) — mismo
-│                        criterio que api/facturas.php o migrar.php. Sigue llamando
-│                        lib/eleventa.php directo, igual que antes
-│
 └── migrar.php            único utilitario que queda en el servidor — aplica cambios de
                           esquema a una BD existente. A diferencia de los demás (todos ya
                           borrados, del repo y del servidor — 2026-11-08: setup.php,
                           crear_admin.php, crear_admin_form.php, reset_facturas.php), SÍ
                           conviene dejarlo: es idempotente (solo aplica lo que falta) y se
                           vuelve a necesitar cada vez que el esquema cambia. Fuera del
-                          Router, igual que procesar_cortes.php
+                          Router, igual que api/facturas.php. (procesar_cortes.php, el
+                          worker del cron de Eleventa, se retiró 2026-11-14 — ver módulo
+                          Ingresos más abajo)
 ```
 
 **Dónde quedó cada pantalla** (todas corren a través de `index.php` + el Router — ver
@@ -195,8 +190,8 @@ web/
 | `factura_ia.php` | `FacturaIaController::index` (JSON: `accion=analizar`\|`guardar` — llamado desde el panel "Agregar factura" de `panel_facturas.php`, sin pantalla propia) |
 | `negocios.php` / `negocio_form.php` / `negocio_tokens.php` / `negocio_panel.php` | `NegociosController::index` / `formulario` / `tokens` / `panel` |
 | `fiados.php` / `cliente_form.php` / `cliente.php` / `estado_cuenta_imprimir.php` | `FiadosController::listado` / `formulario` / `ficha` / `estadoCuenta` |
-| `gastos.php` / `gasto_form.php` / `categorias_gasto.php` / `gastos_fijos.php` | `GastosController::panel` / `formulario` / `categorias` / `fijos` |
-| `ingresos.php` / `corte.php` / `corte_pegar.php` | `IngresosController::panel` / `detalle` / `pegar` |
+| `gastos.php` / `gasto_form.php` / `categorias_gasto.php` | `GastosController::panel` / `formulario` / `categorias` |
+| `ingresos.php` / `corte.php` | `IngresosController::panel` / `detalle` |
 | `herramientas.php` / `herramienta_caja.php` | `HerramientasController::tablero` / `caja` |
 | `herramienta_productos.php` / `producto_form.php` / `historial_productos.php` | `ProductosController::panel` / `formulario` / `historial` |
 | `herramienta_etiquetas.php` / `etiquetas_imprimir.php` / `productos_buscar.php` | `EtiquetasController::formulario` / `imprimir` / `buscarJson` |
@@ -204,7 +199,7 @@ web/
 | `herramienta_catalogo.php` / `catalogo_buscar.php` | `CatalogoController::index` / `buscarJson` |
 | `pos.php` / `pos_api.php` | `PosController::index` / `PosApiController::index` |
 | `caja.php` | `CajaController` — único caso especial: la ruta es una función que elige `abrir`/`movimiento`/`cerrar`/`index` según el `accion` del POST, igual que antes lo elegía el archivo puente |
-| `inventario.php` / `compras.php` / `promociones.php` / `servicios.php` | `InventarioController` / `ComprasController` / `PromocionesController` / `ServiciosController::index` |
+| `inventario.php` / `compras.php` / `promociones.php` | `InventarioController` / `ComprasController` / `PromocionesController` |
 | `precios_fv.php` / `precios_fv_imprimir.php` | `PreciosFvController::index` / `imprimir` |
 
 Lista exacta y siempre actualizada: `app/routes.php`.
@@ -214,8 +209,8 @@ Lista exacta y siempre actualizada: `app/routes.php`.
 **Todo** `web/` sigue el patrón Router → Controlador → Modelo → Vista
 descrito en esta sección y en «El Router (punto de entrada único)» más
 abajo, salvo los scripts de infraestructura sin sesión
-(`api/facturas.php`, `migrar.php`, `procesar_cortes.php` — ver el banner
-del principio de este archivo). El nombre de la sección quedó de cuando
+(`api/facturas.php`, `migrar.php` — ver el banner del principio de este
+archivo). El nombre de la sección quedó de cuando
 solo era el POS; el patrón que describe aplica igual a cualquier
 pantalla. El cómo y por qué se llegó acá, fase por fase, está en
 `web/docs/bitacora-migracion.md`.
@@ -243,31 +238,29 @@ Ver «El Router (punto de entrada único)» más abajo para el detalle completo.
   por dentro llama a `\registrar_venta()` de `lib/pos.php`. Esto fue intencional
   para no mover 1.500 líneas de golpe; significa que **el SQL real del POS sigue
   viviendo en `lib/pos.php`** — para entender o cambiar una regla de negocio del
-  POS (cómo se calcula el vuelto, cómo se aplica una promoción, cómo se liquida
-  un convenio), hay que mirar ahí, no en `app/Models/`. **Excepciones:**
+  POS (cómo se calcula el vuelto, cómo se aplica una promoción), hay que mirar
+  ahí, no en `app/Models/`. **Excepciones:**
   `App\Models\PrecioFV` (Frutas y Verduras) y `App\Models\Cliente` (Fiados)
   tienen su SQL propio — no envuelven nada de `lib/pos.php` porque no existía
   código viejo de POS para esas pantallas (Frutas y Verduras venía de su
   propio módulo, reescrito desde cero a pedido del dueño; Fiados nunca tuvo
   equivalente en el POS). `App\Models\Gasto` es **mixto**: envuelve
   `lib/gastos.php` para lo que ya existía ahí (categorías, totales/desglose
-  del período, generación de gastos fijos — `home.php` y `negocio_panel.php`
-  usan esas mismas funciones, uno directo y el otro a través del Modelo, así
-  que `lib/gastos.php` NO se tocó), y usa SQL propio para el CRUD de
-  gastos/categorías/plantillas que antes vivía suelto dentro de cada
-  pantalla. `App\Models\Home`, `App\Models\Usuario`, `App\Models\Factura` y
+  del período — `home.php` y `negocio_panel.php` usan esas mismas funciones,
+  uno directo y el otro a través del Modelo, así que `lib/gastos.php` NO se
+  tocó), y usa SQL propio para el CRUD de gastos/categorías que antes vivía
+  suelto dentro de cada pantalla. `App\Models\Home`, `App\Models\Usuario`, `App\Models\Factura` y
   `App\Models\Negocio` también son SQL propio — no hay nada en `lib/` que
   envolver para el tablero de inicio, la gestión de usuarios, las facturas
   (`Factura` nació chico, solo con `paraPdf()` para `ver_pdf.php`, y se
   completó al migrar el módulo Facturas — ver Fase 15 en el plan) ni los
   negocios. `Negocio` reutiliza `Home::ventasPorDia()`/`comprasPorNegocio()`
   y `Gasto::totalPeriodo()`/`porCategoria()` en vez de duplicar esas
-  consultas para `negocio_panel.php`. `App\Models\Corte` (Ingresos) es
-  **mixto**, mismo criterio que `Gasto`: envuelve `lib/eleventa.php` solo
-  para `procesar_correo_corte()` (el parser del correo de Eleventa — NO se
-  toca, lo sigue usando también `procesar_cortes.php`, que quedó fuera de
-  esta migración), y SQL propio para todo lo demás (el dashboard, el
-  detalle de un corte, el registro manual).
+  consultas para `negocio_panel.php`. `App\Models\Corte` (Ingresos) es SQL
+  propio puro — hasta 2026-11-14 envolvía `lib/eleventa.php` para parsear
+  los correos de Eleventa, pero ese flujo se retiró por completo (ver
+  módulo Ingresos más abajo); `registrar_corte()`, que antes vivía ahí,
+  se movió a `lib/pos.php` porque el único que la llama hoy es el POS.
 - **CSRF** (`campo_csrf()` en cada formulario, `Session::csrfValido()` en cada
   POST) existe **solo en las pantallas migradas que tienen formularios que
   escriben en la base de datos** (POS + Fiados + Gastos + Usuarios +
@@ -307,14 +300,14 @@ Ver «El Router (punto de entrada único)» más abajo para el detalle completo.
   desde la Fase 19.
 
 **Para agregar una acción nueva a una pantalla ya migrada**: agregar el método
-al Modelo (envolviendo una función de `lib/pos.php`, `lib/gastos.php`,
-`lib/eleventa.php` o `lib/productos.php` si ya existe ahí, o SQL propio si
+al Modelo (envolviendo una función de `lib/pos.php`, `lib/gastos.php`
+o `lib/productos.php` si ya existe ahí, o SQL propio si
 no), el método o rama `accion` al Controlador, y el formulario con
 `campo_csrf()` a la Vista — **la ruta ya existe** si la pantalla ya existía,
 no hace falta tocar `app/routes.php`. **La migración a capas terminó**
 (2026-11-09): todo `web/` sigue este patrón salvo los scripts de
-infraestructura sin sesión (`api/facturas.php`, `migrar.php`,
-`procesar_cortes.php`). Bitácora completa en `web/docs/bitacora-migracion.md`.
+infraestructura sin sesión (`api/facturas.php`, `migrar.php`). Bitácora
+completa en `web/docs/bitacora-migracion.md`.
 
 ## El Router (punto de entrada único)
 
@@ -325,8 +318,8 @@ raíz de `web/`. En su lugar:
    NO sea un archivo o carpeta real existente hacia `index.php`, sin
    cambiar la URL que ve el navegador (`RewriteCond %{REQUEST_FILENAME}
    !-f` / `!-d`, sin flag `[R]`). Los archivos reales (CSS, imágenes,
-   `uploads/`, `api/facturas.php`, `migrar.php`, `procesar_cortes.php`,
-   `config.php`) se siguen sirviendo directo, nunca pasan por acá.
+   `uploads/`, `api/facturas.php`, `migrar.php`, `config.php`) se siguen
+   sirviendo directo, nunca pasan por acá.
 2. **`index.php`** (la raíz) crea un `App\Core\Router`, incluye
    `app/routes.php` (que registra ahí todas las direcciones) y despacha
    según `Request::metodo()` + `Request::ruta()`. Si ninguna ruta hace
@@ -445,13 +438,161 @@ la web suma esta vía adicional para subir un PDF desde cualquier lado
 - **Config**: clave nueva `anthropic` en `config.php` (`api_key` + `modelo`,
   mismo modelo que usa el programa de escritorio) — ver `config.ejemplo.php`.
 
+**Editar y eliminar una factura** (botones discretos junto a "Ver PDF" en
+`factura.php`, 2026-11-13, solo admin): el ícono de lápiz abre un modal
+(mismo lenguaje visual que el de "Agregar factura") para corregir
+proveedor/razón social/RUT/folio/fecha/total/notas; el de papelera hace un
+soft-delete (`eliminada_en`) con confirmación nativa del navegador
+(`confirm()`, mismo patrón que `cliente.php` en Fiados). Antes de programar
+esto se revisó cómo se guardan las facturas para no romper nada:
+- **Nunca se toca `ruta_pdf`, `negocio_id` ni `origen`** al editar — el PDF
+  original no se mueve ni se reemplaza (`ver_pdf.php` sirve lo que diga
+  `ruta_pdf` tal cual, sin recalcular la carpeta por la fecha, así que
+  editar la fecha de emisión no requiere mover el archivo).
+- **Una factura `origen='sync'` sigue teniendo como fuente de verdad la BD
+  del PC** (ver `docs/CONTRATO.md`): si ese mismo PC la vuelve a sincronizar
+  más adelante, el upsert de `api/facturas.php` sobrescribe lo editado acá.
+  Es un caso raro (requiere que alguien la edite también en el programa de
+  escritorio), pero el modal lo avisa igual cuando corresponde.
+- **Restringido a admin**, mismo criterio que editar/eliminar en Fiados:
+  `FacturasController::detalle()` revalida el rol en el backend (no solo
+  oculta los botones), y cada cambio queda en `auditoria` vía
+  `registrar_auditoria()`/`cambios_json()`.
+- Validación del lado servidor antes de guardar: proveedor no vacío, fecha
+  con formato válido y no futura (misma regla que el resto del sistema),
+  total numérico mayor a 0 (reusa `parsear_monto()` de `lib/ui.php`). Si
+  falla, se re-muestra el modal abierto con lo que el admin ya había escrito
+  y un aviso del error — no se pierde la corrección a medio hacer.
+- La pantalla también se reordenó visualmente: tres tarjetas (`.stat-card`,
+  el mismo componente del Home) destacan Total/Estado/Fecha arriba, y el
+  resto de los datos quedan en la grilla de siempre debajo.
+- **El pop-up "Editar factura" y el pop-up de verificación de "Agregar
+  factura" comparten el mismo componente visual** (`.modal-confirmar-ancho`
+  + `.factura-campos` en `assets/estilo.css`) aunque viven en archivos
+  distintos: uno es un `<form>` real (`detalle.php`, campos `name="..."`),
+  el otro lo llena JS desde la respuesta de la IA (`panel.php`, campos
+  `id="f..."`). Un ajuste de diseño en esas dos clases se ve en los dos a
+  la vez — no duplicar el CSS si hay que tocar alguno de los dos (2026-11-14:
+  se ensanchó el modal y Proveedor/Razón social pasaron a ocupar el ancho
+  completo con `.campo-ancho`, porque antes se veían cortados).
+- **El campo Total de los dos pop-ups formatea con separador de miles
+  mientras se escribe** (`formatoMiles()`, duplicada a propósito en los dos
+  `<script>` porque son dos archivos — es una función de 2 líneas, no vale
+  la pena compartirla vía un JS externo). El valor que viaja al servidor
+  es el mismo texto formateado ("1.250.000"): no hace falta limpiarlo antes
+  de mandarlo porque `parsear_monto()` (`lib/ui.php`) ya sabe leer el `.`
+  como separador de miles — es la misma función que usa el resto del
+  sistema para montos chilenos. El de "Editar factura" además precarga el
+  total ya formateado (`number_format()` en el Controlador).
+- **Ficha de factura, ajustes para celular (2026-11-14)**: "Editar"/"Eliminar"
+  se sacaron de la cabecera (`.cab-modulo-der`, donde solo quedan "Ver" y
+  "Volver") y pasaron a una barra `.fd-acciones` al final de la página, abajo
+  de "Datos de la factura" — en celular se apilan y ocupan el ancho completo,
+  en escritorio quedan alineados a la derecha. El botón de PDF dice solo
+  "Ver" (antes "Ver PDF"). Las tres tarjetas Total/Estado/Fecha usan un
+  `@media (max-width: 600px)` que las pone en 2 columnas (Total arriba,
+  ocupando el ancho completo por ser la destacada) con íconos y textos más
+  chicos, para que no dominen la pantalla antes de llegar al contenido. Es
+  solo reordenamiento visual — el modal de edición y el borrado funcionan
+  exactamente igual que antes, con los mismos botones, solo que ahora se
+  abren desde más abajo en la página.
+- **Paginación del listado (2026-11-14)**: `panel_facturas.php` traía hasta
+  500 facturas de un tirón sin paginar (podía volverse lento y confuso al
+  crecer el historial). Ahora `Factura::listado()` acepta `$pagina`/`$porPag`
+  (20 por página) y usa `LIMIT ... OFFSET ...`; `Factura::contarListado()` es
+  el `COUNT(*)` equivalente para saber cuántas páginas hay.
+  `FacturasController::panel()` lee `?p=N` de la URL (clamp a `[1, $paginas]`)
+  y pasa `$pagina`/`$porPag`/`$total`/`$paginas` a la vista. La vista agrega
+  el bloque `.paginacion` (mismo componente/clase CSS que ya usaba
+  `historial_productos.php`, nada nuevo) con "← Anteriores"/"Siguientes →" y
+  una función `url_pagina_factura()` que arma el link conservando todos los
+  filtros activos (`$_GET` + `p`). El resumen "N factura(s)" ahora muestra el
+  total real de la búsqueda (antes era `count($facturas)`, que con la
+  paginación solo habría contado la página actual) y agrega "· página X de Y"
+  cuando hay más de una página.
+
+**Consistencia visual en Gastos** (`gastos.php`, 2026-11-14): mismo tratamiento
+que Facturas/Fiados, reutilizando los componentes genéricos ya existentes (sin
+CSS nuevo salvo el acento de tabla y la variante de botón). El panel de
+Filtros es plegable (`.panel-filtros`, igual patrón que los otros dos) — ojo
+que acá `$fDesde`/`$fHasta` **siempre** traen un valor por defecto (mes
+actual) desde el Controlador, así que `$filtrosActivos` mira `$_GET['desde']`/
+`$_GET['hasta']` crudos en vez de las variables ya normalizadas, para no
+quedar siempre expandido. "+ Registrar gasto" pasó a pastilla roja
+(`.btn-pastilla.btn-pastilla-rojo`, nueva variante del componente genérico
+de Fiados). La tabla lleva `.tabla-gastos` (acento rojo en el encabezado,
+Categoría en negrita, Monto en negrita — el color rojo del monto ya venía
+de `.valor-rojo`). Las 4 tarjetas de resumen ya usaban el componente genérico
+`.stat-card`/`.ingresos-stats` de antes, así que no se tocaron.
+- **Paginación del listado (2026-11-14)**: mismo criterio y mismo código que
+  el de Facturas (ver esa sección) — 20 gastos por página. `Gasto::listado()`
+  ahora recibe `$pagina`/`$porPag` (antes era un `$limite` fijo de 300, sin
+  paginar) y `Gasto::contarListado()` es el `COUNT(*)` para saber cuántas
+  páginas hay, con los mismos filtros de período/categoría que ya usaba
+  `listado()`. `GastosController::panel()` lee `?p=N`, y la vista agrega el
+  bloque `.paginacion` + `url_pagina_gasto()` (idéntico patrón a
+  `url_pagina_factura()`) y la línea "N gasto(s) · página X de Y" arriba de
+  la tabla (antes no había ningún resumen de cantidad en esta pantalla).
+- **Simplificación de Gastos (2026-11-14)**: a pedido del dueño se sacaron las
+  4 tarjetas de resumen (Gastos del período/Promedio/Variación/Mayor por
+  categoría) y la sección plegable "Por categoría" — quedó solo el badge
+  "Viendo: ..." (mismo patrón que Facturas/Fiados, con `$viendo` calculado en
+  `GastosController::panel()` igual que en `FiadosController::listado()`),
+  Filtros y la tabla. `GastosController::panel()` dejó de calcular
+  `totalGastos`/`nGastos`/`porCategoria`/`varGastos`/`promedioDiario`/`topCat`/
+  `maxCat` (ya no se usan en la vista) — si se necesita ese resumen más
+  adelante, está igual disponible en Home.
+
+**Panel de Filtros plegable** (`panel_facturas.php`, 2026-11-12): el panel
+"Filtros" arranca **colapsado** por defecto (pedido del dueño, para dejar la
+ventana más limpia) salvo que ya haya un filtro activo en la URL (búsqueda,
+negocio, proveedor o fechas) — ahí arranca expandido para que se entienda por
+qué el listado está filtrado. `#panelFiltros` lleva la clase `.colapsado`
+(calculada en el Controlador/Vista, `$filtrosActivos` en `panel.php`) y un
+botón-cabecera (`#btnToggleFiltros`, con el ícono `chevron` que rota) la
+agrega/quita en el navegador sin recargar la página. No cambia nada del
+formulario de filtros en sí (mismos campos, mismo GET).
+
 **Módulo Fiados** (web-nativo, NO participa de la sincronización; la web es la
 fuente de verdad). Primer módulo fuera del POS migrado a capas (2026-11-08):
 `fiados.php`/`cliente.php`/`cliente_form.php`/`estado_cuenta_imprimir.php` son
 puentes a `App\Controllers\FiadosController` (métodos `listado()`, `ficha()`,
 `formulario()`, `estadoCuenta()`), con `App\Models\Cliente` (SQL propio, mismo
 criterio que `PrecioFV` — ver «Arquitectura del POS» más arriba) y las vistas
-en `app/views/fiados/`:
+en `app/views/fiados/`. `fiados.php` (`listado()`) reusa el mismo tratamiento
+visual que se definió primero para Facturas (2026-11-14, por consistencia
+entre pantallas — ver «Panel de Filtros plegable» más abajo): el panel
+"Filtros" plegable (`.panel-filtros`/`.panel-filtros-cab`, clases genéricas,
+sin duplicar CSS) y la tabla con línea de acento del color del módulo +
+primera columna en negrita (`.tabla-fiados` en `assets/estilo.css`, mismo
+patrón que `.tabla-facturas`), el badge "Viendo: {negocio}" arriba junto al
+título (igual que en Facturas) y el botón "+ Nuevo cliente" como pastilla
+morada (`.btn-pastilla.btn-pastilla-morado`, una versión genérica de
+`.btn-agregar-factura` pensada para reusarse en otros módulos sin tocar el
+botón de Facturas). No se tocó `ficha.php` ni el resto de las vistas de
+Fiados. `cliente.php` (`ficha()`) recibió el mismo tratamiento (2026-11-14):
+el resumen de Saldo/Fiado/Abonado pasó de `.saldo-card` a tres `.stat-card`
+dentro de `.ingresos-stats` — el mismo componente que ya usaban Home e
+Ingresos, cero CSS nuevo, solo reusar `.t-rojo`/`.t-verde`/`.valor-rojo`/
+`.valor-verde` que ya existían — y la tabla de movimientos (`.tabla-mov`,
+exclusiva de esta vista) ganó la misma línea de acento morada + Detalle y
+Monto en negrita que `.tabla-facturas`/`.tabla-fiados`. Los bloques
+plegables (`.bloque`: Estado de cuenta, Datos de contacto) y el panel de
+registrar fiado/abono no se tocaron — son compartidos con Caja/Gastos/
+Ingresos, así que cualquier cambio ahí se hace aparte, no como "lo mismo
+que Facturas". **Simplificación de `cliente.php` (2026-11-14):** a pedido
+del dueño, las tres tarjetas de Saldo/Fiado/Abonado se sacaron (quedó solo
+un badge compacto "Saldo: $X" en la cabecera, al lado de "Volver") y el
+bloque "Datos de contacto" se movió entero a `cliente_form.php` — ya era la
+pantalla de editar cliente, así que no hubo que crear una página nueva:
+ahora un botón "Datos del cliente" en la cabecera de `cliente.php` lleva
+ahí. El botón "Eliminar cliente" (solo admin) se fue con él, como una
+sección "Zona de peligro" (`.zona-peligro`, el mismo patrón que ya usa
+Productos para vaciar el catálogo) al fondo del formulario — el `<form>`
+de borrado apunta con `action="cliente.php?id=N"` de vuelta a
+`FiadosController::ficha()` (que ya sabía manejar `accion=eliminar_cliente`
+desde antes), así que no hizo falta tocar esa lógica, solo moverle el
+formulario de origen.
 - **`clientes`** — clientes a crédito de cada negocio (`negocio_id`, `nombre`,
   `apellido`, `telefono`, `direccion`, `correo`, `activo`). `negocio_id` vive solo
   aquí; fiados/abonos llegan al negocio a través del cliente.
@@ -481,25 +622,43 @@ falla, va al `error_log` y sigue). Hoy lo usan `cliente.php`/`cliente_form.php` 
 todas las acciones del módulo Fiados (crear/editar/eliminar fiado, abono y cliente).
 Sin página de consulta todavía (se puede agregar una vista admin a futuro).
 
-**Módulo Ingresos** (web-nativo; los datos llegan por el correo de corte de
-Eleventa, NO por la sincronización de facturas). Séptimo módulo fuera del
-POS migrado a capas (2026-11-09): `ingresos.php`/`corte.php`/
-`corte_pegar.php` son puentes a `App\Controllers\IngresosController`
-(métodos `panel()`, `detalle()`, `pegar()`), con `App\Models\Corte` y las
-vistas en `app/views/ingresos/`. `procesar_cortes.php` (el worker de
-cron/IMAP, más abajo) quedó fuera, a propósito — ver su entrada en el árbol
-de archivos más arriba. `IngresosController::detalle()` (`corte.php`) tiene
+**Módulo Ingresos** (web-nativo; cortes de caja). Hoy los genera el **POS
+propio** al cerrar turno (`registrar_corte()` en `lib/pos.php`, llamada desde
+`generar_corte_de_sesion()`). Hasta 2026-11-14 también llegaban por correo de
+Eleventa (software de punto de venta que el negocio dejó de usar — ver
+`docs/MIGRACION_POS.md`), pero **ese flujo se retiró por completo** a pedido
+del dueño, "para que el sistema sea completamente independiente": se
+eliminaron `procesar_cortes.php` (worker de cron/IMAP), `lib/eleventa.php`
+(parser del correo), la ruta `/corte_pegar.php` con
+`IngresosController::pegar()` y su vista (el botón "Registrar corte"), el
+aviso "correos sin procesar" de `ingresos.php`, el bloque `cortes_imap` de
+`config.ejemplo.php`, y los métodos de `App\Models\Corte` que solo servían a
+ese flujo (`correosPendientes`, `correoNegocioId`, `descartarCorreo`,
+`correoPorMessageId`, `actualizarCorreoManual`, `crearCorreoManual`,
+`correoCompletoPorId`, `errorDeCorreo`, `procesarCorreo`). `registrar_corte()`
+— que **el POS reutiliza** para generar cada corte — se movió de
+`lib/eleventa.php` a `lib/pos.php` antes de borrar ese archivo, sin cambiar
+una línea de su comportamiento (se probó cerrando una caja real end-to-end
+después del cambio). **Lo que se conservó a propósito**, por ser historial
+real: la tabla `correos_corte` y los cortes que llegaron por correo en su
+momento siguen intactos y se ven igual en Ingresos; `Corte::correoDe()` sigue
+mostrando el texto crudo del correo original en el detalle de esos cortes
+viejos (`corte.php`). Pendiente del lado del usuario (no se puede hacer
+desde el código): sacar la tarea cron de `procesar_cortes.php` en cPanel.
+`ingresos.php`/`corte.php` son puentes a `App\Controllers\IngresosController`
+(métodos `panel()`, `detalle()`), con `App\Models\Corte` y las vistas en
+`app/views/ingresos/`. `IngresosController::detalle()` (`corte.php`) tiene
 una excepción al permiso `ingresos` (solo admin): una vendedora puede ver el
 corte de un turno que **ella misma abrió** (`CajaSesion::corteEsPropio()`,
 cruza `caja_sesiones.corte_id` con `usuario_apertura`) — así "Ver corte" en
 su propio historial de `caja.php` funciona sin darle el módulo completo.
-- **`correos_corte`** — cada correo crudo recibido (`cuerpo` MEDIUMTEXT,
-  `message_id` UNIQUE para idempotencia, `origen` imap|manual, `estado`
-  pendiente|procesado|error). Se guarda SIEMPRE el crudo: si Eleventa cambia el
-  formato, se ajusta `lib/eleventa.php` y se reprocesa sin perder nada.
-- **`cajeros`** — cajeros de Eleventa por negocio (UNIQUE negocio+nombre), se
-  auto-crean al aparecer en un corte; `usuario_id` opcional los vincula a un
-  usuario web.
+- **`correos_corte`** — cada correo crudo recibido en su momento (`cuerpo`
+  MEDIUMTEXT, `message_id` UNIQUE, `origen` imap|manual, `estado`
+  pendiente|procesado|error|descartado). Tabla de solo-lectura hoy: nada la
+  escribe desde que se retiró Eleventa, queda como archivo histórico.
+- **`cajeros`** — cajeros por negocio (UNIQUE negocio+nombre), se
+  auto-crean al aparecer en un corte (antes los de Eleventa, hoy los del
+  POS); `usuario_id` opcional los vincula a un usuario web.
 - **`cortes`** — un cierre de turno: caja, cajero, rango del turno, ventas
   totales/efectivo/tarjeta/crédito/vales/transferencia, fondo, abonos,
   entradas/salidas y esperado. UNIQUE (negocio, cerrado_en, cajero) hace el
@@ -507,18 +666,45 @@ su propio historial de `caja.php` funciona sin darle el módulo completo.
 - **`corte_movimientos`** — entradas/salidas de caja con hora y descripción
   (ej. pagos de pan a proveedores). Se reemplazan completos en cada reproceso.
 - **`corte_departamentos`** — ventas por departamento del corte.
-
-**Flujo de captura**: Eleventa de cada negocio manda su corte a un alias
-`corte-{slug}@minimark.cl` (forwarder de cPanel) que entrega en la casilla real
-`cortes@...` (credenciales en el bloque `cortes_imap` de `config.php`). El cron
-de cPanel corre `procesar_cortes.php` (solo CLI o `?clave=setup_key`): baja los
-correos no leídos por IMAP, identifica el negocio por el destinatario
-(`negocio_por_destinatario`, header Delivered-To → `negocios.slug`) y procesa
-todo lo pendiente con `parsear_corte_eleventa()`. `corte_pegar.php` permite
-registrar un corte pegando el correo a mano (mismo parser, `origen='manual'`,
-útil en local donde no hay IMAP). Nota: `config.php` detecta el ambiente por
-`HTTP_HOST`; en CLI (cron) no hay host, así que usa la config de producción —
-correcto en el servidor.
+- **Consistencia visual (2026-11-14)**: mismo estándar que Facturas/Fiados/
+  Gastos, **solo diseño, ningún cálculo tocado** (el dueño pidió explícitamente
+  ir con cuidado en esta pantalla por ser la de las entradas de dinero por
+  caja). Cabecera con badge "Viendo: ..." (`$viendo` calculado en
+  `IngresosController::panel()`, mismo criterio que los otros módulos) +
+  "Registrar corte" pasó a pastilla azul (`.btn-pastilla-azul`, nueva
+  variante). Filtros plegable (`.panel-filtros`, mismo cuidado que Gastos:
+  `$fDesde`/`$fHasta` siempre traen el mes actual por defecto, así que
+  `$filtrosActivos` mira `$_GET` crudo). Se agregó la línea "N corte(s)"
+  arriba de la tabla (antes no existía ningún contador ahí) — es solo
+  `count($cortes)`, no toca el `$resumen` que alimenta las tarjetas. La tabla
+  `.tabla-cortes` lleva acento azul en el encabezado, Cierre/Cajero en
+  negrita y Ventas en negrita + azul (`td.col-ventas`, nueva clase agregada
+  solo para el estilo). Las tarjetas de resumen y el aviso de "correos sin
+  procesar" seguían el patrón `.ingresos-stats`/`.stat-card`/`.bloque`
+  reutilizado en el resto del sitio — ambos se terminaron eliminando
+  después, ver las entradas más abajo.
+- **Se eliminaron "Ventas por día" y "Rendimiento por cajero" (2026-11-14)**,
+  a pedido del dueño — quedó solo la tabla de cortes, sin los dos bloques
+  plegables de análisis secundario que había debajo. Se quitó también el
+  código que ya no se usaba: `Corte::ventasPorDia()` y `Corte::porCajero()`
+  (nadie más los llamaba), y las variables `$porDia`/`$porCajero` de
+  `IngresosController::panel()`. **Ojo, no confundir con `Home::ventasPorDia()`**
+  — es un método distinto (en otro Modelo), que sigue usando el gráfico de
+  ventas por día de Home y del panel por negocio; no se tocó.
+  Columnas Efectivo/Tarjeta/Salidas de `.tabla-cortes` llevan color
+  (`td.col-efectivo` verde, `td.col-tarjeta` amarillo oscuro `#8a5a00` —
+  mismo tono ya usado en el resto del sitio para que sea legible en fondo
+  blanco, no el amarillo puro de `--amarillo`—, `td.col-salidas` rojo). Puro
+  cambio visual: los valores que muestran son exactamente los mismos.
+- **Se eliminaron las 5 tarjetas de resumen (2026-11-14)** (Ventas del
+  período/Efectivo/Tarjeta + transferencia/Salidas de caja/Número de
+  ventas) — la pantalla ahora va directo del badge "Viendo"/Filtros al
+  contador "N corte(s)" y la tabla. Se quitó también el código que solo
+  alimentaba esas tarjetas y ya no se usa en ningún otro lado:
+  `Corte::resumenPeriodo()`, el cálculo del período anterior
+  (`$resumenAnt`/`$dias`/`$antDesde`/`$antHasta`) y `$variacion` en
+  `IngresosController::panel()`. La tabla de cortes (con sus propios montos
+  por fila) y todo lo demás no se tocó.
 
 **Módulo Herramientas** (utilidades operativas, web-nativo). Tablero de tarjetas
 (`herramientas.php`) gateado por el permiso `herramientas` (lo tienen `admin` y
@@ -543,31 +729,48 @@ contador de caja y la cola de ofertas calculan todo en el navegador).
 sueldos, arriendo, etc.). **Solo admin** (información financiera del dueño, igual
 que Ingresos). Acotado por `negocios_visibles()`. Segundo módulo fuera del POS
 migrado a capas (2026-11-09): `gastos.php`/`gasto_form.php`/
-`categorias_gasto.php`/`gastos_fijos.php` son puentes a
-`App\Controllers\GastosController` (métodos `panel()`, `formulario()`,
-`categorias()`, `fijos()`), con `App\Models\Gasto` y las vistas en
-`app/views/gastos/`. `lib/gastos.php` sigue existiendo y NO se tocó: todo lo
-que ya lo usaba (`home.php`, `negocio_panel.php`) sigue llegando a esas
-mismas funciones, ahora a través de `App\Models\Gasto` (que las envuelve) en
-vez de llamarlas directo, desde que esas dos pantallas también se migraron
-(Fases 13 y 16 — ver «Arquitectura del POS» más arriba, sección de Modelos).
+`categorias_gasto.php` son puentes a `App\Controllers\GastosController`
+(métodos `panel()`, `formulario()`, `categorias()`), con `App\Models\Gasto` y
+las vistas en `app/views/gastos/`. `lib/gastos.php` sigue existiendo y NO se
+tocó: todo lo que ya lo usaba (`home.php`, `negocio_panel.php`) sigue
+llegando a esas mismas funciones, ahora a través de `App\Models\Gasto` (que
+las envuelve) en vez de llamarlas directo, desde que esas dos pantallas
+también se migraron (Fases 13 y 16 — ver «Arquitectura del POS» más arriba,
+sección de Modelos).
 - **`categorias_gasto`** — catálogo editable de tipos de gasto (`nombre` UNIQUE,
   `activo`, `orden`). **Compartido entre negocios** (el dueño es uno). Se siembra con
   categorías base (Agua, Luz, Gas, Sueldos, Arriendo, Internet/Teléfono, Mantención,
   Otros) vía `INSERT IGNORE`. CRUD en `categorias_gasto.php`; una categoría con
-  gastos/plantillas asociadas no se borra (se desactiva).
+  gastos asociados no se borra (se desactiva).
 - **`gastos`** — cada gasto real (`negocio_id`, `categoria_id` FK RESTRICT, `fecha`,
-  `monto`, `descripcion`, `gasto_fijo_id` opcional → marca que nació de una plantilla,
-  `creado_por`). CRUD en `gasto_form.php`.
-- **`gastos_fijos`** — plantillas de gasto mensual recurrente (`negocio_id`,
-  `categoria_id`, `descripcion`, `monto_estimado`, `dia_mes`, `activo`). CRUD en
-  `gastos_fijos.php`. **Recurrencia sin cron**: el botón "Generar gastos fijos del
-  mes" en `gastos.php` llama `App\Models\Gasto::generarFijosDelMes()`
-  (envoltorio de `registrar_gastos_fijos()`), que inserta un `gasto` por
-  plantilla activa que aún no tenga uno este mes (idempotente: no duplica).
-  **Nota de UX conservada del código viejo**: esta acción NO redirige — pinta
-  el mensaje de resultado en la misma respuesta (200), a diferencia de las
-  demás acciones del Controlador que sí redirigen tras guardar.
+  `monto`, `descripcion`, `creado_por`). CRUD en `gasto_form.php`.
+- **"Gastos fijos" (plantillas de gasto recurrente) se eliminó por completo
+  (2026-11-14)**, no se usaba. Se quitaron: la ruta `gastos_fijos.php` (`app/routes.php`),
+  `GastosController::fijos()` y el bloque POST `generar_fijos` de `panel()`,
+  `app/views/gastos/fijos.php`, los métodos de plantillas en `App\Models\Gasto`
+  (`fijosDe`/`fijoPorId`/`crearFijo`/`actualizarFijo`/`toggleFijo`/`eliminarFijo`/
+  `generarFijosDelMes`), `registrar_gastos_fijos()` de `lib/gastos.php`, y la
+  tabla `gastos_fijos` + la columna `gastos.gasto_fijo_id` de `lib/esquema.sql`
+  y `migrar.php` (ambos solo afectan instalaciones **nuevas** — ninguno de los
+  dos hace `DROP`, así que la tabla y la columna siguen existiendo, vacías e
+  inofensivas, en la base de datos ya instalada; si se quiere limpiar eso
+  también hay que correr un `ALTER TABLE`/`DROP TABLE` aparte a mano). El menú
+  "Más ▾" de `gastos.php`, que solo tenía "Gastos fijos" y "Categorías", quedó
+  con un solo botón directo "Categorías" (ya no tiene sentido como dropdown).
+- **Rediseño de `categorias_gasto.php` (2026-11-14)**: mismo estándar visual
+  (acento rojo en `.tabla-categorias`, nombre de categoría en negrita, panel
+  "Nueva categoría" con `.fd-panel-tit`). El botón "Activar"/"Desactivar"
+  pasó de texto a ícono (`icono('activar')`, un ícono de encendido nuevo en
+  `lib/ui.php`) para que los 3 controles de la columna Acciones (lápiz,
+  encendido, basurero) midan siempre lo mismo. El basurero de "Eliminar", que
+  antes desaparecía cuando la categoría tenía gastos asociados (hacía
+  "saltar" el ancho de la columna de fila en fila), ahora se deja siempre
+  visible pero atenuado y sin acción (`.btn-icono.deshabilitado`) con un
+  tooltip explicando por qué no se puede borrar — ningún cambio funcional,
+  solo visual. El panel "Nueva categoría" pasó de `.fd-panel`/`.fd-panel-tit`
+  (acento naranjo — ese componente es de Facturas, no correspondía acá) al
+  mismo patrón plegable `.panel-filtros` que Filtros: arranca colapsado para
+  que la tabla quede a la vista de inmediato.
 
 El **Home** muestra "Gastos del mes" (reemplazó a "Por cobrar") y suma los gastos en
 la grilla "Estado por negocio". El dashboard de Gastos compara ventas (de `cortes`)
@@ -657,16 +860,17 @@ incluido el modo kiosco) y `docs/MIGRACION_POS.md` (el cambio desde Eleventa).
   `caja_sesiones.tipo` (`fisica` | `express`) distingue una caja con cajón de
   efectivo de la **Caja Express** (pensada para vender desde un celular/tablet en
   horas punta): al abrirla no se pide fondo inicial, y tanto `PosApiController`
-  (acciones `cobrar`/`movimiento`/`recaudacion`) como `registrar_venta()` en
-  `lib/pos.php` rechazan cualquier intento de pago en efectivo, movimiento de
-  caja o pago de cuenta en una sesión `express` — la vista (`pos/index.php`,
+  (acciones `cobrar`/`movimiento`) como `registrar_venta()` en
+  `lib/pos.php` rechazan cualquier intento de pago en efectivo o movimiento de
+  caja en una sesión `express` — la vista (`pos/index.php`,
   `caja/index.php`) solo oculta esas opciones para no ofrecer algo que el
   servidor igual va a rechazar. El arqueo de una Express siempre da $0 (nunca
   tocó efectivo), así que su cierre no pide contar nada.
-- **Al cerrar caja se genera un `corte`** reutilizando `registrar_corte()` de
-  `lib/eleventa.php`, así el módulo Ingresos y los reportes siguen igual pero con
-  datos propios. `cortes` ganó `recaudado_efectivo` y `diferencia` (los cortes que
-  llegan por correo las dejan NULL).
+- **Al cerrar caja se genera un `corte`** con `registrar_corte()`, hoy en
+  `lib/pos.php` (hasta 2026-11-14 vivía en `lib/eleventa.php`, retirado — ver
+  módulo Ingresos), así el módulo Ingresos y los reportes siguen igual pero
+  con datos propios. `cortes` ganó `recaudado_efectivo` y `diferencia` (los
+  cortes históricos que llegaron por correo de Eleventa los dejan NULL).
 - **`promociones`** — ofertas que el POS aplica **solo** al vender: `pack`
   ("4 x $1.000"), `nxm`, `precio` y `porcentaje`, a un producto o a un
   departamento. El navegador las calcula para mostrarlas al instante, pero **el
@@ -693,16 +897,23 @@ incluido el modo kiosco) y `docs/MIGRACION_POS.md` (el cambio desde Eleventa).
   stock dos veces si a una venta ya devuelta parcialmente se la termina
   cancelando entera.
 
-**Recaudación de convenios** (`convenios`, `servicio_operaciones`) — **crítico para
-que el balance sea real** (ver docs/POS_DISENO.md 7.7): la plata que el cliente paga por
-su cuenta de luz **NO es venta** (es de la empresa de servicios) y recargar saldo
-**NO es un gasto** (es plata propia cambiando de bolsillo). El único ingreso real
-es la **comisión**. El efectivo sí entra al cajón, así que el arqueo lo suma: sin
-eso mostraría un sobrante todos los días. Soporta convenios **prepago** (Mercado
-Pago, con saldo que se descuenta — el negocio dejó Klap, ver `servicios.php`) y
-**postpago** (deuda que se liquida). El nombre del convenio es libre (lo crea el
-usuario en Servicios): no hay ninguna integración técnica real con ningún
-proveedor, el sistema es genérico desde su diseño.
+**Recaudación de convenios (retirada, 2026-11-14)** — el POS tenía un módulo
+completo para cobrar cuentas de terceros (Klap y similares) desde la caja: una
+pantalla "Servicios" para administrar convenios y ver el saldo, un botón "Pago
+de cuenta" (F9) en `pos.php`, y el aporte de ese efectivo a `efectivo_esperado`
+en el arqueo. Se eliminó por completo a pedido del dueño (no se usaba) —
+`ServiciosController`, `App\Models\Convenio`, `app/views/servicios/`, la
+sección "Recaudación de servicios" de `lib/pos.php`, la acción `recaudacion`
+de `PosApiController`, el botón/modal de `pos.php`, el ítem de menú y las
+tablas `convenios`/`servicio_operaciones` (borradas, con los datos que tenían).
+**Lo único que se conservó**: la columna `cortes.recaudado_efectivo` (para no
+perder el valor de los cortes viejos que sí recaudaron) y el término
+correspondiente en la fórmula de `resumen_caja()` de `lib/pos.php` — ahora
+siempre calcula 0, sin tocar el cálculo del arqueo que ya estaba probado.
+`ingresos/detalle.php` solo muestra la fila "Pagos de cuentas" cuando ese
+valor es mayor que 0 (los cortes históricos reales lo siguen mostrando; los
+nuevos, no). Si el negocio vuelve a necesitar esto, hay que reconstruirlo
+desde cero — no quedó ningún atajo ni bandera para reactivarlo.
 
 **Catálogo compartido** — `productos` **no tiene `negocio_id`**: es un solo catálogo
 para los dos negocios (igual que `precios_fv`). Agregar un producto o cambiar un
@@ -727,9 +938,9 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
 
 - **Modelo RBAC simple definido en código**: la matriz `PERMISOS` mapea cada rol a
   los **módulos** que puede usar (`facturas`, `fiados`, `ingresos`, `gastos`,
-  `productos`, `ventas`, `herramientas`, `negocios`, `usuarios`). Roles
-  actuales: **`admin`** (todos los módulos) y **`vendedor`** (`ventas`, `facturas`,
-  `fiados`, `productos`, `herramientas`).
+  `gastos_registrar`, `productos`, `ventas`, `herramientas`, `negocios`, `usuarios`).
+  Roles actuales: **`admin`** (todos los módulos) y **`vendedor`** (`ventas`,
+  `facturas`, `fiados`, `productos`, `herramientas`, `gastos_registrar`).
   **`ventas` se habilitó para vendedoras el 2026-11-08** (antes era solo admin,
   mientras el POS se construía y probaba sin que las vendedoras vieran nada —
   ver `docs/MIGRACION_POS.md` paso 5. Ya se probó en producción, así que se
@@ -737,9 +948,21 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
   vender y abrir/cerrar su propio turno.
   **`productos`** (crear/editar catálogo y promociones) lo tienen ambos por decisión
   del usuario: es más ágil y todo cambio queda auditado y consultable. `usuarios.rol` es `VARCHAR(20)` (agregar roles no requiere
-  `ALTER`). Los módulos `ingresos` y `gastos` son solo admin (información financiera
-  del dueño). El módulo `precios` (Frutas y Verduras) ya no existe: esa pantalla
+  `ALTER`). El módulo `ingresos` es solo admin (información financiera del
+  dueño). El módulo `precios` (Frutas y Verduras) ya no existe: esa pantalla
   vive dentro de `ventas` (ver «Arquitectura del POS»).
+  **`gastos_registrar`** (2026-11-14) es un permiso aparte de `gastos`, para
+  vendedoras: pueden **crear** un gasto nuevo (ej. pagarle en efectivo a un
+  proveedor sin factura, como el de los huevos), pero no ven el listado ni
+  pueden editar o eliminar uno existente — eso sigue siendo solo de `gastos`
+  (admin). Es el único caso con dos permisos para la misma pantalla:
+  `GastosController::formulario()` acepta ambos
+  (`exigirPermisoAlguno(['gastos', 'gastos_registrar'])`) y adentro mira
+  `puede($usuario, 'gastos')` para decidir si puede ver/editar/eliminar un
+  gasto existente (`$puedeGestionar`) o solo crear uno nuevo. `panel()` y
+  `categorias()` siguen exigiendo `gastos` a secas. El ítem de menú de
+  Gastos (`lib/ui.php`) apunta a `gastos.php` si tiene `gastos`, o directo a
+  `gasto_form.php` si solo tiene `gastos_registrar`.
 - **Agregar un rol** = una fila en `PERMISOS` + etiqueta en `ROLES`. **Agregar un
   módulo** = su clave en la matriz + `exigir_permiso('modulo')` en la página + ítem
   en el menú de `lib/ui.php`. Todo el control vive en un solo lugar.
@@ -747,7 +970,11 @@ seguridad fuerte** — está anotado así en `huella_pin()`.
   directo en el código viejo o vía `BaseController::exigirPermiso()` en las
   pantallas migradas — por dentro es la misma función): `exigir_login()` +
   chequea la matriz; si no tiene el permiso redirige a `home.php`.
-  `exigir_admin()` queda para chequeos puntuales "solo admin".
+  `exigir_admin()` queda para chequeos puntuales "solo admin". Para una
+  pantalla que comparten un permiso completo y uno limitado está
+  `BaseController::exigirPermisoAlguno([...])` — exige sesión y AL MENOS UNO
+  de la lista; el Controlador decide adentro qué tanto puede hacer cada cual
+  (ver `gastos_registrar` arriba).
 - **Alcance por negocio** se mantiene: `negocios_visibles($usuario)` (admin = todos;
   cualquier otro rol = asignados en `usuario_negocio`) y `puede_ver_negocio()`.
   Toda consulta de facturas/fiados filtra por los negocios visibles, y

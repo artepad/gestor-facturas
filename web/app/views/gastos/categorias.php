@@ -18,8 +18,11 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
 
         <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
 
-        <div class="panel">
-            <h2>Nueva categoría</h2>
+        <div class="panel panel-filtros colapsado" id="panelNuevaCategoria">
+            <button type="button" class="panel-filtros-cab" id="btnToggleNuevaCategoria" aria-expanded="false">
+                <h2>Nueva categoría</h2>
+                <span class="chevron"><?= icono('chevron') ?></span>
+            </button>
             <form method="post" class="filtros">
                 <?= campo_csrf() ?>
                 <input type="hidden" name="accion" value="crear">
@@ -32,9 +35,22 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 </div>
             </form>
         </div>
+        <script>
+          // Panel "Nueva categoría" plegable: mismo patrón que el de Filtros.
+          (function () {
+            var panel = document.getElementById('panelNuevaCategoria');
+            var btn = document.getElementById('btnToggleNuevaCategoria');
+            if (!panel || !btn) return;
+            btn.addEventListener('click', function () {
+              var abierto = !panel.classList.contains('colapsado');
+              panel.classList.toggle('colapsado', abierto);
+              btn.setAttribute('aria-expanded', abierto ? 'false' : 'true');
+            });
+          })();
+        </script>
 
         <div class="tabla-wrap">
-            <table>
+            <table class="tabla-categorias">
                 <thead><tr>
                     <th>Categoría</th>
                     <th class="col-ocultar-movil">Gastos</th>
@@ -62,7 +78,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                         </td>
                         <td class="col-ocultar-movil"><?= $n ?></td>
                         <td>
-                            <span class="mov-badge <?= $c['activo'] ? 'mov-abono' : '' ?>">
+                            <span class="mov-badge badge-estado <?= $c['activo'] ? 'mov-abono' : '' ?>">
                                 <?= $c['activo'] ? 'Activa' : 'Inactiva' ?></span>
                         </td>
                         <td class="col-accion">
@@ -73,7 +89,9 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                                     <?= campo_csrf() ?>
                                     <input type="hidden" name="accion" value="toggle">
                                     <input type="hidden" name="id" value="<?= $cid ?>">
-                                    <button class="btn sm gris" type="submit"><?= $c['activo'] ? 'Desactivar' : 'Activar' ?></button>
+                                    <button class="btn-icono" type="submit"
+                                            title="<?= $c['activo'] ? 'Desactivar' : 'Activar' ?>"
+                                            aria-label="<?= $c['activo'] ? 'Desactivar' : 'Activar' ?>"><?= icono('activar') ?></button>
                                 </form>
                                 <?php if ($n === 0): ?>
                                 <form method="post" class="inline-form" onsubmit="return confirm('¿Eliminar esta categoría?')">
@@ -82,6 +100,9 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                                     <input type="hidden" name="id" value="<?= $cid ?>">
                                     <button class="btn-icono peligro" type="submit" title="Eliminar" aria-label="Eliminar"><?= icono('basurero') ?></button>
                                 </form>
+                                <?php else: ?>
+                                <span class="btn-icono deshabilitado"
+                                      title="Tiene gastos asociados; desactívala en vez de borrarla"><?= icono('basurero') ?></span>
                                 <?php endif; ?>
                             </span>
                         </td>

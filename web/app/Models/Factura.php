@@ -23,17 +23,28 @@ final class Factura
     }
 
     /**
-     * Listado filtrado del panel. $idsVisibles ya viene acotado a los
-     * negocios del usuario (0=1 si viene vacío: sucursal sin negocios no ve nada).
+     * Listado filtrado del panel, paginado. $idsVisibles ya viene acotado a
+     * los negocios del usuario (0=1 si viene vacío: sucursal sin negocios no
+     * ve nada).
      */
-    public static function listado(array $idsVisibles, array $filtros): array
+    public static function listado(array $idsVisibles, array $filtros, int $pagina = 1, int $porPag = 20): array
     {
         [$where, $params] = self::condicionListado($idsVisibles, $filtros);
         return Database::todos(
             "SELECT f.*, n.nombre AS negocio_nombre
                FROM facturas f JOIN negocios n ON n.id = f.negocio_id
               WHERE $where
-              ORDER BY f.fecha DESC, f.id DESC LIMIT 500",
+              ORDER BY f.fecha DESC, f.id DESC LIMIT $porPag OFFSET " . (($pagina - 1) * $porPag),
+            $params
+        );
+    }
+
+    /** Cantidad total de facturas que calzan con los filtros (para la paginación). */
+    public static function contarListado(array $idsVisibles, array $filtros): int
+    {
+        [$where, $params] = self::condicionListado($idsVisibles, $filtros);
+        return (int)Database::valor(
+            "SELECT COUNT(*) FROM facturas f WHERE $where",
             $params
         );
     }
@@ -144,6 +155,35 @@ final class Factura
             $campos['ruta_pdf'], $creadaPor,
         ]);
         return (int)$pdo->lastInsertId();
+    }
+
+    /**
+     * Edita los campos de cabecera de una factura (botón "Editar" en
+     * factura.php, solo admin — ver FacturasController::detalle()). Nunca
+     * toca `ruta_pdf`, `negocio_id` ni `origen`: el PDF y a quién pertenece
+     * no se tocan desde acá. Si la factura es `origen='sync'` y el programa
+     * de escritorio la vuelve a sincronizar más adelante, ese upsert
+     * sobrescribe lo editado acá (la BD local sigue siendo la fuente de
+     * verdad de esa factura — ver web/docs/CONTRATO.md); por eso la vista
+     * avisa de esto en el formulario cuando corresponde.
+     */
+    public static function actualizar(int $id, array $campos): void
+    {
+        Database::pdo()->prepare(
+            "UPDATE facturas
+                SET proveedor = ?, razon_social = ?, rut_emisor = ?, numero_factura = ?,
+                    fecha = ?, total = ?, notas = ?
+              WHERE id = ?"
+        )->execute([
+            $campos['proveedor'], $campos['razon_social'], $campos['rut_emisor'], $campos['numero_factura'],
+            $campos['fecha'], $campos['total'], $campos['notas'], $id,
+        ]);
+    }
+
+    /** Soft-delete (botón "Eliminar" en factura.php, solo admin): mismo criterio que el borrado por sync. */
+    public static function eliminar(int $id): void
+    {
+        Database::pdo()->prepare('UPDATE facturas SET eliminada_en = NOW() WHERE id = ?')->execute([$id]);
     }
 
     private static function generarUuid4(): string

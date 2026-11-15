@@ -5,8 +5,8 @@ declare(strict_types=1);
  * Punto de entrada único de todo el panel (Fase 19 de la migración, ver
  * web/docs/bitacora-migracion.md). El .htaccess manda acá cualquier
  * dirección que no sea un archivo real que ya exista (css, imágenes,
- * api/facturas.php, migrar.php, procesar_cortes.php se siguen sirviendo
- * directo, sin pasar por acá). Antes cada pantalla tenía su propio archivo
+ * api/facturas.php, migrar.php se siguen sirviendo directo, sin pasar por
+ * acá). Antes cada pantalla tenía su propio archivo
  * "puente" en esta carpeta; ahora un solo Router (app/routes.php) decide a
  * qué Controlador mandar cada dirección — las direcciones mismas NO
  * cambiaron, ni una URL se mueve.

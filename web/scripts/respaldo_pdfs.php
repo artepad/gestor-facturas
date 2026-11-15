@@ -11,7 +11,7 @@
  * ultimos 14 (mismo criterio que usa cPanel para la base de datos) y borra
  * los mas viejos.
  *
- * Se ejecuta de dos formas, mismo patron que procesar_cortes.php:
+ * Se ejecuta de dos formas:
  *   - Cron de cPanel (una vez al dia):  php /home/.../scripts/respaldo_pdfs.php
  *   - A mano en el navegador:           respaldo_pdfs.php?clave=SETUP_KEY
  */

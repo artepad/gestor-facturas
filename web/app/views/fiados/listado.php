@@ -14,11 +14,24 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <span class="modulo-badge"><?= icono('fiados') ?></span>
                 <h2>Fiados</h2>
             </div>
-            <a class="btn" href="cliente_form.php">+ Nuevo cliente</a>
+            <div class="cab-modulo-der">
+                <span class="badge-negocio">
+                    <?= icono('negocios') ?>
+                    Viendo: <strong><?= e($viendo) ?></strong>
+                </span>
+                <a class="btn-pastilla btn-pastilla-morado" href="cliente_form.php">
+                    <?= icono('usuarios') ?> Nuevo cliente
+                </a>
+            </div>
         </div>
 
-        <div class="panel">
-            <h2>Filtros</h2>
+        <?php $filtrosActivos = ($fTexto !== '' || $fNegocio !== 0); ?>
+        <div class="panel panel-filtros<?= $filtrosActivos ? '' : ' colapsado' ?>" id="panelFiltros">
+            <button type="button" class="panel-filtros-cab" id="btnToggleFiltros"
+                    aria-expanded="<?= $filtrosActivos ? 'true' : 'false' ?>">
+                <h2>Filtros</h2>
+                <span class="chevron"><?= icono('chevron') ?></span>
+            </button>
             <form class="filtros" method="get">
                 <div class="campo campo-busqueda">
                     <label>Buscar cliente</label>
@@ -45,16 +58,27 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 </div>
             </form>
         </div>
+        <script>
+          // Panel de Filtros plegable: mismo patrón que panel_facturas.php
+          // (arranca colapsado salvo que ya haya un filtro activo en la URL).
+          (function () {
+            var panel = document.getElementById('panelFiltros');
+            var btn = document.getElementById('btnToggleFiltros');
+            if (!panel || !btn) return;
+            btn.addEventListener('click', function () {
+              var abierto = !panel.classList.contains('colapsado');
+              panel.classList.toggle('colapsado', abierto);
+              btn.setAttribute('aria-expanded', abierto ? 'false' : 'true');
+            });
+          })();
+        </script>
 
         <div class="resumen">
             <span><?= count($clientes) ?> cliente(s) ·
                 Total adeudado: <strong class="saldo-deuda"><?= clp($totalDeuda) ?></strong></span>
-            <span class="badge-negocio">
-                <?= icono('negocios') ?> Viendo: <strong><?= e($viendo) ?></strong>
-            </span>
         </div>
 
-        <div class="tabla-wrap">
+        <div class="tabla-wrap tabla-fiados">
             <table>
                 <thead>
                     <tr>

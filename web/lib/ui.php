@@ -32,7 +32,7 @@ function icono(string $nombre, string $extra = ''): string
         'gastos'   => '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
         'categorias'=> '<path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="1.6" fill="currentColor" stroke="none"/>',
         'precios'  => '<path d="M12 7c0-2.2 1.8-4 4-4 0 2.2-1.8 4-4 4z"/><path d="M12 7c-.6-1.7-2.2-2.8-4-2.8-2.4 0-4 1.9-4 4.3 0 3.6 4 8.5 8 10.5 4-2 8-6.9 8-10.5 0-1.3-.5-2.4-1.3-3.1"/>',
-        'herramientas' => '<path d="M14.5 5.5a3.6 3.6 0 0 0-4.8 4.8l-4.9 4.9a1.6 1.6 0 0 0 2.2 2.2l4.9-4.9a3.6 3.6 0 0 0 4.8-4.8l-2.4 2.4-2.2-2.2 2.4-2.4z"/>',
+        'herramientas' => '<path d="M3 7h18v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/><path d="M10 12v2h4v-2"/>',
         'calculadora' => '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h4"/>',
         'etiqueta'  => '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-6.2-6.2a2 2 0 0 1-.6-1.4V5a2 2 0 0 1 2-2h7.2a2 2 0 0 1 1.4.6l6.2 6.2a2 2 0 0 1 0 2.8z"/><circle cx="8.5" cy="8.5" r="1.5"/>',
         'telefono'  => '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/>',
@@ -42,10 +42,10 @@ function icono(string $nombre, string $extra = ''): string
         'inventario'=> '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/>',
         'lupa'      => '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
         'codigo-barras' => '<path d="M3 5v14M6 5v14M9.5 5v14M13 5v14M16 5v14M18 5v14M21 5v14"/>',
-        'servicios' => '<path d="M4 21V8a1 1 0 0 1 1-1h5V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17"/><path d="M2 21h20"/><path d="M14 7h3M14 11h3M14 15h3"/><path d="M7 11h1M7 15h1"/>',
         'ventas'    => '<circle cx="9" cy="20" r="1.6" fill="currentColor" stroke="none"/><circle cx="18" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M2 3h3l2.7 12.4a1.5 1.5 0 0 0 1.5 1.1h8.4a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/>',
         'caja'      => '<path d="M3 9l1.5-4.5A1.5 1.5 0 0 1 6 3.5h12a1.5 1.5 0 0 1 1.5 1L21 9"/><rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M9 13h6"/>',
         'subir'     => '<path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/>',
+        'activar'   => '<path d="M12 2v6"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
     ];
     $d = $svg[$nombre] ?? '';
     $clase = 'ic' . ($extra !== '' ? ' ' . $extra : '');
@@ -121,9 +121,10 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
           <?= $item('home', 'Home', 'home.php') ?>
           <?php if (puede($usuario, 'ventas')): ?><?= $item('ventas', 'Ventas', 'pos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'ingresos')): ?><?= $item('ingresos', 'Ingresos', 'ingresos.php') ?><?php endif; ?>
-          <?php if (puede($usuario, 'ingresos')): ?><?= $item('servicios', 'Servicios', 'servicios.php') ?><?php endif; ?>
-          <?php if (puede($usuario, 'gastos')): ?><?= $item('gastos', 'Gastos', 'gastos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
+          <?php if (puede($usuario, 'gastos')): ?><?= $item('gastos', 'Gastos', 'gastos.php') ?>
+          <?php elseif (puede($usuario, 'gastos_registrar')): ?><?= $item('gastos', 'Gastos', 'gasto_form.php') ?>
+          <?php endif; ?>
           <?php if (puede($usuario, 'fiados')): ?><?= $item('fiados', 'Fiados', 'fiados.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'herramientas')): ?><?= $item('herramientas', 'Herramientas', 'herramientas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'negocios') || puede($usuario, 'usuarios')): ?>

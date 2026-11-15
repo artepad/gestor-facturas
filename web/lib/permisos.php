@@ -21,9 +21,18 @@
 // vendedoras por decisión del usuario: es más ágil y todo cambio queda
 // auditado. Para quitárselo a las vendedoras basta con borrar 'productos' de
 // su fila.
+// 'gastos_registrar' (2026-11-14) = versión limitada de 'gastos' para
+// vendedoras: pueden REGISTRAR un gasto nuevo (ej. pagarle en efectivo a un
+// proveedor sin factura, como el de los huevos), pero no ven el listado ni
+// pueden editar o eliminar gastos existentes — eso sigue siendo solo de
+// 'gastos' (admin). GastosController::formulario() es la única acción que
+// acepta ambos permisos; panel()/categorias() siguen exigiendo 'gastos' a
+// secas. El Controlador decide adentro qué tanto puede hacer cada quien
+// mirando puede($usuario, 'gastos') (acceso completo) vs. solo
+// 'gastos_registrar' (crear nada más) — ver GastosController::formulario().
 const PERMISOS = [
     'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'productos', 'herramientas', 'negocios', 'usuarios'],
-    'vendedor' => ['ventas', 'facturas', 'fiados', 'productos', 'herramientas'],
+    'vendedor' => ['ventas', 'facturas', 'fiados', 'productos', 'herramientas', 'gastos_registrar'],
 ];
 
 // Etiquetas legibles de los roles (orden = orden en los formularios).

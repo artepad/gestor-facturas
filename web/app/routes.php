@@ -15,8 +15,8 @@ declare(strict_types=1);
  * registra cada ruta en los dos métodos con el helper `ambos()`.
  *
  * Quedan FUERA de esta tabla (siguen siendo archivos reales, servidos
- * directo por Apache, ver .htaccess): api/facturas.php, migrar.php y
- * procesar_cortes.php — ninguno es una pantalla de sesión.
+ * directo por Apache, ver .htaccess): api/facturas.php y migrar.php —
+ * ninguno es una pantalla de sesión.
  */
 
 use App\Controllers\AuthController;
@@ -39,7 +39,6 @@ use App\Controllers\PosController;
 use App\Controllers\PreciosFvController;
 use App\Controllers\PromocionesController;
 use App\Controllers\ProductosController;
-use App\Controllers\ServiciosController;
 use App\Controllers\UsuariosController;
 use App\Controllers\VerPdfController;
 use App\Core\Request;
@@ -86,12 +85,10 @@ $ambos('/estado_cuenta_imprimir.php', [FiadosController::class, 'estadoCuenta'])
 $ambos('/gastos.php', [GastosController::class, 'panel']);
 $ambos('/gasto_form.php', [GastosController::class, 'formulario']);
 $ambos('/categorias_gasto.php', [GastosController::class, 'categorias']);
-$ambos('/gastos_fijos.php', [GastosController::class, 'fijos']);
 
 // --- Ingresos ---
 $ambos('/ingresos.php', [IngresosController::class, 'panel']);
 $ambos('/corte.php', [IngresosController::class, 'detalle']);
-$ambos('/corte_pegar.php', [IngresosController::class, 'pegar']);
 
 // --- Herramientas ---
 $ambos('/herramientas.php', [HerramientasController::class, 'tablero']);
@@ -130,6 +127,5 @@ $ambos('/caja.php', function (): void {
 $ambos('/inventario.php', [InventarioController::class, 'index']);
 $ambos('/compras.php', [ComprasController::class, 'index']);
 $ambos('/promociones.php', [PromocionesController::class, 'index']);
-$ambos('/servicios.php', [ServiciosController::class, 'index']);
 $ambos('/precios_fv.php', [PreciosFvController::class, 'index']);
 $ambos('/precios_fv_imprimir.php', [PreciosFvController::class, 'imprimir']);

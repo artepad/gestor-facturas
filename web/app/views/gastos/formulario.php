@@ -1,7 +1,9 @@
 <?php
 /**
  * Vista de app/Controllers/GastosController::formulario().
- * Variables disponibles: $usuario, $negocios, $id, $gasto, $categorias, $error, $titulo.
+ * Variables disponibles: $usuario, $negocios, $id, $gasto, $categorias, $error,
+ * $aviso, $titulo, $puedeGestionar (false = vendedora con permiso limitado,
+ * solo puede crear), $volverA (gastos.php o home.php según $puedeGestionar).
  */
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
@@ -14,9 +16,10 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                     <span class="modulo-badge"><?= icono('gastos') ?></span>
                     <h2><?= $titulo ?></h2>
                 </div>
-                <a class="btn gris" href="gastos.php">Volver</a>
+                <a class="btn gris" href="<?= h($volverA) ?>">Volver</a>
             </div>
             <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
+            <?php if ($aviso): ?><div class="aviso-ok"><?= e($aviso) ?></div><?php endif; ?>
             <div class="panel">
             <form method="post">
                 <?= campo_csrf() ?>
@@ -43,9 +46,11 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                                 <?= e($c['nombre']) ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <?php if (!$categorias): ?>
+                    <?php if (!$categorias && $puedeGestionar): ?>
                         <p class="texto-ayuda">No hay categorías activas. Crea una en
                            <a href="categorias_gasto.php">Categorías</a>.</p>
+                    <?php elseif (!$categorias): ?>
+                        <p class="texto-ayuda">No hay categorías activas. Pídele a un administrador que cree una.</p>
                     <?php endif; ?>
                 </div>
                 <div class="campo">
@@ -64,14 +69,14 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 </div>
                 <div class="form-acciones">
                     <button class="btn" type="submit">Guardar</button>
-                    <a class="btn gris" href="gastos.php">Cancelar</a>
-                    <?php if ($id): ?>
+                    <a class="btn gris" href="<?= h($volverA) ?>">Cancelar</a>
+                    <?php if ($id && $puedeGestionar): ?>
                     <button class="btn rojo" type="submit" form="form-eliminar" style="margin-left:auto"
                             onclick="return confirm('¿Eliminar este gasto? Esta acción no se puede deshacer.')">Eliminar</button>
                     <?php endif; ?>
                 </div>
             </form>
-            <?php if ($id): ?>
+            <?php if ($id && $puedeGestionar): ?>
             <form method="post" id="form-eliminar">
                 <?= campo_csrf() ?>
                 <input type="hidden" name="accion" value="eliminar">

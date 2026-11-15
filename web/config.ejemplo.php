@@ -23,22 +23,6 @@ return [
     // Estructura: documentos/facturas/{slug del negocio}/{año}/{mes}/{uuid}.pdf
     'carpeta_pdf' => __DIR__ . '/documentos/facturas',
 
-    // --- Casilla que recibe los cortes de caja de Eleventa (módulo Ingresos) ---
-    // Eleventa de cada negocio envía su corte a esta casilla; procesar_cortes.php
-    // (cron) la lee por IMAP. Si dejas 'usuario' vacío, la lectura IMAP se omite
-    // (los cortes se pueden pegar a mano igual).
-    //
-    // Según el proveedor de correo, el 'host' cambia:
-    //   - Titan (HostGator):   imap.titan.email
-    //   - Correo del cPanel:   mail.minimark.cl
-    'cortes_imap' => [
-        'host'    => 'imap.titan.email',       // Titan Básico de HostGator
-        'puerto'  => 993,                      // IMAP con SSL
-        'usuario' => '',                       // ej. cortes@minimark.cl
-        'clave'   => '',
-        'carpeta' => 'INBOX',
-    ],
-
     // --- IA para "Nueva factura" (subida directa en la web) ---
     // Misma cuenta/clave que usa el programa de escritorio (ver .env en la
     // raíz del repo, ANTHROPIC_API_KEY), solo que acá la web la llama directo

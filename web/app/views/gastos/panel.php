@@ -2,11 +2,18 @@
 /**
  * Vista de app/Controllers/GastosController::panel().
  * Variables disponibles: $usuario, $negocios, $mismoNegocio, $fNegocio, $fDesde,
- * $fHasta, $fCategoria, $categorias, $flash, $totalGastos, $nGastos, $porCategoria,
- * $gastos, $promedioDiario, $varGastos, $topCat, $maxCat.
+ * $fHasta, $fCategoria, $categorias, $flash, $gastos, $viendo, $pagina, $porPag,
+ * $total, $paginas.
  */
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
+
+/** Arma la URL de la página N conservando los filtros activos. */
+function url_pagina_gasto(int $n): string
+{
+    $p = $_GET; $p['p'] = $n;
+    return 'gastos.php?' . http_build_query($p);
+}
 ?>
 <?php cabecera_dashboard($usuario, 'gastos', 'Gastos'); ?>
     <div class="contenido">
@@ -15,29 +22,30 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <span class="modulo-badge"><?= icono('gastos') ?></span>
                 <h2>Gastos</h2>
             </div>
-            <div class="acciones-rapidas">
-                <a class="btn" href="gasto_form.php">+ Registrar gasto</a>
-                <details class="menu-acciones">
-                    <summary class="btn gris">Más ▾</summary>
-                    <div class="menu-pop">
-                        <form method="post"
-                              onsubmit="return confirm('¿Generar los gastos fijos de este mes? No se duplican los ya creados.')">
-                            <?= campo_csrf() ?>
-                            <input type="hidden" name="accion" value="generar_fijos">
-                            <button class="menu-item" type="submit">Generar gastos fijos del mes</button>
-                        </form>
-                        <a class="menu-item" href="gastos_fijos.php">Gastos fijos</a>
-                        <a class="menu-item" href="categorias_gasto.php">Categorías</a>
-                    </div>
-                </details>
+            <div class="cab-modulo-der">
+                <span class="badge-negocio">
+                    <?= icono('negocios') ?>
+                    Viendo: <strong><?= e($viendo) ?></strong>
+                </span>
+                <a class="btn gris" href="categorias_gasto.php">Categorías</a>
+                <a class="btn-pastilla btn-pastilla-rojo" href="gasto_form.php">
+                    <?= icono('gastos') ?> Registrar gasto
+                </a>
             </div>
         </div>
 
         <?php if ($flash): ?><div class="aviso-ok"><?= e($flash) ?></div><?php endif; ?>
 
-        <!-- Filtros -->
-        <div class="panel">
-            <h2>Filtros</h2>
+        <!-- Filtros (plegable: mismo patrón que Facturas/Fiados) -->
+        <?php // $fDesde/$fHasta siempre vienen con un valor por defecto (mes actual) desde el
+        // Controlador, así que para saber si el usuario realmente filtró hay que mirar el GET crudo.
+        $filtrosActivos = (isset($_GET['desde']) || isset($_GET['hasta']) || $fNegocio !== 0 || $fCategoria !== 0); ?>
+        <div class="panel panel-filtros<?= $filtrosActivos ? '' : ' colapsado' ?>" id="panelFiltros">
+            <button type="button" class="panel-filtros-cab" id="btnToggleFiltros"
+                    aria-expanded="<?= $filtrosActivos ? 'true' : 'false' ?>">
+                <h2>Filtros</h2>
+                <span class="chevron"><?= icono('chevron') ?></span>
+            </button>
             <form class="filtros" method="get">
                 <?php if (!$mismoNegocio): ?>
                 <div class="campo">
@@ -75,43 +83,27 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 </div>
             </form>
         </div>
+        <script>
+          // Panel de Filtros plegable: mismo patrón que panel_facturas.php / fiados.php.
+          (function () {
+            var panel = document.getElementById('panelFiltros');
+            var btn = document.getElementById('btnToggleFiltros');
+            if (!panel || !btn) return;
+            btn.addEventListener('click', function () {
+              var abierto = !panel.classList.contains('colapsado');
+              panel.classList.toggle('colapsado', abierto);
+              btn.setAttribute('aria-expanded', abierto ? 'false' : 'true');
+            });
+          })();
+        </script>
 
-        <!-- Resumen del período -->
-        <div class="ingresos-stats stats-compactas">
-            <div class="stat-card stat-destacado">
-                <span class="stat-label">Gastos del período</span>
-                <span class="stat-valor valor-rojo"><?= clp($totalGastos) ?: '$0' ?></span>
-                <span class="stat-comp texto-tenue"><?= $nGastos ?> gasto(s)</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Promedio diario</span>
-                <span class="stat-valor"><?= clp($promedioDiario) ?: '$0' ?></span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Variación de gastos</span>
-                <?php if ($varGastos !== null): $sube = $varGastos > 0; $pct = number_format(abs($varGastos), 1, ',', '.'); ?>
-                    <span class="stat-valor <?= $sube ? 'valor-rojo' : 'valor-verde' ?>"><?= ($sube ? '▲ +' : '▼ −') . $pct ?>%</span>
-                    <span class="stat-comp texto-tenue">vs. período anterior</span>
-                <?php else: ?>
-                    <span class="stat-valor">—</span>
-                    <span class="stat-comp texto-tenue">sin datos previos</span>
-                <?php endif; ?>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Mayor gasto por categoría</span>
-                <?php if ($topCat): ?>
-                    <span class="stat-valor valor-rojo"><?= clp($topCat['total']) ?></span>
-                    <span class="stat-comp texto-tenue"><?= e($topCat['nombre']) ?></span>
-                <?php else: ?>
-                    <span class="stat-valor">$0</span>
-                    <span class="stat-comp texto-tenue">sin gastos</span>
-                <?php endif; ?>
-            </div>
+        <div class="resumen">
+            <?= $total ?> gasto(s)<?= $paginas > 1 ? " · página $pagina de $paginas" : '' ?>
         </div>
 
         <!-- Tabla de gastos -->
         <div class="tabla-wrap">
-            <table>
+            <table class="tabla-gastos">
                 <thead><tr>
                     <th>Fecha</th>
                     <th>Categoría</th>
@@ -125,7 +117,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <?php else: foreach ($gastos as $g): ?>
                     <tr class="fila-click" onclick="location.href='gasto_form.php?id=<?= (int)$g['id'] ?>'">
                         <td class="nowrap"><?= e(fecha_dmy($g['fecha'])) ?></td>
-                        <td><?= e($g['categoria']) ?><?= $g['gasto_fijo_id'] ? ' <span class="mini-tag">fijo</span>' : '' ?></td>
+                        <td><?= e($g['categoria']) ?></td>
                         <td class="col-ocultar-movil"><?= e($g['descripcion']) ?: '—' ?></td>
                         <?php if (!$mismoNegocio): ?><td class="col-ocultar-movil"><?= e($g['negocio']) ?></td><?php endif; ?>
                         <td class="monto-col valor-rojo"><?= clp($g['monto']) ?></td>
@@ -135,22 +127,16 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
             </table>
         </div>
 
-        <!-- Desglose por categoría (colapsable, oculto por defecto) -->
-        <?php if ($porCategoria): ?>
-        <details class="bloque bloque-sep">
-            <summary>Por categoría</summary>
-            <div class="bloque-cuerpo">
-                <div class="cat-barras">
-                    <?php foreach ($porCategoria as $c): $pct = $maxCat > 0 ? round((float)$c['total'] / $maxCat * 100) : 0; ?>
-                    <div class="cat-fila">
-                        <span class="cat-nombre"><?= e($c['nombre']) ?></span>
-                        <span class="cat-barra"><span class="cat-relleno" style="width: <?= $pct ?>%"></span></span>
-                        <span class="cat-monto"><?= clp($c['total']) ?></span>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
+        <?php if ($paginas > 1): ?>
+            <div class="paginacion">
+                <?php if ($pagina > 1): ?>
+                    <a class="btn gris sm" href="<?= e(url_pagina_gasto($pagina - 1)) ?>">← Anteriores</a>
+                <?php endif; ?>
+                <span class="texto-tenue">Página <?= $pagina ?> de <?= $paginas ?></span>
+                <?php if ($pagina < $paginas): ?>
+                    <a class="btn gris sm" href="<?= e(url_pagina_gasto($pagina + 1)) ?>">Siguientes →</a>
+                <?php endif; ?>
             </div>
-        </details>
         <?php endif; ?>
     </div>
     <?php pie_dashboard(); ?>

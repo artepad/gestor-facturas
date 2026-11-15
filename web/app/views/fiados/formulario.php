@@ -1,7 +1,7 @@
 <?php
 /**
  * Vista de app/Controllers/FiadosController::formulario().
- * Variables disponibles: $usuario, $negocios, $id, $cliente, $error, $titulo.
+ * Variables disponibles: $usuario, $negocios, $id, $cliente, $error, $titulo, $esAdmin.
  */
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
@@ -63,6 +63,20 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 </div>
             </form>
             </div>
+
+            <?php if ($id && $esAdmin): ?>
+            <div class="panel zona-peligro">
+                <h2 class="panel-titulo">Zona de peligro</h2>
+                <p class="texto-ayuda">Elimina a <strong><?= e(trim($cliente['nombre'] . ' ' . $cliente['apellido'])) ?></strong>
+                    y TODO su historial de fiados y abonos. Esta acción no se puede deshacer.</p>
+                <form method="post" action="cliente.php?id=<?= (int)$id ?>"
+                      onsubmit="return confirm('¿Eliminar este cliente y TODO su historial? Esta acción no se puede deshacer.')">
+                    <?= campo_csrf() ?>
+                    <input type="hidden" name="accion" value="eliminar_cliente">
+                    <button class="btn peligro" type="submit">Eliminar cliente</button>
+                </form>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
     <?php pie_dashboard(); ?>

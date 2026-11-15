@@ -201,6 +201,8 @@ final class FiadosController extends BaseController
         require_once dirname(__DIR__, 2) . '/lib/ui.php';        // icono()
         require_once dirname(__DIR__, 2) . '/lib/auditoria.php'; // registrar_auditoria()
 
+        $esAdmin = ($usuario['rol'] ?? '') === 'admin';
+
         $negocios = \negocios_visibles($usuario);
         $idsVisibles = array_map(fn($n) => (int)$n['id'], $negocios);
 
@@ -254,7 +256,7 @@ final class FiadosController extends BaseController
         $titulo = $id ? 'Editar cliente' : 'Nuevo cliente';
 
         View::render('fiados/formulario', compact(
-            'usuario', 'negocios', 'id', 'cliente', 'error', 'titulo'
+            'usuario', 'negocios', 'id', 'cliente', 'error', 'titulo', 'esAdmin'
         ));
     }
 

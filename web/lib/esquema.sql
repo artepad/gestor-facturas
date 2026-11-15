@@ -230,9 +230,10 @@ CREATE TABLE IF NOT EXISTS cortes (
   ventas_vales         DECIMAL(14,2) NULL,
   ventas_transferencia DECIMAL(14,2) NULL,
   -- Columnas que aporta el POS propio (los cortes de Eleventa las dejan NULL).
-  -- recaudado_efectivo: pagos de cuentas cobrados en efectivo. NO son venta,
-  -- pero entran al cajon, asi que sin esto el corte no cuadraria consigo mismo
-  -- (fondo + ventas_efectivo + recaudado + entradas - salidas = esperado).
+  -- recaudado_efectivo: pagos de cuentas de terceros cobrados en efectivo
+  -- (Klap y similares, retirado 2026-11-14 - ver web/CLAUDE.md, modulo
+  -- Servicios). Se deja la columna para no perder el valor de los cortes
+  -- viejos que la tuvieron; en los cortes nuevos siempre queda en 0.
   recaudado_efectivo   DECIMAL(14,2) NULL,
   diferencia           DECIMAL(14,2) NULL,   -- contado - esperado en el arqueo
   creado_en            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -333,22 +334,6 @@ CREATE TABLE IF NOT EXISTS categorias_gasto (
   UNIQUE KEY uq_categoria_gasto (nombre)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Plantillas de gasto fijo mensual (sueldos, arriendo...). Se "generan" como
--- gastos reales una vez al mes con un clic (ver registrar_gastos_fijos).
-CREATE TABLE IF NOT EXISTS gastos_fijos (
-  id             INT AUTO_INCREMENT PRIMARY KEY,
-  negocio_id     INT NOT NULL,
-  categoria_id   INT NOT NULL,
-  descripcion    VARCHAR(255) NULL,
-  monto_estimado DECIMAL(14,2) NOT NULL,
-  dia_mes        TINYINT NULL,                        -- dia sugerido de pago (1-31)
-  activo         TINYINT(1) NOT NULL DEFAULT 1,
-  creado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (negocio_id)   REFERENCES negocios(id)        ON DELETE CASCADE,
-  FOREIGN KEY (categoria_id) REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
-  INDEX idx_gfijo_negocio (negocio_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- Cada gasto real registrado.
 CREATE TABLE IF NOT EXISTS gastos (
   id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -357,12 +342,10 @@ CREATE TABLE IF NOT EXISTS gastos (
   fecha         DATE NOT NULL,
   monto         DECIMAL(14,2) NOT NULL,
   descripcion   VARCHAR(255) NULL,
-  gasto_fijo_id INT NULL,                             -- nacio de una plantilla fija
   creado_por    INT NULL,
   creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (negocio_id)    REFERENCES negocios(id)         ON DELETE CASCADE,
   FOREIGN KEY (categoria_id)  REFERENCES categorias_gasto(id) ON DELETE RESTRICT,
-  FOREIGN KEY (gasto_fijo_id) REFERENCES gastos_fijos(id)     ON DELETE SET NULL,
   FOREIGN KEY (creado_por)    REFERENCES usuarios(id)         ON DELETE SET NULL,
   INDEX idx_gasto_negocio_fecha (negocio_id, fecha)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -543,50 +526,6 @@ CREATE TABLE IF NOT EXISTS ventas_espera (
   FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE CASCADE,
   FOREIGN KEY (usuario_id)     REFERENCES usuarios(id)      ON DELETE SET NULL,
   INDEX idx_espera_sesion (caja_sesion_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ===== Recaudacion de servicios (Klap y cualquier otro convenio) =====
--- CRITICO para el balance: la plata recaudada NO es venta y las recargas de
--- saldo NO son gasto. El unico ingreso real del negocio es la comision.
-
-CREATE TABLE IF NOT EXISTS convenios (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  negocio_id   INT NOT NULL,
-  nombre       VARCHAR(80) NOT NULL,                  -- Klap, Sencillito, Servipag...
-  modalidad    VARCHAR(10) NOT NULL DEFAULT 'prepago', -- prepago | postpago
-  saldo_minimo DECIMAL(14,2) NULL,                    -- umbral de alerta (prepago)
-  saldo_ajuste DECIMAL(14,2) NOT NULL DEFAULT 0,      -- correccion manual vs. el portal
-  activo       TINYINT(1) NOT NULL DEFAULT 1,
-  creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  actualizado_en TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE,
-  UNIQUE KEY uq_convenio (negocio_id, nombre)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS servicio_operaciones (
-  id             INT AUTO_INCREMENT PRIMARY KEY,
-  uuid           CHAR(36) NOT NULL UNIQUE,
-  negocio_id     INT NOT NULL,
-  convenio_id    INT NOT NULL,
-  caja_sesion_id INT NULL,
-  usuario_id     INT NULL,
-  tipo           VARCHAR(14) NOT NULL,   -- recaudacion | recarga_saldo | comision | liquidacion
-  servicio       VARCHAR(80) NULL,       -- Luz, Agua, Telefono, Recarga...
-  monto          DECIMAL(14,2) NOT NULL,
-  medio_pago     VARCHAR(15) NULL,       -- recaudacion: efectivo|tarjeta|transferencia
-  comision       DECIMAL(14,2) NULL,
-  origen_fondos  VARCHAR(10) NULL,       -- recarga/liquidacion: banco | caja
-  referencia     VARCHAR(120) NULL,      -- n. de comprobante
-  fecha          DATETIME NOT NULL,
-  nota           VARCHAR(255) NULL,
-  creado_en      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (negocio_id)     REFERENCES negocios(id)      ON DELETE CASCADE,
-  FOREIGN KEY (convenio_id)    REFERENCES convenios(id)     ON DELETE RESTRICT,
-  FOREIGN KEY (caja_sesion_id) REFERENCES caja_sesiones(id) ON DELETE SET NULL,
-  FOREIGN KEY (usuario_id)     REFERENCES usuarios(id)      ON DELETE SET NULL,
-  INDEX idx_servop_negocio_fecha (negocio_id, fecha),
-  INDEX idx_servop_convenio (convenio_id, fecha),
-  INDEX idx_servop_sesion (caja_sesion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ===== Promociones automaticas (el POS las aplica solo al vender) =====

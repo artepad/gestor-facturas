@@ -207,9 +207,11 @@ function tickets_en_espera(PDO $pdo, int $sesionId): int
  * efectivo_esperado = fondo + ventas en efectivo + recaudaciones en efectivo
  *                     + entradas − salidas
  *
- * Ojo con las recaudaciones (Klap y otros convenios): el efectivo del cliente
- * SÍ entra al cajón aunque NO sea una venta. Si no se sumaran acá, el arqueo
- * mostraría un sobrante todos los días. Ver docs/POS_DISENO.md sección 7.7.
+ * recaudado_efectivo queda siempre en 0: el negocio ya no recauda cuentas de
+ * terceros (Klap y similares, retirado 2026-11-14 — ver web/CLAUDE.md, módulo
+ * Servicios). Se deja el campo en la fórmula y en `cortes.recaudado_efectivo`
+ * para no tocar el cálculo del arqueo ni perder el valor de los cortes viejos
+ * que sí lo tuvieron.
  */
 function resumen_caja(PDO $pdo, int $sesionId): array
 {
@@ -260,18 +262,6 @@ function resumen_caja(PDO $pdo, int $sesionId): array
         if (isset($mapa[$f['medio']])) $r[$mapa[$f['medio']]] = (float)$f['m'];
     }
 
-    // Recaudación de servicios: NO es venta, pero el efectivo entra al cajón.
-    $st = $pdo->prepare(
-        "SELECT COALESCE(SUM(monto),0) total,
-                COALESCE(SUM(CASE WHEN medio_pago = 'efectivo' THEN monto ELSE 0 END),0) efectivo
-           FROM servicio_operaciones
-          WHERE caja_sesion_id = ? AND tipo = 'recaudacion'"
-    );
-    $st->execute([$sesionId]);
-    $s = $st->fetch();
-    $r['recaudado_total']    = (float)$s['total'];
-    $r['recaudado_efectivo'] = (float)$s['efectivo'];
-
     // Entradas y salidas de efectivo.
     $st = $pdo->prepare(
         "SELECT tipo, COALESCE(SUM(monto),0) m FROM caja_movimientos
@@ -308,11 +298,88 @@ function departamentos_del_turno(PDO $pdo, int $sesionId): array
 }
 
 /**
- * Genera el `corte` del turno reutilizando registrar_corte() de lib/eleventa.php
- * — el mismo que usan los correos de Eleventa. Así el módulo Ingresos y todos
- * los reportes siguen funcionando igual, pero con datos reales del POS.
+ * Inserta o actualiza un corte (idempotente por negocio+cierre+cajero).
+ * Crea el cajero si es la primera vez que aparece. Reemplaza completos los
+ * movimientos y departamentos (mismo patrón que el detalle de facturas).
+ * Devuelve el id del corte.
  *
- * Es idempotente por (negocio, cerrado_en, cajero), como el de los correos.
+ * Venía de lib/eleventa.php (hasta 2026-11-14 también lo usaban los correos
+ * de "Corte del turno" de Eleventa, ya retirado de la web — ver
+ * web/CLAUDE.md, módulo Ingresos). Se movió acá porque ahora es el único
+ * llamador: el POS propio, al cerrar caja.
+ */
+function registrar_corte(PDO $pdo, int $negocioId, ?int $correoId, array $d): int
+{
+    $propia = !$pdo->inTransaction();
+    if ($propia) $pdo->beginTransaction();
+    try {
+        // Cajero (auto-aprendido por negocio)
+        $st = $pdo->prepare("SELECT id FROM cajeros WHERE negocio_id = ? AND nombre = ?");
+        $st->execute([$negocioId, $d['cajero']]);
+        $cajeroId = $st->fetchColumn();
+        if (!$cajeroId) {
+            $pdo->prepare("INSERT INTO cajeros (negocio_id, nombre) VALUES (?, ?)")
+                ->execute([$negocioId, $d['cajero']]);
+            $cajeroId = (int)$pdo->lastInsertId();
+        }
+
+        $campos = [
+            'negocio_id' => $negocioId, 'correo_id' => $correoId, 'cajero_id' => $cajeroId,
+            'caja' => $d['caja'], 'abierto_en' => $d['abierto_en'], 'cerrado_en' => $d['cerrado_en'],
+            'ventas_totales' => $d['ventas_totales'], 'ganancia' => $d['ganancia'],
+            'numero_ventas' => $d['numero_ventas'], 'fondo_caja' => $d['fondo_caja'],
+            'ventas_efectivo' => $d['ventas_efectivo'], 'abonos_efectivo' => $d['abonos_efectivo'],
+            'entradas_caja' => $d['entradas_caja'], 'salidas_caja' => $d['salidas_caja'],
+            'efectivo_esperado' => $d['efectivo_esperado'], 'ventas_tarjeta' => $d['ventas_tarjeta'],
+            'ventas_credito' => $d['ventas_credito'], 'ventas_vales' => $d['ventas_vales'],
+            'ventas_transferencia' => $d['ventas_transferencia'],
+            'recaudado_efectivo' => $d['recaudado_efectivo'] ?? null,
+            'diferencia' => $d['diferencia'] ?? null,
+        ];
+
+        $st = $pdo->prepare("SELECT id FROM cortes WHERE negocio_id = ? AND cerrado_en = ? AND cajero_id = ?");
+        $st->execute([$negocioId, $d['cerrado_en'], $cajeroId]);
+        $corteId = $st->fetchColumn();
+
+        if ($corteId) {
+            $sets = implode(', ', array_map(fn($c) => "$c = :$c", array_keys($campos)));
+            $campos['id'] = $corteId;
+            $pdo->prepare("UPDATE cortes SET $sets WHERE id = :id")->execute($campos);
+        } else {
+            $cols = implode(', ', array_keys($campos));
+            $ph   = implode(', ', array_map(fn($c) => ":$c", array_keys($campos)));
+            $pdo->prepare("INSERT INTO cortes ($cols) VALUES ($ph)")->execute($campos);
+            $corteId = (int)$pdo->lastInsertId();
+        }
+
+        $pdo->prepare("DELETE FROM corte_movimientos WHERE corte_id = ?")->execute([$corteId]);
+        $ins = $pdo->prepare(
+            "INSERT INTO corte_movimientos (corte_id, tipo, hora, descripcion, monto) VALUES (?, ?, ?, ?, ?)"
+        );
+        foreach ($d['movimientos'] as $mv) {
+            $ins->execute([$corteId, $mv['tipo'], $mv['hora'], $mv['descripcion'], $mv['monto']]);
+        }
+
+        $pdo->prepare("DELETE FROM corte_departamentos WHERE corte_id = ?")->execute([$corteId]);
+        $ins = $pdo->prepare(
+            "INSERT INTO corte_departamentos (corte_id, departamento, monto) VALUES (?, ?, ?)"
+        );
+        foreach ($d['departamentos'] as $dp) {
+            $ins->execute([$corteId, $dp['departamento'], $dp['monto']]);
+        }
+
+        if ($propia) $pdo->commit();
+        return (int)$corteId;
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Genera el `corte` del turno con registrar_corte() de arriba.
+ *
+ * Es idempotente por (negocio, cerrado_en, cajero).
  * Devuelve el id del corte.
  *
  * $usuario es quien EJECUTA el cierre (normalmente el mismo que abrió el
@@ -325,9 +392,6 @@ function departamentos_del_turno(PDO $pdo, int $sesionId): array
 function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
                                  array $r, float $contado, float $diferencia): int
 {
-    if (!function_exists('registrar_corte')) {
-        require_once __DIR__ . '/eleventa.php';
-    }
     $negocioId = (int)$sesion['negocio_id'];
     $usuarioAperturaId = $sesion['usuario_apertura'] ?? null;
     $cajero = null;
@@ -353,8 +417,8 @@ function generar_corte_de_sesion(PDO $pdo, array $usuario, array $sesion,
         'caja'          => $sesion['caja'],
         'abierto_en'    => $sesion['abierto_en'],
         'cerrado_en'    => date('Y-m-d H:i:s'),
-        // Ventas del negocio. La recaudación de convenios NO va acá: no es
-        // venta (ver docs/POS_DISENO.md 7.7); viaja en recaudado_efectivo.
+        // Ventas del negocio (recaudado_efectivo siempre queda en 0 — ver
+        // resumen_caja() más arriba).
         'ventas_totales'       => $r['ventas_total'],
         'ganancia'             => ($r['ganancia'] ?? null),
         'numero_ventas'        => $r['numero_ventas'],
@@ -1485,262 +1549,6 @@ function descartar_espera(PDO $pdo, int $sesionId, int $esperaId): string
     if (!$t) throw new RuntimeException('Ese ticket en espera ya no existe.');
     $pdo->prepare("DELETE FROM ventas_espera WHERE id = ?")->execute([$esperaId]);
     return ($t['etiqueta'] ?: 'Ticket ' . $t['numero']) . ' por ' . clp($t['total_estimado']);
-}
-
-// ============ Recaudación de servicios (Klap y otros convenios) ============
-// CRÍTICO para el balance y el arqueo: la plata que paga el cliente NO es venta
-// del negocio (es de la empresa de servicios), pero el efectivo SÍ entra al
-// cajón. Ver docs/POS_DISENO.md sección 7.7.
-
-/** Servicios que se pueden pagar. Lista fija por ahora; se puede volver tabla. */
-const SERVICIOS_RECAUDACION = [
-    'Luz', 'Agua', 'Gas', 'Teléfono/Internet', 'Recarga celular',
-    'Cuenta municipal', 'Otro servicio',
-];
-
-/** Convenios activos de un negocio. */
-function convenios_de(PDO $pdo, int $negocioId): array
-{
-    $st = $pdo->prepare(
-        "SELECT * FROM convenios WHERE negocio_id = ? AND activo = 1 ORDER BY nombre"
-    );
-    $st->execute([$negocioId]);
-    return $st->fetchAll();
-}
-
-/**
- * Convenio con el que registrar un pago. Si el negocio todavía no tiene
- * ninguno, crea "Mercado Pago" (prepago) para que el vendedor no tenga que
- * configurar nada antes de cobrar la primera cuenta. La gestión de convenios
- * llega en la Etapa 2; esto solo evita que el paso 1D quede bloqueado.
- *
- * Nota (migración de arquitectura, Fase 6): el negocio dejó Klap por Mercado
- * Pago (ver web/docs/bitacora-migracion.md). Esto solo cambia el nombre que se
- * crea por defecto cuando un negocio no tiene NINGÚN convenio todavía — los
- * negocios que ya tienen uno (aunque se siga llamando "Klap") no se tocan
- * solos; el dueño lo desactiva y crea el nuevo desde Servicios cuando quiera.
- */
-function convenio_por_defecto(PDO $pdo, int $negocioId): array
-{
-    $lista = convenios_de($pdo, $negocioId);
-    if ($lista) return $lista[0];
-
-    $pdo->prepare(
-        "INSERT IGNORE INTO convenios (negocio_id, nombre, modalidad) VALUES (?, 'Mercado Pago', 'prepago')"
-    )->execute([$negocioId]);
-    $lista = convenios_de($pdo, $negocioId);
-    if (!$lista) throw new RuntimeException('No se pudo preparar el convenio de recaudación.');
-    return $lista[0];
-}
-
-/** Operación de servicio ya registrada con ese uuid, o null (idempotencia). */
-function operacion_por_uuid(PDO $pdo, string $uuid): ?array
-{
-    $st = $pdo->prepare("SELECT * FROM servicio_operaciones WHERE uuid = ?");
-    $st->execute([$uuid]);
-    return $st->fetch() ?: null;
-}
-
-/**
- * Registra el pago de una cuenta de un cliente.
- *
- * IDEMPOTENTE por uuid, igual que las ventas: reenviar el mismo pago no lo
- * duplica. NO crea una venta ni toca `ventas`; solo deja la operación, que el
- * arqueo suma al efectivo esperado cuando el medio es efectivo.
- */
-function registrar_recaudacion(PDO $pdo, array $usuario, array $sesion, string $uuid,
-                               int $convenioId, string $servicio, float $monto,
-                               string $medioPago, string $referencia = '',
-                               ?float $comision = null): array
-{
-    if ($previa = operacion_por_uuid($pdo, $uuid)) {
-        return ['operacion' => $previa, 'duplicada' => true];
-    }
-    if ($monto <= 0) {
-        throw new RuntimeException('El monto de la cuenta debe ser mayor que cero.');
-    }
-    if (!in_array($medioPago, ['efectivo', 'tarjeta', 'transferencia'], true)) {
-        throw new RuntimeException('Medio de pago desconocido: ' . $medioPago);
-    }
-    // El convenio debe ser del mismo negocio del turno (no se confía en el navegador).
-    $st = $pdo->prepare("SELECT * FROM convenios WHERE id = ? AND negocio_id = ? AND activo = 1");
-    $st->execute([$convenioId, (int)$sesion['negocio_id']]);
-    if (!$st->fetch()) {
-        throw new RuntimeException('Convenio inválido para este negocio.');
-    }
-
-    $st = $pdo->prepare(
-        "INSERT INTO servicio_operaciones
-            (uuid, negocio_id, convenio_id, caja_sesion_id, usuario_id, tipo,
-             servicio, monto, medio_pago, comision, referencia, fecha)
-         VALUES (?,?,?,?,?, 'recaudacion', ?,?,?,?,?, NOW())"
-    );
-    try {
-        $st->execute([$uuid, (int)$sesion['negocio_id'], $convenioId, (int)$sesion['id'],
-                      $usuario['id'] ?? null, substr($servicio, 0, 80), $monto, $medioPago,
-                      $comision, ($referencia !== '' ? substr($referencia, 0, 120) : null)]);
-    } catch (PDOException $e) {
-        // 23000 = uuid duplicado: llegó dos veces la misma operación.
-        if ($e->getCode() === '23000' && ($previa = operacion_por_uuid($pdo, $uuid))) {
-            return ['operacion' => $previa, 'duplicada' => true];
-        }
-        throw $e;
-    }
-    $st = $pdo->prepare("SELECT * FROM servicio_operaciones WHERE id = ?");
-    $st->execute([(int)$pdo->lastInsertId()]);
-    return ['operacion' => $st->fetch(), 'duplicada' => false];
-}
-
-/**
- * Saldo estimado de un convenio.
- *
- *   prepago  (Klap): recargas + comisiones − recaudaciones + ajuste
- *                    → es un HABER: cuánto te queda para seguir cobrando cuentas.
- *   postpago:        recaudaciones − liquidaciones + ajuste
- *                    → es una DEUDA: cuánto le debes al convenio.
- *
- * Es un cálculo propio, no un dato en línea del proveedor: por eso se muestra
- * siempre como "estimado" y existe `saldo_ajuste` para cuadrarlo contra el
- * portal. Ver docs/POS_DISENO.md 7.7.
- */
-function saldo_convenio(PDO $pdo, array $convenio): array
-{
-    $st = $pdo->prepare(
-        "SELECT tipo, COALESCE(SUM(monto),0) m, COUNT(*) n
-           FROM servicio_operaciones WHERE convenio_id = ? GROUP BY tipo"
-    );
-    $st->execute([(int)$convenio['id']]);
-    $t = ['recaudacion' => 0.0, 'recarga_saldo' => 0.0, 'comision' => 0.0, 'liquidacion' => 0.0];
-    $n = ['recaudacion' => 0, 'recarga_saldo' => 0, 'comision' => 0, 'liquidacion' => 0];
-    foreach ($st->fetchAll() as $f) {
-        if (isset($t[$f['tipo']])) { $t[$f['tipo']] = (float)$f['m']; $n[$f['tipo']] = (int)$f['n']; }
-    }
-    $ajuste = (float)$convenio['saldo_ajuste'];
-
-    $esPrepago = ($convenio['modalidad'] ?? 'prepago') === 'prepago';
-    $saldo = $esPrepago
-        ? $t['recarga_saldo'] + $t['comision'] - $t['recaudacion'] + $ajuste
-        : $t['recaudacion'] - $t['liquidacion'] + $ajuste;
-
-    $minimo = $convenio['saldo_minimo'] !== null ? (float)$convenio['saldo_minimo'] : null;
-    return [
-        'saldo'      => round($saldo, 2),
-        'es_prepago' => $esPrepago,
-        'totales'    => $t,
-        'conteos'    => $n,
-        'ajuste'     => $ajuste,
-        // Solo tiene sentido avisar en prepago: es cuando te puedes quedar sin.
-        'bajo'       => $esPrepago && $minimo !== null && $saldo <= $minimo,
-        'minimo'     => $minimo,
-    ];
-}
-
-/** Convenios de un negocio con su saldo ya calculado. */
-function convenios_con_saldo(PDO $pdo, int $negocioId, bool $soloActivos = true): array
-{
-    $sql = "SELECT * FROM convenios WHERE negocio_id = ?"
-         . ($soloActivos ? " AND activo = 1" : "") . " ORDER BY nombre";
-    $st = $pdo->prepare($sql);
-    $st->execute([$negocioId]);
-    $out = [];
-    foreach ($st->fetchAll() as $c) {
-        $out[] = $c + ['calc' => saldo_convenio($pdo, $c)];
-    }
-    return $out;
-}
-
-/**
- * Registra una recarga de saldo, una liquidación o una comisión.
- *
- * OJO con la contabilidad (docs/POS_DISENO.md 7.7): recargar saldo NO es un gasto
- * (es plata propia cambiando de bolsillo) y liquidar tampoco. El único ingreso
- * real del negocio es la comisión.
- *
- * Si el dinero sale de la caja (`origen_fondos = 'caja'`), además se registra
- * la salida de efectivo para que el arqueo cuadre.
- */
-function registrar_operacion_convenio(PDO $pdo, array $usuario, int $convenioId,
-                                      string $tipo, float $monto, string $origenFondos = 'banco',
-                                      string $referencia = '', string $nota = '',
-                                      ?array $sesion = null): array
-{
-    if (!in_array($tipo, ['recarga_saldo', 'liquidacion', 'comision'], true)) {
-        throw new RuntimeException('Tipo de operación desconocido.');
-    }
-    if ($monto <= 0) {
-        throw new RuntimeException('El monto debe ser mayor que cero.');
-    }
-    $st = $pdo->prepare("SELECT * FROM convenios WHERE id = ?");
-    $st->execute([$convenioId]);
-    $conv = $st->fetch();
-    if (!$conv) throw new RuntimeException('Ese convenio no existe.');
-    if (!puede_ver_negocio($usuario, (int)$conv['negocio_id'])) {
-        throw new RuntimeException('No tienes acceso a ese convenio.');
-    }
-    // La comisión siempre llega del proveedor; no sale de la caja.
-    if ($tipo === 'comision') $origenFondos = 'banco';
-    if (!in_array($origenFondos, ['banco', 'caja'], true)) $origenFondos = 'banco';
-    if ($origenFondos === 'caja' && !$sesion) {
-        throw new RuntimeException('Para sacar la plata de la caja necesitas un turno abierto.');
-    }
-
-    $propia = !$pdo->inTransaction();
-    if ($propia) $pdo->beginTransaction();
-    try {
-        $pdo->prepare(
-            "INSERT INTO servicio_operaciones
-               (uuid, negocio_id, convenio_id, caja_sesion_id, usuario_id, tipo,
-                monto, origen_fondos, referencia, nota, fecha)
-             VALUES (?,?,?,?,?,?,?,?,?,?,NOW())"
-        )->execute([uuid4(), (int)$conv['negocio_id'], $convenioId,
-                    $sesion ? (int)$sesion['id'] : null, $usuario['id'] ?? null, $tipo,
-                    $monto, $origenFondos,
-                    ($referencia !== '' ? substr($referencia, 0, 120) : null),
-                    ($nota !== '' ? substr($nota, 0, 255) : null)]);
-        $id = (int)$pdo->lastInsertId();
-
-        if ($origenFondos === 'caja') {
-            $etiqueta = $tipo === 'recarga_saldo' ? 'Recarga de saldo ' : 'Liquidación a ';
-            registrar_movimiento_caja($pdo, $usuario, (int)$sesion['id'], 'salida', $monto,
-                                      $etiqueta . $conv['nombre']);
-        }
-
-        if ($propia) $pdo->commit();
-        return ['id' => $id, 'convenio' => $conv];
-    } catch (Throwable $e) {
-        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
-}
-
-/** Últimas operaciones de un convenio (todas: cobros, recargas, comisiones). */
-function operaciones_convenio(PDO $pdo, int $convenioId, int $limite = 60): array
-{
-    $st = $pdo->prepare(
-        "SELECT o.*, u.nombre AS usuario
-           FROM servicio_operaciones o
-           LEFT JOIN usuarios u ON u.id = o.usuario_id
-          WHERE o.convenio_id = ?
-          ORDER BY o.id DESC LIMIT " . (int)$limite
-    );
-    $st->execute([$convenioId]);
-    return $st->fetchAll();
-}
-
-/** Pagos de cuentas registrados en el turno, del más nuevo al más viejo. */
-function recaudaciones_del_turno(PDO $pdo, int $sesionId, int $limite = 50): array
-{
-    $st = $pdo->prepare(
-        "SELECT o.*, c.nombre AS convenio, u.nombre AS usuario
-           FROM servicio_operaciones o
-           JOIN convenios c ON c.id = o.convenio_id
-           LEFT JOIN usuarios u ON u.id = o.usuario_id
-          WHERE o.caja_sesion_id = ? AND o.tipo = 'recaudacion'
-          ORDER BY o.id DESC
-          LIMIT " . (int)$limite
-    );
-    $st->execute([$sesionId]);
-    return $st->fetchAll();
 }
 
 /** Turnos ya cerrados de los negocios dados (historial). */

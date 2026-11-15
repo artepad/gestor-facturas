@@ -1,9 +1,9 @@
 <?php
 /**
- * Helpers del módulo Gastos: categorías, totales del período y la generación
- * idempotente de los gastos fijos del mes. Web-nativo (la web es la fuente de
- * verdad). Las funciones reciben los IDs de negocios ya acotados a los visibles
- * del usuario desde el llamador (nunca consultan sin ese filtro).
+ * Helpers del módulo Gastos: categorías y totales del período. Web-nativo (la
+ * web es la fuente de verdad). Las funciones reciben los IDs de negocios ya
+ * acotados a los visibles del usuario desde el llamador (nunca consultan sin
+ * ese filtro).
  */
 
 /** Lista de categorías de gasto (para selects y CRUD). */
@@ -57,50 +57,4 @@ function gastos_por_negocio(PDO $pdo, array $ids, string $desde, string $hasta):
     $mapa = [];
     foreach ($st as $r) $mapa[(int)$r['negocio_id']] = (float)$r['total'];
     return $mapa;
-}
-
-/**
- * Genera los gastos del mes a partir de las plantillas fijas activas de un
- * negocio. Idempotente: solo crea el gasto si esa plantilla aún no generó uno
- * en el mes indicado. Devuelve cuántos gastos creó.
- *
- * @param string $mes primer día del mes objetivo (YYYY-MM-01)
- */
-function registrar_gastos_fijos(PDO $pdo, int $negocioId, string $mes, ?int $usuarioId): int
-{
-    $inicio = date('Y-m-01', strtotime($mes));
-    $fin    = date('Y-m-t',  strtotime($mes));
-
-    $st = $pdo->prepare("SELECT * FROM gastos_fijos WHERE negocio_id = ? AND activo = 1");
-    $st->execute([$negocioId]);
-    $plantillas = $st->fetchAll();
-    if (!$plantillas) return 0;
-
-    $existe = $pdo->prepare(
-        "SELECT COUNT(*) FROM gastos
-         WHERE gasto_fijo_id = ? AND fecha BETWEEN ? AND ?"
-    );
-    $insertar = $pdo->prepare(
-        "INSERT INTO gastos (negocio_id, categoria_id, fecha, monto, descripcion, gasto_fijo_id, creado_por)
-         VALUES (?,?,?,?,?,?,?)"
-    );
-
-    $creados = 0;
-    foreach ($plantillas as $p) {
-        $existe->execute([(int)$p['id'], $inicio, $fin]);
-        if ((int)$existe->fetchColumn() > 0) continue;   // ya generado este mes
-
-        // Fecha = día sugerido del mes, acotado a los días reales del mes.
-        $dia = (int)($p['dia_mes'] ?? 0);
-        $maxDia = (int)date('t', strtotime($mes));
-        $dia = $dia >= 1 && $dia <= $maxDia ? $dia : 1;
-        $fecha = date('Y-m-', strtotime($mes)) . str_pad((string)$dia, 2, '0', STR_PAD_LEFT);
-
-        $insertar->execute([
-            $negocioId, (int)$p['categoria_id'], $fecha,
-            $p['monto_estimado'], $p['descripcion'], (int)$p['id'], $usuarioId,
-        ]);
-        $creados++;
-    }
-    return $creados;
 }

@@ -9,7 +9,7 @@
  * (hallazgo H3).
  *
  * Variables disponibles (ver CajaController): $usuario, $negocios, $esAdmin,
- * $sesion, $error, $aviso, $corteNuevo, $resumen, $movimientos, $recaudado,
+ * $sesion, $error, $aviso, $corteNuevo, $resumen, $movimientos,
  * $enEspera, $otrasAbiertas, $historial, $avisoLarga, $sesionesAbiertas.
  */
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
@@ -22,7 +22,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <span class="modulo-badge"><?= icono('caja') ?></span>
                 <h2>Caja</h2>
             </div>
-            <a class="btn gris" href="pos.php">Ir a vender</a>
+            <?php if ($sesion): ?><a class="btn gris" href="pos.php">Ir a vender</a><?php endif; ?>
         </div>
 
         <?php if ($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
@@ -40,11 +40,26 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
         <?php if (!$sesion): ?>
             <!-- ================= Abrir caja ================= -->
             <div class="panel">
-                <h2>Abrir caja</h2>
+                <h2 class="panel-titulo"><?= icono('caja') ?> Abrir caja</h2>
                 <p class="ec-intro">
                     Declara con cuánto efectivo parte la caja (el sencillo para dar vuelto).
                     Al cerrar el turno se comparará con lo que cuentes.
                 </p>
+
+                <?php if ($sesionesAbiertas): ?>
+                <div class="aviso-cajas-abiertas">
+                    <p>
+                        <strong>Cajas abiertas ahora mismo:</strong>
+                        <?php foreach ($sesionesAbiertas as $s): ?>
+                            <span class="chip-caja-abierta">
+                                <?= h($s['caja'] ?: 'Caja') ?> · <?= h($s['negocio_nombre']) ?>
+                                <small>(<?= h($s['cajero'] ?: '—') ?>, desde <?= h(substr((string)$s['abierto_en'], 11, 5)) ?>)</small>
+                            </span>
+                        <?php endforeach; ?>
+                    </p>
+                </div>
+                <?php endif; ?>
+
                 <?php if (!$negocios): ?>
                     <p class="vacio">No tienes negocios asignados.</p>
                 <?php else: ?>
@@ -59,22 +74,25 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                                 <option value="<?= (int)$n['id'] ?>"><?= h($n['nombre']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <small class="campo-ayuda">El local donde abrirás el turno</small>
                     </div>
                     <?php else: ?>
                         <input type="hidden" name="negocio_id" value="<?= (int)$negocios[0]['id'] ?>">
                     <?php endif; ?>
                     <input type="hidden" name="tipo" id="abrirCajaTipo" value="fisica">
                     <div class="campo">
-                        <label>Nombre de la caja</label>
+                        <label>Caja</label>
                         <select name="caja" id="abrirCajaNombre" style="min-width:180px">
                             <option value="Principal" data-tipo="fisica">Principal</option>
                             <option value="Secundaria" data-tipo="fisica">Secundaria</option>
                             <option value="Express" data-tipo="express">Express (celular, sin efectivo)</option>
                         </select>
+                        <small class="campo-ayuda">Cuál vas a usar hoy</small>
                     </div>
                     <div class="campo" id="campoFondoInicial">
                         <label>Fondo inicial</label>
-                        <input type="text" name="fondo_inicial" id="abrirCajaFondo" placeholder="20.000" inputmode="numeric">
+                        <input type="text" name="fondo_inicial" id="abrirCajaFondo" placeholder="0" inputmode="numeric" maxlength="7">
+                        <small class="campo-ayuda">Máximo $300.000</small>
                     </div>
                     <div class="campo">
                         <label>&nbsp;</label>
@@ -91,7 +109,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                     <p class="modal-confirmar-ayuda">Revisa los datos: una vez abierta, todas las ventas de este turno quedarán registradas aquí.</p>
                     <dl class="modal-confirmar-datos">
                         <div><dt>Negocio</dt><dd id="confNegocio">—</dd></div>
-                        <div><dt>Nombre de la caja</dt><dd id="confCaja">—</dd></div>
+                        <div><dt>Caja</dt><dd id="confCaja">—</dd></div>
                         <div><dt>Monto inicial</dt><dd id="confFondo">—</dd></div>
                     </dl>
                     <p class="modal-confirmar-aviso" id="confAviso" hidden></p>
@@ -212,6 +230,24 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                     actualizarTipo();
                     revisarDuplicada();
 
+                    // Separador de miles en vivo (formato chileno: "." cada 3
+                    // dígitos), mismo patrón que "Agregar factura" — parsear_monto()
+                    // en lib/ui.php ya sabe leer "20.000" tal cual se ve en pantalla.
+                    // Tope de $300.000 (y de paso, nunca más de 6 dígitos): el
+                    // servidor vuelve a validar esto mismo en CajaController::abrir().
+                    var FONDO_MAXIMO = 300000;
+                    function formatoMiles(v) {
+                        v = String(v || '').replace(/[^0-9]/g, '').slice(0, 6);
+                        if (v === '') return '';
+                        if (parseInt(v, 10) > FONDO_MAXIMO) v = String(FONDO_MAXIMO);
+                        return v.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                    }
+                    txtFondo.addEventListener('input', function () {
+                        var pos = txtFondo.selectionStart, antes = txtFondo.value.length;
+                        txtFondo.value = formatoMiles(txtFondo.value);
+                        txtFondo.selectionStart = txtFondo.selectionEnd = pos + (txtFondo.value.length - antes);
+                    });
+
                     form.addEventListener('submit', function (ev) {
                         if (modal.dataset.confirmado === '1') return;
                         ev.preventDefault();
@@ -265,11 +301,6 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                     <div class="stat-card">
                         <span class="stat-label">Ventas en efectivo</span>
                         <span class="stat-valor valor-verde"><?= clp($resumen['ventas_efectivo']) ?: '$0' ?></span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">Pagos de cuentas</span>
-                        <span class="stat-valor"><?= clp($resumen['recaudado_efectivo']) ?: '$0' ?></span>
-                        <span class="stat-comp texto-tenue">en efectivo, no es venta</span>
                     </div>
                     <div class="stat-card">
                         <span class="stat-label">Entradas de efectivo</span>
@@ -394,42 +425,6 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
             </div>
             <?php endif; ?>
 
-            <!-- ================= Pagos de cuentas del turno ================= -->
-            <?php if ($recaudado): ?>
-            <div class="panel">
-                <h2>Pagos de cuentas (Mercado Pago y otros convenios)</h2>
-                <p class="ec-intro">
-                    Estos <strong>no son ventas tuyas</strong>: el dinero es de la empresa de
-                    servicios. Se registran acá porque el efectivo sí entra al cajón y el
-                    arqueo tiene que contarlo. Se registran desde la pantalla de venta con <b>F9</b>.
-                </p>
-                <div class="tabla-wrap">
-                    <table>
-                        <thead><tr>
-                            <th>Hora</th><th>Servicio</th><th>Convenio</th><th>Pagó con</th>
-                            <th>Comprobante</th><th class="monto-col">Monto</th>
-                        </tr></thead>
-                        <tbody>
-                        <?php foreach ($recaudado as $o): ?>
-                            <tr>
-                                <td><?= h(substr((string)$o['fecha'], 11, 5)) ?></td>
-                                <td><?= h($o['servicio']) ?></td>
-                                <td><?= h($o['convenio']) ?></td>
-                                <td>
-                                    <span class="badge-mov <?= $o['medio_pago'] === 'efectivo' ? 'b-entrada' : 'b-salida' ?>">
-                                        <?= h(ucfirst((string)$o['medio_pago'])) ?>
-                                    </span>
-                                </td>
-                                <td><?= h($o['referencia'] ?: '—') ?></td>
-                                <td class="monto-col"><?= clp($o['monto']) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <?php endif; ?>
-
             <!-- ================= Cerrar caja (arqueo) — la acción más importante
                  de esta pantalla: panel propio, más grande y con su propio
                  color, para que se note antes que cualquier otra cosa. ===== -->
@@ -506,7 +501,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                     disponible, puedes cerrarla tú — pídele por teléfono cuánto efectivo hay
                     realmente en el cajón antes de hacerlo.
                 </p>
-                <div class="tabla-wrap">
+                <div class="tabla-wrap tabla-otras-cajas">
                     <table>
                         <thead><tr>
                             <th>Negocio</th><th>Caja</th><th>Cajero</th><th>Abierta desde</th>
@@ -628,7 +623,7 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <?php if (!$historial): ?>
                     <p class="vacio">Aún no hay turnos cerrados.</p>
                 <?php else: ?>
-                    <div class="tabla-wrap">
+                    <div class="tabla-wrap tabla-turnos">
                         <table>
                             <thead><tr>
                                 <th>Cerrado</th><th>Negocio</th><th>Caja</th><th>Cajero</th>

@@ -6,7 +6,6 @@ namespace App\Controllers;
 use App\Core\Request;
 use App\Core\Session;
 use App\Models\CajaSesion;
-use App\Models\Convenio;
 use App\Models\Promocion;
 use App\Models\Venta;
 
@@ -320,54 +319,6 @@ final class PosApiController
                 \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', 'movimiento_caja', null,
                     ucfirst($tipo) . ' de efectivo por ' . \clp($monto) . ($motivo !== '' ? " ($motivo)" : ''));
                 \responder_json(['ok' => true, 'mensaje' => ucfirst($tipo) . ' registrada: ' . \clp($monto)]);
-            }
-
-            // ---------- Pago de cuenta (recaudación de un convenio) ----------
-            if ($accion === 'recaudacion') {
-                if ($esExpress) {
-                    \responder_json(['error' => 'La Caja Express no puede registrar pagos de cuenta. Usa una caja Principal o Secundaria.'], 400);
-                }
-                $uuid = trim((string)($datos['uuid'] ?? ''));
-                if ($uuid === '') \responder_json(['error' => 'Falta el identificador de la operación.'], 400);
-
-                $monto = \parsear_monto((string)($datos['monto'] ?? ''));
-                if ($monto === null || $monto <= 0) {
-                    \responder_json(['error' => 'Escribe el monto de la cuenta.'], 400);
-                }
-                $convenioId = (int)($datos['convenio_id'] ?? 0) ?: (int)Convenio::porDefecto($negocioId)['id'];
-                $comision = ($datos['comision'] ?? '') !== ''
-                          ? \parsear_monto((string)$datos['comision']) : null;
-
-                $r = Convenio::registrarRecaudacion(
-                    $usuario, $sesion, $uuid, $convenioId,
-                    trim((string)($datos['servicio'] ?? 'Otro servicio')), $monto,
-                    (string)($datos['medio_pago'] ?? 'efectivo'),
-                    trim((string)($datos['referencia'] ?? '')), $comision
-                );
-                $o = $r['operacion'];
-                if (!$r['duplicada']) {
-                    \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'ventas', 'recaudacion', null,
-                        'Pago de cuenta (' . $o['servicio'] . ') por ' . \clp($o['monto']) .
-                        ' en ' . $o['medio_pago']);
-                }
-                $conv = Convenio::porId($convenioId);
-                $k = $conv ? Convenio::saldo($conv) : null;
-
-                \responder_json([
-                    'ok' => true,
-                    'duplicada' => $r['duplicada'],
-                    'operacion' => [
-                        'id' => (int)$o['id'], 'servicio' => $o['servicio'],
-                        'monto' => (float)$o['monto'], 'medio_pago' => $o['medio_pago'],
-                    ],
-                    'saldo' => $k ? [
-                        'convenio'   => $conv['nombre'],
-                        'monto'      => $k['saldo'],
-                        'bajo'       => $k['bajo'],
-                        'es_prepago' => $k['es_prepago'],
-                    ] : null,
-                    'resumen' => CajaSesion::resumen((int)$sesion['id']),
-                ]);
             }
 
             \responder_json(['error' => 'Acción desconocida.'], 400);

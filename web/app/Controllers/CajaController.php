@@ -38,7 +38,6 @@ final class CajaController extends BaseController
 
         $resumen       = $sesion ? CajaSesion::resumen((int)$sesion['id']) : null;
         $movimientos   = $sesion ? CajaSesion::movimientos((int)$sesion['id']) : [];
-        $recaudado     = $sesion ? CajaSesion::recaudacionesDelTurno((int)$sesion['id']) : [];
         $enEspera      = $sesion ? CajaSesion::ticketsEnEspera((int)$sesion['id']) : 0;
         // Todas las sesiones abiertas en los negocios visibles: el admin las ve
         // en la tabla "Otras cajas abiertas"; TODOS los roles la necesitan
@@ -58,7 +57,7 @@ final class CajaController extends BaseController
         // Una vendedora solo ve su propio historial de cierres (no el de sus
         // compañeras); el admin sigue viendo el de todos — mismo criterio
         // que "Cajas abiertas de otros" arriba.
-        $historial     = CajaSesion::cerradasEn($idsVisibles, 15, $esAdmin ? null : (int)$usuario['id']);
+        $historial     = CajaSesion::cerradasEn($idsVisibles, 7, $esAdmin ? null : (int)$usuario['id']);
         $avisoLarga    = $sesion ? CajaSesion::avisoSiLlevaMuchoAbierta($sesion) : null;
         // Caja Express: celular/tablet sin efectivo (ver CLAUDE.md, módulo
         // Ventas/POS). La vista oculta entradas/salidas y simplifica el cierre.
@@ -66,7 +65,7 @@ final class CajaController extends BaseController
 
         View::render('caja/index', compact(
             'usuario', 'negocios', 'esAdmin', 'sesion', 'error', 'aviso', 'corteNuevo',
-            'resumen', 'movimientos', 'recaudado', 'enEspera', 'otrasAbiertas', 'historial',
+            'resumen', 'movimientos', 'enEspera', 'otrasAbiertas', 'historial',
             'avisoLarga', 'sesionesAbiertas', 'esExpress'
         ));
     }
@@ -92,6 +91,9 @@ final class CajaController extends BaseController
             $fondo = $tipo === 'express' ? 0.0 : (\parsear_monto(Request::post('fondo_inicial')) ?? 0.0);
             if ($fondo < 0) {
                 throw new \RuntimeException('El fondo inicial no puede ser negativo.');
+            }
+            if ($fondo > 300000) {
+                throw new \RuntimeException('El fondo inicial no puede superar $300.000.');
             }
             $caja = Request::post('caja');
             CajaSesion::abrir($usuario, $negocioId, $caja, $fondo, $tipo);

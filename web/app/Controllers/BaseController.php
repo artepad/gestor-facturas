@@ -34,6 +34,29 @@ abstract class BaseController
         return $usuario;
     }
 
+    /**
+     * Exige sesion y AL MENOS UNO de los permisos dados (ej. una pantalla que
+     * comparten un rol con acceso completo y otro con acceso limitado, como
+     * 'gastos'/'gastos_registrar'). El Controlador decide adentro, mirando
+     * puede($usuario, 'modulo_completo'), qué tanto puede hacer cada uno.
+     */
+    protected function exigirPermisoAlguno(array $modulos): array
+    {
+        require_once dirname(__DIR__, 2) . '/lib/auth.php';
+        require_once dirname(__DIR__, 2) . '/lib/permisos.php';
+
+        $usuario = \usuario_actual();
+        if (!$usuario) {
+            \redirigir('login.php');
+        }
+        foreach ($modulos as $modulo) {
+            if (\puede($usuario, $modulo)) {
+                return $usuario;
+            }
+        }
+        \redirigir('home.php');
+    }
+
     /** Exige solo sesion, sin mirar un permiso de modulo (ej. home.php: cualquier rol entra). */
     protected function exigirSesion(): array
     {

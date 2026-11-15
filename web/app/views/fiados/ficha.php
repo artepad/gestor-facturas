@@ -16,18 +16,18 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <span class="modulo-badge"><?= icono('fiados') ?></span>
                 <h2><?= e($nombreCompleto) ?></h2>
             </div>
-            <a class="btn gris" href="fiados.php">Volver</a>
+            <div class="cab-modulo-der">
+                <span class="badge-negocio">
+                    Saldo: <strong class="<?= $claseSaldo ?>"><?= clp($saldo) ?></strong>
+                </span>
+                <a class="btn gris" href="cliente_form.php?id=<?= (int)$id ?>">Datos del cliente</a>
+                <a class="btn gris" href="fiados.php">Volver</a>
+            </div>
         </div>
 
-        <!-- Resumen: lo esencial a primera vista (saldo + acciones) -->
-        <div class="panel">
-            <div class="saldo-card">
-                <span class="saldo-label">Saldo pendiente</span>
-                <span class="saldo-monto <?= $claseSaldo ?>"><?= clp($saldo) ?></span>
-                <span class="dg-label">Fiado: <?= clp($totalFiado) ?> · Abonado: <?= clp($totalAbono) ?></span>
-            </div>
-
-            <?php if ($error): ?><div class="error" style="margin-top:12px"><?= e($error) ?></div><?php endif; ?>
+        <!-- Registrar fiado / abono -->
+        <div class="panel fd-panel">
+            <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
 
             <div class="acciones-cc" id="registrar">
                 <details class="accion-cc" <?= $abrirFiado ? 'open' : '' ?>>
@@ -99,30 +99,6 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                         <button class="btn gris" type="submit">Generar</button>
                     </form>
                 </details>
-            </div>
-        </details>
-
-        <!-- Datos de contacto (desplegable) -->
-        <details class="bloque">
-            <summary>Datos de contacto</summary>
-            <div class="bloque-cuerpo">
-                <div class="contacto-grid">
-                    <div class="dg-item"><span class="dg-label">Negocio</span><span class="dg-valor"><?= e($cliente['negocio_nombre']) ?></span></div>
-                    <div class="dg-item"><span class="dg-label">Teléfono</span><span class="dg-valor"><?= e($cliente['telefono']) ?: '—' ?></span></div>
-                    <div class="dg-item"><span class="dg-label">Dirección</span><span class="dg-valor"><?= e($cliente['direccion']) ?: '—' ?></span></div>
-                    <div class="dg-item"><span class="dg-label">Correo</span><span class="dg-valor"><?= e($cliente['correo']) ?: '—' ?></span></div>
-                </div>
-                <div class="acciones-rapidas centrado" style="margin-top:16px">
-                    <a class="btn gris" href="cliente_form.php?id=<?= (int)$id ?>">Editar cliente</a>
-                    <?php if ($esAdmin): ?>
-                    <form method="post" class="inline-form"
-                          onsubmit="return confirm('¿Eliminar este cliente y TODO su historial? Esta acción no se puede deshacer.')">
-                        <?= campo_csrf() ?>
-                        <input type="hidden" name="accion" value="eliminar_cliente">
-                        <button class="btn rojo" type="submit">Eliminar cliente</button>
-                    </form>
-                    <?php endif; ?>
-                </div>
             </div>
         </details>
 
