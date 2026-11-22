@@ -688,3 +688,17 @@ CREATE TABLE IF NOT EXISTS compra_items (
     FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
     INDEX idx_citem_compra (compra_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Que productos del catalogo distribuye cada proveedor (Etapa 1 del diseno de
+-- Proveedores/Reposicion). codigo_proveedor es el SKU propio del proveedor
+-- para ese producto (distinto de nuestro codigo de barra), opcional.
+CREATE TABLE IF NOT EXISTS producto_proveedor (
+    producto_id      INT NOT NULL,
+    proveedor_id     INT NOT NULL,
+    codigo_proveedor VARCHAR(40) NULL,
+    creado_en        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (producto_id, proveedor_id),
+    FOREIGN KEY (producto_id)  REFERENCES productos(id)   ON DELETE CASCADE,
+    FOREIGN KEY (proveedor_id) REFERENCES proveedores(id) ON DELETE CASCADE,
+    INDEX idx_pp_proveedor (proveedor_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -177,6 +177,18 @@ final class Producto
         );
     }
 
+    /** Autocompletar de productos para asignarlos a un proveedor (necesita el id, a diferencia de buscar_productos()). */
+    public static function buscarParaAsignar(string $q, int $limite = 15): array
+    {
+        return Database::todos(
+            "SELECT id, codigo, nombre
+               FROM productos
+              WHERE codigo LIKE ? OR nombre LIKE ?
+              ORDER BY (codigo = ?) DESC, nombre LIMIT $limite",
+            [$q . '%', '%' . $q . '%', $q]
+        );
+    }
+
     public static function porId(int $id): ?array
     {
         return Database::uno("SELECT * FROM productos WHERE id = ?", [$id]);
@@ -188,6 +200,17 @@ final class Producto
         return Database::uno(
             "SELECT id, nombre FROM productos WHERE codigo = ? AND id <> ?",
             [$codigo, $excluirId]
+        );
+    }
+
+    /** Proveedores asignados a este producto (solo lectura, se gestiona desde Compras → Proveedores). */
+    public static function proveedoresDe(int $productoId): array
+    {
+        return Database::todos(
+            "SELECT pr.id, pr.nombre, pp.codigo_proveedor
+               FROM producto_proveedor pp JOIN proveedores pr ON pr.id = pp.proveedor_id
+              WHERE pp.producto_id = ? ORDER BY pr.nombre",
+            [$productoId]
         );
     }
 

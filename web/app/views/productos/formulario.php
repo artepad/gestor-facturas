@@ -2,7 +2,8 @@
 /**
  * Vista de app/Controllers/ProductosController::formulario().
  * Variables disponibles: $usuario, $id, $prod, $deptos, $error, $errores (array
- * campo => mensaje), $autor, $titulo, $maxCodigo, $maxNombre, $maxDepto, $maxMonto.
+ * campo => mensaje), $autor, $titulo, $maxCodigo, $maxNombre, $maxDepto, $maxMonto,
+ * $proveedoresProducto.
  *
  * El catálogo es COMPARTIDO por los dos negocios: lo que se cambie acá se
  * ve en ambos locales al instante.
@@ -110,6 +111,22 @@ function clase_campo(array $errores, string $campo): string
                         </label>
                     </div>
                 </div>
+
+                <?php if ($id): ?>
+                <div class="campo">
+                    <label>Proveedores</label>
+                    <?php if ($proveedoresProducto): ?>
+                        <div class="lista-chips">
+                            <?php foreach ($proveedoresProducto as $pv): ?>
+                                <span class="chip-proveedor"><?= h($pv['nombre']) ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <p class="texto-tenue">Sin proveedores asignados.</p>
+                    <?php endif; ?>
+                    <small class="texto-tenue">Se gestiona desde Compras → Proveedores.</small>
+                </div>
+                <?php endif; ?>
 
                 <?php if ($autor): ?>
                     <p class="texto-tenue firma-cambio">

@@ -7,6 +7,7 @@ use App\Core\Request;
 use App\Core\View;
 use App\Models\Compra;
 use App\Models\Inventario;
+use App\Models\Producto;
 
 /**
  * Compras: registrar la mercadería que llega (suma stock si el negocio lo
@@ -59,6 +60,31 @@ final class ComprasController extends BaseController
                     \redirigir('compras.php?negocio_id=' . $neg . '&msg=proveedor');
                 }
 
+                if ($accion === 'asignar_producto') {
+                    $proveedorId = Request::entero('proveedor_id');
+                    $productoId = Request::entero('producto_id');
+                    $proveedor = Compra::proveedorPorId($proveedorId);
+                    $producto = $productoId ? Producto::porId($productoId) : null;
+                    if (!$proveedor) throw new \RuntimeException('Ese proveedor no existe.');
+                    if (!$producto) throw new \RuntimeException('Ese producto no existe.');
+                    $codigoProveedor = trim(Request::post('codigo_proveedor'));
+                    Compra::asignarProducto($proveedorId, $productoId, $codigoProveedor !== '' ? $codigoProveedor : null);
+                    \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'asignar_producto_proveedor', null,
+                        'Asignó ' . $producto['nombre'] . ' al proveedor ' . $proveedor['nombre'], null, 'producto', $productoId);
+                    \redirigir('compras.php?negocio_id=' . $neg . '&proveedor=' . $proveedorId);
+                }
+
+                if ($accion === 'quitar_producto') {
+                    $proveedorId = Request::entero('proveedor_id');
+                    $productoId = Request::entero('producto_id');
+                    $proveedor = Compra::proveedorPorId($proveedorId);
+                    if (!$proveedor) throw new \RuntimeException('Ese proveedor no existe.');
+                    Compra::quitarProducto($proveedorId, $productoId);
+                    \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'quitar_producto_proveedor', null,
+                        'Quitó un producto del proveedor ' . $proveedor['nombre'], null, 'producto', $productoId);
+                    \redirigir('compras.php?negocio_id=' . $neg . '&proveedor=' . $proveedorId);
+                }
+
                 if ($accion === 'compra') {
                     $fecha = preg_match('/^\d{4}-\d{2}-\d{2}$/', Request::post('fecha'))
                            ? Request::post('fecha') : date('Y-m-d');
@@ -108,9 +134,24 @@ final class ComprasController extends BaseController
         $detalle = $verId ? Compra::items($verId) : [];
         $facturas = Compra::facturasRecientes($negocioId);
 
+        $verProveedor = Request::entero('proveedor');
+        $proveedorActual = $verProveedor ? Compra::proveedorPorId($verProveedor) : null;
+        $productosProveedor = $proveedorActual ? Compra::productosDe($verProveedor) : [];
+
         View::render('compras/index', compact(
             'usuario', 'negocios', 'negocioId', 'error', 'aviso', 'controla', 'proveedores',
-            'compras', 'verId', 'detalle', 'facturas'
+            'compras', 'verId', 'detalle', 'facturas', 'verProveedor', 'proveedorActual', 'productosProveedor'
         ));
+    }
+
+    /** Autocompletar de productos para asignarlos a un proveedor (ver compras/index.php). */
+    public function buscarProductoJson(array $parametros = []): void
+    {
+        $this->exigirPermiso('productos');
+        require_once dirname(__DIR__, 2) . '/lib/db.php'; // responder_json()
+
+        $q = trim(Request::get('q'));
+        if ($q === '') \responder_json(['productos' => []]);
+        \responder_json(['productos' => Producto::buscarParaAsignar($q)]);
     }
 }

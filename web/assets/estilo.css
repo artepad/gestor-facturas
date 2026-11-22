@@ -331,6 +331,14 @@ tr:hover td { background: #eef5ff; }
 /* Evita que el nombre/chip de usuario se corte en dos líneas en la tabla */
 .col-nowrap { white-space: nowrap; }
 
+/* Proveedores asignados a un producto (solo lectura, ver
+   app/views/productos/formulario.php): mismo lenguaje de pastilla que
+   .chip-usuario, en un tono neutro (no es por persona). */
+.lista-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-proveedor { display: inline-block; font-weight: 700; font-size: 13px;
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+  color: #475569; background: #e2e8f0; }
+
 /* Chip de "Vendidos" (ver app/views/productos/listado.php): mismo lenguaje
    de pastilla que .chip-usuario, pero con el color de acento de la tabla
    (no es por usuario, es un dato que siempre queremos destacar). */
@@ -1774,6 +1782,18 @@ th.col-num { text-align: right; }
 .campo-error { display: block; color: var(--rojo); font-size: 12px; margin-top: 2px; }
 /* Firma de quien edito por ultima vez */
 .firma-cambio { margin: 14px 0 0; font-size: 12.5px; }
+
+/* Buscador de productos para asignarlos a un proveedor (Compras →
+   Proveedores → Productos): mismo patrón que .combo-depto (lista anclada
+   bajo el campo), pero con su propia clase porque busca por AJAX contra el
+   catálogo completo en vez de filtrar una lista fija en el cliente. */
+.combo-producto { position: relative; }
+.combo-producto-lista { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  background: #fff; border: 1px solid var(--borde); border-radius: 8px;
+  max-height: 240px; overflow-y: auto; box-shadow: 0 10px 28px rgba(0,0,0,.14); }
+.combo-producto-opcion { padding: 10px 14px; font-size: 13.5px; cursor: pointer; }
+.combo-producto-opcion:hover { background: #f2f6fa; }
+.combo-producto-vacio { margin: 0; padding: 10px 14px; font-size: 12.5px; color: var(--texto-tenue); }
 /* Producto oculto de la venta: se ve atenuado en el listado */
 .fila-inactiva td { opacity: .55; }
 

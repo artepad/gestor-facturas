@@ -23,6 +23,40 @@ final class Compra
         return \proveedores_de(Database::pdo(), $negocioId, $soloActivos);
     }
 
+    public static function proveedorPorId(int $id): ?array
+    {
+        return Database::uno('SELECT * FROM proveedores WHERE id = ?', [$id]);
+    }
+
+    /** Productos del catálogo que distribuye este proveedor (Etapa 1 de Proveedores). */
+    public static function productosDe(int $proveedorId): array
+    {
+        return Database::todos(
+            "SELECT p.id, p.codigo, p.nombre, p.departamento, pp.codigo_proveedor
+               FROM producto_proveedor pp JOIN productos p ON p.id = pp.producto_id
+              WHERE pp.proveedor_id = ? ORDER BY p.nombre",
+            [$proveedorId]
+        );
+    }
+
+    /** Asocia un producto a un proveedor (o actualiza su código de proveedor si ya estaba asociado). */
+    public static function asignarProducto(int $proveedorId, int $productoId, ?string $codigoProveedor): void
+    {
+        Database::consultar(
+            "INSERT INTO producto_proveedor (producto_id, proveedor_id, codigo_proveedor) VALUES (?,?,?)
+             ON DUPLICATE KEY UPDATE codigo_proveedor = VALUES(codigo_proveedor)",
+            [$productoId, $proveedorId, $codigoProveedor]
+        );
+    }
+
+    public static function quitarProducto(int $proveedorId, int $productoId): void
+    {
+        Database::consultar(
+            'DELETE FROM producto_proveedor WHERE proveedor_id = ? AND producto_id = ?',
+            [$proveedorId, $productoId]
+        );
+    }
+
     public static function crearProveedor(
         ?int $negocioId, string $nombre, ?string $rut, ?string $telefono, ?string $correo
     ): int {

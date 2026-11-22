@@ -966,6 +966,32 @@ ya lo hace mejor; se llega a `panel()`, `historial_productos.php` y
   - **Precio de costo y mayoreo también se validan ahora** (antes solo
     `precio_venta` se revisaba): deben ser un monto válido, no negativo y no
     mayor a `MAX_MONTO` si se completan (siguen siendo opcionales).
+- **Proveedores — Etapa 1: relación producto↔proveedor (2026-11-22)**: primer
+  paso del diseño de Proveedores/Reposición (ver conversación del dueño sobre
+  representantes de proveedores proponiendo pedidos — todavía no construido,
+  esto es solo la base). "Departamento" **no se tocó**: sigue siendo la
+  categoría del producto para reportes/promociones; "Proveedor" es un
+  concepto nuevo y aparte (quién lo distribuye), tabla puente
+  `producto_proveedor` (muchos a muchos, con `codigo_proveedor` opcional =
+  el SKU propio del proveedor para ese producto). Se gestiona **desde los
+  dos lados**, a pedido del dueño:
+  - **Completo, desde el Proveedor** (`compras.php?proveedor=ID`, dentro del
+    bloque "Proveedores" que ya existía): buscador de productos por AJAX
+    (`compras_producto_buscar.php` → `Producto::buscarParaAsignar()`, con
+    *debounce*, mismo patrón de UI que el combo de Departamento pero
+    filtrando el catálogo completo en el servidor en vez de una lista fija
+    en el cliente) para agregar, tabla de ya asignados con "Quitar".
+    `ComprasController::index()` maneja las acciones `asignar_producto`/
+    `quitar_producto` (`Compra::asignarProducto()` hace *upsert* — reasignar
+    solo actualiza `codigo_proveedor`, nunca duplica la fila gracias a la
+    llave primaria compuesta `(producto_id, proveedor_id)`).
+  - **Solo lectura, desde el Producto** (`producto_form.php`): chips con los
+    proveedores asignados (`Producto::proveedoresDe()`), sin poder editarlo
+    ahí — el aviso bajo los chips dice dónde se gestiona.
+  - Probado con `curl` directo (sin navegador, sin depender del `confirm()`
+    de JS que el entorno de prueba suprime): producto o proveedor
+    inexistente no inserta nada, reasignar actualiza sin duplicar, y quitar
+    sí borra la fila.
 
 **Unificar catálogos** (`herramienta_unificar_productos.php`, **solo admin**
 — mismo criterio que "Vaciar catálogo" e `historial_productos.php`: es una

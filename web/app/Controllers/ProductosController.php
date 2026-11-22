@@ -366,11 +366,14 @@ final class ProductosController extends BaseController
 
         $autor = ($id && $original) ? Producto::autorDe($id) : null;
         $titulo = $id ? 'Editar producto' : 'Nuevo producto';
+        // Solo lectura aquí: la relación se administra desde Compras → Proveedores
+        // (ver ComprasController::index(), acciones 'asignar_producto'/'quitar_producto').
+        $proveedoresProducto = $id ? Producto::proveedoresDe($id) : [];
 
         require_once dirname(__DIR__, 2) . '/lib/ui.php'; // icono()
         View::render('productos/formulario', compact(
             'usuario', 'id', 'prod', 'deptos', 'error', 'errores', 'autor', 'titulo',
-            'maxCodigo', 'maxNombre', 'maxDepto', 'maxMonto'
+            'maxCodigo', 'maxNombre', 'maxDepto', 'maxMonto', 'proveedoresProducto'
         ));
     }
 

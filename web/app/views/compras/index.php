@@ -7,7 +7,8 @@
  * panel (cabecera_dashboard/pie_dashboard), igual que el resto del sitio.
  *
  * Variables disponibles: $usuario, $negocios, $negocioId, $error, $aviso,
- * $controla, $proveedores, $compras, $verId, $detalle, $facturas.
+ * $controla, $proveedores, $compras, $verId, $detalle, $facturas,
+ * $verProveedor, $proveedorActual, $productosProveedor.
  */
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
@@ -173,7 +174,7 @@ placeholder="7801234567890 24 850
             <?php if ($proveedores): ?>
                 <div class="tabla-wrap">
                     <table>
-                        <thead><tr><th>Nombre</th><th>RUT</th><th>Teléfono</th><th>Correo</th></tr></thead>
+                        <thead><tr><th>Nombre</th><th>RUT</th><th>Teléfono</th><th>Correo</th><th></th></tr></thead>
                         <tbody>
                         <?php foreach ($proveedores as $p): ?>
                             <tr>
@@ -185,6 +186,7 @@ placeholder="7801234567890 24 850
                                 <td class="texto-tenue"><?= e($p['rut'] ?: '—') ?></td>
                                 <td class="texto-tenue"><?= e($p['telefono'] ?: '—') ?></td>
                                 <td class="texto-tenue"><?= e($p['correo'] ?: '—') ?></td>
+                                <td><a class="btn sm gris" href="compras.php?negocio_id=<?= $negocioId ?>&proveedor=<?= (int)$p['id'] ?>">Productos</a></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -220,5 +222,122 @@ placeholder="7801234567890 24 850
                 </div>
             </form>
         </details>
+
+        <?php if ($proveedorActual): ?>
+        <div class="panel">
+            <h2 class="panel-titulo">Productos de <?= e($proveedorActual['nombre']) ?></h2>
+            <?php if ($productosProveedor): ?>
+                <div class="tabla-wrap">
+                    <table>
+                        <thead><tr><th>Código</th><th>Producto</th><th>Código del proveedor</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($productosProveedor as $pp): ?>
+                            <tr>
+                                <td class="texto-tenue"><?= e($pp['codigo']) ?></td>
+                                <td><?= e($pp['nombre']) ?></td>
+                                <td class="texto-tenue"><?= e($pp['codigo_proveedor'] ?: '—') ?></td>
+                                <td>
+                                    <form method="post" onsubmit="return confirm('¿Quitar este producto del proveedor?')">
+                                        <?= campo_csrf() ?>
+                                        <input type="hidden" name="accion" value="quitar_producto">
+                                        <input type="hidden" name="negocio_id" value="<?= $negocioId ?>">
+                                        <input type="hidden" name="proveedor_id" value="<?= (int)$proveedorActual['id'] ?>">
+                                        <input type="hidden" name="producto_id" value="<?= (int)$pp['id'] ?>">
+                                        <button class="btn sm rojo" type="submit">Quitar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <p class="vacio">Todavía no tiene productos asignados.</p>
+            <?php endif; ?>
+
+            <form method="post" class="filtros">
+                <?= campo_csrf() ?>
+                <input type="hidden" name="accion" value="asignar_producto">
+                <input type="hidden" name="negocio_id" value="<?= $negocioId ?>">
+                <input type="hidden" name="proveedor_id" value="<?= (int)$proveedorActual['id'] ?>">
+                <input type="hidden" name="producto_id" id="comboProductoId">
+                <div class="campo" style="flex:1 1 260px">
+                    <label>Agregar producto</label>
+                    <div class="combo-producto" id="comboProducto">
+                        <input type="text" id="inputProducto" autocomplete="off"
+                               placeholder="Escribe el código o el nombre...">
+                        <div class="combo-producto-lista" id="listaComboProducto" hidden>
+                            <p class="combo-producto-vacio" hidden>Ningún producto coincide.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="campo">
+                    <label>Código del proveedor</label>
+                    <input type="text" name="codigo_proveedor" placeholder="Opcional" style="width:150px">
+                </div>
+                <div class="campo">
+                    <label>&nbsp;</label>
+                    <button class="btn" type="submit" id="btnAsignarProducto" disabled>Agregar</button>
+                </div>
+            </form>
+        </div>
+        <script>
+          // Buscador de productos para asignarlos al proveedor: mismo patrón que
+          // el combo de Departamento (Nuevo/Editar producto), pero busca por AJAX
+          // contra compras_producto_buscar.php (el catálogo es demasiado grande
+          // para filtrar una lista fija en el cliente).
+          (function () {
+            var caja = document.getElementById('comboProducto');
+            var input = document.getElementById('inputProducto');
+            var lista = document.getElementById('listaComboProducto');
+            var hiddenId = document.getElementById('comboProductoId');
+            var btn = document.getElementById('btnAsignarProducto');
+            if (!caja || !input || !lista || !hiddenId || !btn) return;
+            var avisoVacio = lista.querySelector('.combo-producto-vacio');
+            var timer = null;
+
+            function cerrar() { lista.hidden = true; }
+
+            function pintar(productos) {
+              lista.querySelectorAll('.combo-producto-opcion').forEach(function (n) { n.remove(); });
+              productos.forEach(function (p) {
+                var op = document.createElement('div');
+                op.className = 'combo-producto-opcion';
+                op.textContent = p.nombre + ' (' + p.codigo + ')';
+                op.addEventListener('mousedown', function (e) {
+                  e.preventDefault(); // no perder el foco antes del click
+                  input.value = p.nombre + ' (' + p.codigo + ')';
+                  hiddenId.value = p.id;
+                  btn.disabled = false;
+                  cerrar();
+                });
+                lista.insertBefore(op, avisoVacio);
+              });
+              avisoVacio.hidden = productos.length > 0;
+              lista.hidden = false;
+            }
+
+            function buscar(q) {
+              fetch('compras_producto_buscar.php?q=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (d) { pintar(d.productos || []); })
+                .catch(function () { /* sin conexión: no se rompe el formulario */ });
+            }
+
+            input.addEventListener('input', function () {
+              hiddenId.value = '';
+              btn.disabled = true;
+              var q = input.value.trim();
+              if (timer) clearTimeout(timer);
+              if (q.length < 2) { cerrar(); return; }
+              timer = setTimeout(function () { buscar(q); }, 250);
+            });
+            input.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+            document.addEventListener('click', function (e) {
+              if (!caja.contains(e.target)) cerrar();
+            });
+          })();
+        </script>
+        <?php endif; ?>
     </div>
     <?php pie_dashboard(); ?>

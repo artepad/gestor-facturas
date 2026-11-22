@@ -129,6 +129,7 @@ $ambos('/caja.php', function (): void {
 });
 $ambos('/inventario.php', [InventarioController::class, 'index']);
 $ambos('/compras.php', [ComprasController::class, 'index']);
+$ambos('/compras_producto_buscar.php', [ComprasController::class, 'buscarProductoJson']);
 $ambos('/promociones.php', [PromocionesController::class, 'index']);
 $ambos('/precios_fv.php', [PreciosFvController::class, 'index']);
 $ambos('/precios_fv_imprimir.php', [PreciosFvController::class, 'imprimir']);
