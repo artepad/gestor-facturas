@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS usuarios (
   rol           VARCHAR(20) NOT NULL DEFAULT 'vendedor',   -- ver lib/permisos.php
   pin_hash      VARCHAR(64) NULL,                          -- cerrojo local de la caja
   color         VARCHAR(7) NULL,                           -- identificador visual (#rrggbb), ver lib/ui.php
+  -- Solo para rol='representante' (ver lib/permisos.php): a que proveedor
+  -- pertenece. Sin FK inline: "proveedores" se define mucho mas abajo en
+  -- este archivo; la integridad la garantiza el codigo (se valida que el
+  -- proveedor exista antes de crear la cuenta), igual que producto_proveedor.
+  proveedor_id  INT NULL,
   creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

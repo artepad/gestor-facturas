@@ -35,6 +35,10 @@ final class Usuario
         return self::PALETA[0];
     }
 
+    /** Personal de la casa (admin/vendedor) para usuarios.php. Los representantes de
+     * proveedor (Etapa 2 de Proveedores) NO salen aquí — se gestionan aparte, desde
+     * Compras -> Proveedores (ver Usuario::representantesDe()), para que esta pantalla
+     * nunca pueda tocar por error una cuenta externa. */
     public static function todosConNegocios(): array
     {
         return Database::todos(
@@ -42,6 +46,7 @@ final class Usuario
                FROM usuarios u
                LEFT JOIN usuario_negocio un ON un.usuario_id = u.id
                LEFT JOIN negocios n ON n.id = un.negocio_id
+              WHERE u.rol <> 'representante'
               GROUP BY u.id ORDER BY u.nombre, u.email"
         );
     }
@@ -118,5 +123,58 @@ final class Usuario
     public static function eliminar(int $id): void
     {
         Database::consultar('DELETE FROM usuarios WHERE id = ?', [$id]);
+    }
+
+    // ---- Representantes de proveedor (Etapa 2 de Proveedores, gestionados
+    // desde Compras -> Proveedores, no desde esta pantalla de Usuarios) ----
+
+    /** Representantes de un proveedor, con las sucursales que cada uno puede ver. */
+    public static function representantesDe(int $proveedorId): array
+    {
+        return Database::todos(
+            "SELECT u.*, GROUP_CONCAT(n.nombre SEPARATOR ', ') AS negocios
+               FROM usuarios u
+               LEFT JOIN usuario_negocio un ON un.usuario_id = u.id
+               LEFT JOIN negocios n ON n.id = un.negocio_id
+              WHERE u.rol = 'representante' AND u.proveedor_id = ?
+              GROUP BY u.id ORDER BY u.nombre, u.email",
+            [$proveedorId]
+        );
+    }
+
+    /** El representante, solo si de verdad pertenece a ESE proveedor (evita tocar la cuenta de otro). */
+    public static function porIdYProveedor(int $id, int $proveedorId): ?array
+    {
+        return Database::uno(
+            "SELECT * FROM usuarios WHERE id = ? AND rol = 'representante' AND proveedor_id = ?",
+            [$id, $proveedorId]
+        );
+    }
+
+    public static function crearRepresentante(string $email, string $nombre, string $passwordHash, int $proveedorId): int
+    {
+        Database::consultar(
+            "INSERT INTO usuarios (email, nombre, rol, password_hash, proveedor_id)
+             VALUES (?, ?, 'representante', ?, ?)",
+            [$email, $nombre, $passwordHash, $proveedorId]
+        );
+        return (int)Database::pdo()->lastInsertId();
+    }
+
+    public static function actualizarRepresentante(int $id, string $email, string $nombre, int $proveedorId): void
+    {
+        Database::consultar(
+            "UPDATE usuarios SET email=?, nombre=?, proveedor_id=? WHERE id=? AND rol='representante'",
+            [$email, $nombre, $proveedorId, $id]
+        );
+    }
+
+    public static function actualizarRepresentanteConClave(
+        int $id, string $email, string $nombre, int $proveedorId, string $passwordHash
+    ): void {
+        Database::consultar(
+            "UPDATE usuarios SET email=?, nombre=?, proveedor_id=?, password_hash=? WHERE id=? AND rol='representante'",
+            [$email, $nombre, $proveedorId, $passwordHash, $id]
+        );
     }
 }

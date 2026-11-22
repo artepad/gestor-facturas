@@ -46,6 +46,11 @@ body { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
 .topbar-sub { font-size: 13px; font-weight: 400; opacity: .65;
   margin-left: 10px; padding-left: 10px;
   border-left: 1px solid rgba(255,255,255,.25); }
+/* Botón "Cerrar sesión" del portal de proveedor (Etapa 2 de Proveedores,
+   app/views/portal_proveedor/index.php): topbar sin sidebar ni reloj, así
+   que este es quien empuja el link a la derecha. */
+.topbar-salir { margin-left: auto; }
+
 /* Reloj en vivo del header (fecha + hora), discreto y a la derecha */
 .topbar-reloj { margin-left: auto; display: flex; align-items: center; gap: 8px;
   font-size: 13px; color: #cfd6dd; white-space: nowrap;

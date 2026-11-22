@@ -992,6 +992,46 @@ ya lo hace mejor; se llega a `panel()`, `historial_productos.php` y
     de JS que el entorno de prueba suprime): producto o proveedor
     inexistente no inserta nada, reasignar actualiza sin duplicar, y quitar
     sí borra la fila.
+- **Proveedores — Etapa 2: acceso del representante (2026-11-22)**: primera
+  cuenta **externa** a la casa (rol `representante`, `lib/permisos.php`) —
+  el vendedor de un proveedor entra desde su celular a un catálogo de solo
+  lectura de **su propio** proveedor (`PortalProveedorController` →
+  `portal_proveedor.php`), sin precios ni nada más de la casa. Decisiones
+  clave:
+  - `usuarios.proveedor_id` (nullable, solo se usa con rol `representante`;
+    sin FK inline porque `proveedores` se define más abajo en
+    `esquema.sql` — la integridad la valida el código, igual que
+    `producto_proveedor`). `PERMISOS['representante'] = ['portal_proveedor']`
+    y a propósito **no** está en `ROLES`/`roles_disponibles()` (ese selector
+    es solo para personal de la casa).
+  - Cuentas gestionadas **enteramente desde Compras → Proveedores**
+    (`ComprasController`, acciones `guardar_representante`/
+    `eliminar_representante`, panel "Representantes de {proveedor}" junto al
+    de productos) — nunca desde `usuarios.php`. Esa pantalla de personal
+    **excluye explícitamente** `rol='representante'` en tres capas
+    (`Usuario::todosConNegocios()` ya no las trae, `?editar=ID` las rechaza,
+    y el POST `guardar`/`eliminar` las rechaza aunque alguien arme la
+    petición a mano) — se encontró y cerró durante esta misma etapa que, sin
+    esa triple exclusión, abrir por error la ficha de un representante en
+    Usuarios y guardar sin tocar el selector de rol lo **promovía a
+    Administrador** en silencio (el `<select>` de esa pantalla ni siquiera
+    contempla la opción `representante`).
+  - `HomeController::index()` manda a un representante directo a
+    `portal_proveedor.php` apenas pisa `home.php` — cubre tanto el redirect
+    post-login como cualquier rebote de `exigirPermiso()` desde un módulo
+    de la casa (ambos caminos pasan por `home.php`), así nunca ve el menú
+    lateral completo del dashboard.
+  - `portal_proveedor/index.php` tiene layout **propio** (su propio
+    `<!doctype html>`, sin `cabecera_dashboard`/sidebar — reusa
+    `.franja`/`.topbar`/`.main`/`.main-scroll` de `estilo.css`, que no
+    dependen de `.app`/`.sidebar`), con un buscador simple en el cliente
+    (el catálogo de un proveedor es acotado, a diferencia del buscador de
+    Compras que sí va al servidor).
+  - Probado con `curl` directo: crear sin correo o con clave corta no
+    inserta nada; intentar editar/eliminar el representante de OTRO
+    proveedor falla (`Usuario::porIdYProveedor()`); una cuenta
+    `representante` que pide `usuarios.php` a mano (vía HTTP directo, sin
+    navegador) rebota con 302 sin ver nada.
 
 **Unificar catálogos** (`herramienta_unificar_productos.php`, **solo admin**
 — mismo criterio que "Vaciar catálogo" e `historial_productos.php`: es una

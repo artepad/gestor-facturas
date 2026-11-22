@@ -8,6 +8,7 @@ use App\Core\View;
 use App\Models\Compra;
 use App\Models\Inventario;
 use App\Models\Producto;
+use App\Models\Usuario;
 
 /**
  * Compras: registrar la mercadería que llega (suma stock si el negocio lo
@@ -85,6 +86,65 @@ final class ComprasController extends BaseController
                     \redirigir('compras.php?negocio_id=' . $neg . '&proveedor=' . $proveedorId);
                 }
 
+                if ($accion === 'guardar_representante') {
+                    $proveedorId = Request::entero('proveedor_id');
+                    $proveedor = Compra::proveedorPorId($proveedorId);
+                    if (!$proveedor) throw new \RuntimeException('Ese proveedor no existe.');
+
+                    $repId = Request::entero('id');
+                    $email = Request::post('email');
+                    $nombreRep = Request::post('nombre');
+                    $clave = (string)($_POST['clave'] ?? ''); // nunca se trimea una clave
+                    $negociosSel = array_map('intval', $_POST['negocios'] ?? []);
+
+                    if ($repId && !Usuario::porIdYProveedor($repId, $proveedorId)) {
+                        throw new \RuntimeException('Ese representante no pertenece a este proveedor.');
+                    }
+                    if ($email === '') {
+                        throw new \RuntimeException('El correo es obligatorio.');
+                    }
+                    if (!$repId && strlen($clave) < 6) {
+                        throw new \RuntimeException('La contraseña debe tener al menos 6 caracteres.');
+                    }
+
+                    try {
+                        if ($repId) {
+                            if ($clave !== '') {
+                                Usuario::actualizarRepresentanteConClave(
+                                    $repId, $email, $nombreRep, $proveedorId, password_hash($clave, PASSWORD_DEFAULT)
+                                );
+                            } else {
+                                Usuario::actualizarRepresentante($repId, $email, $nombreRep, $proveedorId);
+                            }
+                            \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'editar_representante', null,
+                                'Editó al representante ' . $nombreRep . ' de ' . $proveedor['nombre'], null, 'usuario', $repId);
+                        } else {
+                            $repId = Usuario::crearRepresentante($email, $nombreRep, password_hash($clave, PASSWORD_DEFAULT), $proveedorId);
+                            \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'crear_representante', null,
+                                'Creó al representante ' . $nombreRep . ' de ' . $proveedor['nombre'], null, 'usuario', $repId);
+                        }
+                        Usuario::reasignarNegocios($repId, $negociosSel);
+                    } catch (\Throwable $e) {
+                        throw new \RuntimeException(
+                            str_contains($e->getMessage(), 'Duplicate')
+                                ? 'Ya existe una cuenta con ese correo.'
+                                : 'Error al guardar el representante.'
+                        );
+                    }
+                    \redirigir('compras.php?negocio_id=' . $neg . '&proveedor=' . $proveedorId);
+                }
+
+                if ($accion === 'eliminar_representante') {
+                    $proveedorId = Request::entero('proveedor_id');
+                    $repId = Request::entero('id');
+                    $rep = Usuario::porIdYProveedor($repId, $proveedorId);
+                    if (!$rep) throw new \RuntimeException('Ese representante no existe para este proveedor.');
+                    Usuario::eliminar($repId);
+                    \registrar_auditoria(\App\Core\Database::pdo(), $usuario, 'productos', 'eliminar_representante', null,
+                        'Eliminó al representante ' . $rep['nombre'], null, 'usuario', $repId);
+                    \redirigir('compras.php?negocio_id=' . $neg . '&proveedor=' . $proveedorId);
+                }
+
                 if ($accion === 'compra') {
                     $fecha = preg_match('/^\d{4}-\d{2}-\d{2}$/', Request::post('fecha'))
                            ? Request::post('fecha') : date('Y-m-d');
@@ -137,10 +197,16 @@ final class ComprasController extends BaseController
         $verProveedor = Request::entero('proveedor');
         $proveedorActual = $verProveedor ? Compra::proveedorPorId($verProveedor) : null;
         $productosProveedor = $proveedorActual ? Compra::productosDe($verProveedor) : [];
+        $representantes = $proveedorActual ? Usuario::representantesDe($verProveedor) : [];
+        $editarRepId = Request::entero('editar_rep');
+        $editarRep = ($proveedorActual && $editarRepId) ? Usuario::porIdYProveedor($editarRepId, $verProveedor) : null;
+        if ($editarRep) $editarRep['negocios_ids'] = Usuario::negociosIdsDe((int)$editarRep['id']);
+        $negociosTodos = Usuario::negociosTodos();
 
         View::render('compras/index', compact(
             'usuario', 'negocios', 'negocioId', 'error', 'aviso', 'controla', 'proveedores',
-            'compras', 'verId', 'detalle', 'facturas', 'verProveedor', 'proveedorActual', 'productosProveedor'
+            'compras', 'verId', 'detalle', 'facturas', 'verProveedor', 'proveedorActual', 'productosProveedor',
+            'representantes', 'editarRep', 'negociosTodos'
         ));
     }
 

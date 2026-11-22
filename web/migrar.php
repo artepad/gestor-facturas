@@ -1005,4 +1005,9 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS producto_proveedor (
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 echo "  ~ tabla producto_proveedor lista\n";
 
+echo "\n[Proveedores: acceso del representante]\n";
+// Etapa 2 del diseno de Proveedores/Reposicion (ver web/CLAUDE.md): nuevo rol
+// 'representante' (lib/permisos.php). Solo se usa cuando rol='representante'.
+agregar_columna($pdo, 'usuarios', 'proveedor_id', "INT NULL");
+
 echo "\nListo. Migraciones aplicadas.\n";

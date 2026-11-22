@@ -30,12 +30,24 @@
 // secas. El Controlador decide adentro qué tanto puede hacer cada quien
 // mirando puede($usuario, 'gastos') (acceso completo) vs. solo
 // 'gastos_registrar' (crear nada más) — ver GastosController::formulario().
+// 'representante' (2026-11-22, Etapa 2 de Proveedores) = acceso EXTERNO para
+// un representante de un proveedor (ej. el vendedor de Coca-Cola): la unica
+// persona ajena a la casa que entra al sistema. Su unico modulo es
+// 'portal_proveedor' (catalogo de solo lectura de su propio proveedor, ver
+// PortalProveedorController) — al no estar en ninguna otra fila, puede() le
+// niega automaticamente cualquier otro modulo sin tener que tocar las demas
+// filas. Queda deliberadamente FUERA de ROLES/roles_disponibles() (abajo):
+// esa lista alimenta el selector de usuarios.php (personal de la casa), y un
+// representante no se crea ahi sino desde Compras -> Proveedores
+// (ComprasController), que es quien conoce a que proveedor pertenece.
 const PERMISOS = [
-    'admin'    => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'productos', 'herramientas', 'negocios', 'usuarios'],
-    'vendedor' => ['ventas', 'facturas', 'fiados', 'productos', 'herramientas', 'gastos_registrar'],
+    'admin'          => ['ventas', 'facturas', 'fiados', 'ingresos', 'gastos', 'productos', 'herramientas', 'negocios', 'usuarios'],
+    'vendedor'       => ['ventas', 'facturas', 'fiados', 'productos', 'herramientas', 'gastos_registrar'],
+    'representante'  => ['portal_proveedor'],
 ];
 
 // Etiquetas legibles de los roles (orden = orden en los formularios).
+// 'representante' no esta aca a proposito (ver nota de PERMISOS arriba).
 const ROLES = [
     'admin'    => 'Administrador',
     'vendedor' => 'Vendedor',

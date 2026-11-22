@@ -338,6 +338,92 @@ placeholder="7801234567890 24 850
             });
           })();
         </script>
+
+        <div class="panel">
+            <h2 class="panel-titulo">Representantes de <?= e($proveedorActual['nombre']) ?></h2>
+            <p class="texto-tenue">
+                Cuentas para que el vendedor de este proveedor entre desde su celular a ver
+                (solo ver, nunca editar) los productos que distribuye. Ver
+                <a href="portal_proveedor.php" target="_blank" rel="noopener">cómo se ve su portal</a>.
+            </p>
+            <?php if ($representantes): ?>
+                <div class="tabla-wrap">
+                    <table>
+                        <thead><tr><th>Nombre</th><th>Correo</th><th>Sucursales</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($representantes as $r): ?>
+                            <tr>
+                                <td><?= e($r['nombre']) ?></td>
+                                <td class="texto-tenue"><?= e($r['email']) ?></td>
+                                <td class="texto-tenue"><?= e($r['negocios'] ?: '—') ?></td>
+                                <td class="nowrap">
+                                    <a class="btn sm gris"
+                                       href="compras.php?negocio_id=<?= $negocioId ?>&proveedor=<?= (int)$proveedorActual['id'] ?>&editar_rep=<?= (int)$r['id'] ?>#formRepresentante">Editar</a>
+                                    <form method="post" class="inline-form" onsubmit="return confirm('¿Eliminar el acceso de este representante?')">
+                                        <?= campo_csrf() ?>
+                                        <input type="hidden" name="accion" value="eliminar_representante">
+                                        <input type="hidden" name="negocio_id" value="<?= $negocioId ?>">
+                                        <input type="hidden" name="proveedor_id" value="<?= (int)$proveedorActual['id'] ?>">
+                                        <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                        <button class="btn sm rojo" type="submit">Eliminar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <p class="vacio">Todavía no tiene representantes con acceso.</p>
+            <?php endif; ?>
+
+            <?php $rep = $editarRep ?: ['id' => 0, 'email' => '', 'nombre' => '', 'negocios_ids' => []]; ?>
+            <form method="post" class="filtros" id="formRepresentante">
+                <?= campo_csrf() ?>
+                <input type="hidden" name="accion" value="guardar_representante">
+                <input type="hidden" name="negocio_id" value="<?= $negocioId ?>">
+                <input type="hidden" name="proveedor_id" value="<?= (int)$proveedorActual['id'] ?>">
+                <input type="hidden" name="id" value="<?= (int)$rep['id'] ?>">
+                <div class="campo">
+                    <label>Nombre *</label>
+                    <input type="text" name="nombre" value="<?= e($rep['nombre']) ?>" required>
+                </div>
+                <div class="campo">
+                    <label>Correo *</label>
+                    <input type="email" name="email" value="<?= e($rep['email']) ?>" required>
+                </div>
+                <div class="campo">
+                    <label>Contraseña<?= $rep['id'] ? ' (en blanco = no cambiarla)' : ' *' ?></label>
+                    <input type="password" name="clave" autocomplete="new-password">
+                </div>
+                <div class="campo" style="flex-basis:100%">
+                    <label>Sucursales que puede ver</label>
+                    <?php if ($negociosTodos): ?>
+                        <div class="lista-check">
+                            <?php foreach ($negociosTodos as $n): ?>
+                                <label>
+                                    <input type="checkbox" name="negocios[]" value="<?= (int)$n['id'] ?>"
+                                        <?= in_array((int)$n['id'], $rep['negocios_ids'] ?? [], true) ? 'checked' : '' ?>>
+                                    <span><?= e($n['nombre']) ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <p class="campo-ayuda">Aún no hay sucursales creadas.</p>
+                    <?php endif; ?>
+                </div>
+                <div class="campo">
+                    <label>&nbsp;</label>
+                    <button class="btn" type="submit"><?= $rep['id'] ? 'Guardar cambios' : 'Crear acceso' ?></button>
+                </div>
+                <?php if ($rep['id']): ?>
+                    <div class="campo">
+                        <label>&nbsp;</label>
+                        <a class="btn gris" href="compras.php?negocio_id=<?= $negocioId ?>&proveedor=<?= (int)$proveedorActual['id'] ?>">Cancelar</a>
+                    </div>
+                <?php endif; ?>
+            </form>
+        </div>
         <?php endif; ?>
     </div>
     <?php pie_dashboard(); ?>

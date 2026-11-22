@@ -34,6 +34,7 @@ use App\Controllers\IngresosController;
 use App\Controllers\InventarioController;
 use App\Controllers\NegociosController;
 use App\Controllers\OfertasController;
+use App\Controllers\PortalProveedorController;
 use App\Controllers\PosApiController;
 use App\Controllers\PosController;
 use App\Controllers\PreciosFvController;
@@ -130,6 +131,7 @@ $ambos('/caja.php', function (): void {
 $ambos('/inventario.php', [InventarioController::class, 'index']);
 $ambos('/compras.php', [ComprasController::class, 'index']);
 $ambos('/compras_producto_buscar.php', [ComprasController::class, 'buscarProductoJson']);
+$ambos('/portal_proveedor.php', [PortalProveedorController::class, 'index']);
 $ambos('/promociones.php', [PromocionesController::class, 'index']);
 $ambos('/precios_fv.php', [PreciosFvController::class, 'index']);
 $ambos('/precios_fv_imprimir.php', [PreciosFvController::class, 'imprimir']);

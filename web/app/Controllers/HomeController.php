@@ -22,6 +22,15 @@ final class HomeController extends BaseController
         require_once dirname(__DIR__, 2) . '/lib/auth.php'; // negocios_visibles(), puede()
         require_once dirname(__DIR__, 2) . '/lib/ui.php';   // clp(), icono(), fecha_dmy()
 
+        // Una cuenta de representante de proveedor (Etapa 2 de Proveedores)
+        // nunca debe ver el dashboard de la casa: ni el tablero ni el menú
+        // lateral completo le dicen nada ni le sirven. Esto cubre tanto el
+        // redirect post-login como cualquier rebote de exigirPermiso() desde
+        // un módulo sin acceso (BaseController), porque ambos caen en home.php.
+        if (($usuario['rol'] ?? '') === 'representante') {
+            \redirigir('portal_proveedor.php');
+        }
+
         $verFacturas = \puede($usuario, 'facturas');
         $verFiados   = \puede($usuario, 'fiados');
         $verIngresos = \puede($usuario, 'ingresos');

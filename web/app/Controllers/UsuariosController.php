@@ -47,6 +47,12 @@ final class UsuariosController extends BaseController
 
                 if ($email === '') {
                     $error = 'El correo es obligatorio.';
+                } elseif ($uid && Usuario::rolDe($uid) === 'representante') {
+                    // Defensa en profundidad (ver nota de Usuario::todosConNegocios()):
+                    // aunque el formulario nunca ofrece este id, nada impide un POST
+                    // armado a mano con el id de un representante — se corta acá,
+                    // no solo ocultando el caso en la vista.
+                    $error = 'Esta cuenta es de un representante de proveedor: edítala desde Compras → Proveedores.';
                 } elseif (!$uid && strlen($clave) < 6) {
                     $error = 'La contraseña debe tener al menos 6 caracteres.';
                 } elseif ($degradaUltimoAdmin) {
@@ -79,16 +85,20 @@ final class UsuariosController extends BaseController
                 }
             } elseif ($accion === 'eliminar') {
                 $uid = Request::entero('id');
+                $rolDel = Usuario::rolDe($uid);
                 if ($uid === (int)$usuario['id']) {
                     $error = 'No puedes eliminar tu propio usuario.';
+                } elseif ($rolDel === 'representante') {
+                    // Las cuentas de representantes de proveedor no se tocan desde
+                    // acá (ver nota de Usuario::todosConNegocios()): se eliminan
+                    // desde Compras -> Proveedores, donde se valida a qué
+                    // proveedor pertenecen antes de borrar.
+                    $error = 'Esta cuenta es de un representante de proveedor: elimínala desde Compras → Proveedores.';
+                } elseif ($rolDel === 'admin' && Usuario::contarAdmins() <= 1) {
+                    $error = 'No puedes eliminar al único administrador.';
                 } else {
-                    $rolDel = Usuario::rolDe($uid);
-                    if ($rolDel === 'admin' && Usuario::contarAdmins() <= 1) {
-                        $error = 'No puedes eliminar al único administrador.';
-                    } else {
-                        Usuario::eliminar($uid);
-                        $exito = 'Usuario eliminado.';
-                    }
+                    Usuario::eliminar($uid);
+                    $exito = 'Usuario eliminado.';
                 }
             }
         }
@@ -99,6 +109,12 @@ final class UsuariosController extends BaseController
         $editar = null;
         if (Request::get('editar') !== '') {
             $editar = Usuario::porId(Request::entero('editar'));
+            // Blindaje: ni por URL a mano se puede traer acá una cuenta de
+            // representante (ver nota de Usuario::todosConNegocios()) — el
+            // selector de rol de este formulario ni siquiera la contempla.
+            if ($editar && $editar['rol'] === 'representante') {
+                $editar = null;
+            }
             if ($editar) {
                 $editar['negocios_ids'] = Usuario::negociosIdsDe((int)$editar['id']);
             }
