@@ -395,3 +395,529 @@ function consultar_catalogo(PDO $pdo, string $q, string $departamento = '', int 
     $st->execute($args);
     return $st->fetchAll();
 }
+
+/**
+ * Genera un .xlsx (formato Eleventa: Codigo/Producto/P. Costo/P. Venta/
+ * P. Mayoreo/Departamento/Tipo de venta) a partir de filas ['codigo','nombre',
+ * 'precio_costo','precio_venta','precio_mayoreo','departamento','tipo_venta'].
+ * Mismo criterio de "sin Composer ni PhpSpreadsheet" que parsear_excel_productos:
+ * un .xlsx es un .zip con XML adentro, armado acá a mano con ZipArchive.
+ * Devuelve los bytes del archivo (ZipArchive solo sabe escribir a una ruta real,
+ * así que se arma en un temporal y se lee de vuelta).
+ */
+function generar_excel_productos(array $filas): string
+{
+    $encabezados = ['Codigo', 'Producto', 'P. Costo', 'P. Venta', 'P. Mayoreo', 'Departamento', 'Tipo de venta'];
+    $columnas = ['codigo', 'nombre', 'precio_costo', 'precio_venta', 'precio_mayoreo', 'departamento', 'tipo_venta'];
+
+    $compartidas = [];
+    $idx = function (string $s) use (&$compartidas): int {
+        $i = array_search($s, $compartidas, true);
+        if ($i !== false) return $i;
+        $compartidas[] = $s;
+        return count($compartidas) - 1;
+    };
+    $celdaXml = function (int $col, int $fila, $valor) use ($idx): string {
+        $ref = chr(65 + $col) . $fila;
+        if ($valor === null || $valor === '') return "<c r=\"$ref\"/>";
+        if (is_numeric($valor)) return "<c r=\"$ref\"><v>$valor</v></c>";
+        return "<c r=\"$ref\" t=\"s\"><v>" . $idx((string)$valor) . "</v></c>";
+    };
+
+    $filasXml = '<row r="1">';
+    foreach ($encabezados as $c => $texto) $filasXml .= $celdaXml($c, 1, $texto);
+    $filasXml .= '</row>';
+    foreach ($filas as $i => $f) {
+        $filasXml .= '<row r="' . ($i + 2) . '">';
+        foreach ($columnas as $c => $campo) {
+            $valor = $f[$campo] ?? null;
+            // La BD guarda los precios con ".00" (columnas DECIMAL), pero el CLP no
+            // tiene centavos y _prod_precio() interpreta ese punto como separador de
+            // miles al reimportar (690.00 -> 69000). Se escribe como entero para que
+            // el ciclo exportar->reimportar no multiplique el precio por 100.
+            if (in_array($campo, ['precio_costo', 'precio_venta', 'precio_mayoreo'], true)
+                && $valor !== null && $valor !== '') {
+                $valor = (int)round((float)$valor);
+            }
+            $filasXml .= $celdaXml($c, $i + 2, $valor);
+        }
+        $filasXml .= '</row>';
+    }
+
+    $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . "<sheetData>$filasXml</sheetData></worksheet>";
+
+    $sst = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'
+        . count($compartidas) . '" uniqueCount="' . count($compartidas) . '">';
+    foreach ($compartidas as $s) {
+        $sst .= '<si><t xml:space="preserve">' . htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</t></si>';
+    }
+    $sst .= '</sst>';
+
+    $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        . '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
+        . '</Types>';
+
+    $rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        . '</Relationships>';
+
+    $workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        . 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        . '<sheets><sheet name="Catalogo" sheetId="1" r:id="rId1"/></sheets></workbook>';
+
+    $workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>'
+        . '</Relationships>';
+
+    $tmp = tempnam(sys_get_temp_dir(), 'catalogo_xlsx_');
+    $zip = new ZipArchive();
+    if ($zip->open($tmp, ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('No se pudo generar el archivo Excel.');
+    }
+    $zip->addFromString('[Content_Types].xml', $contentTypes);
+    $zip->addFromString('_rels/.rels', $rootRels);
+    $zip->addFromString('xl/workbook.xml', $workbook);
+    $zip->addFromString('xl/_rels/workbook.xml.rels', $workbookRels);
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
+    $zip->addFromString('xl/sharedStrings.xml', $sst);
+    $zip->close();
+
+    $bytes = file_get_contents($tmp);
+    unlink($tmp);
+    return $bytes;
+}
+
+/** Catálogo completo (todos los productos, cualquier estado), para exportar a Excel. */
+function catalogo_completo(PDO $pdo): array
+{
+    return $pdo->query(
+        "SELECT codigo, nombre, precio_costo, precio_venta, precio_mayoreo, departamento, tipo_venta
+           FROM productos ORDER BY nombre"
+    )->fetchAll();
+}
+
+/**
+ * Unificar catálogos de dos negocios (ej. cuando cada local trae su propio
+ * Excel de Eleventa con productos y precios distintos). Compara por código de
+ * barras primero; lo que no calza por código se vuelve a comparar por nombre
+ * normalizado, para detectar el mismo producto con códigos distintos.
+ *
+ * Nunca escribe en `productos` directamente: arma una comparación que el
+ * usuario revisa y decide (tabla `producto_unificaciones` +
+ * `producto_unificacion_items`), y solo al confirmar (aplicar_unificacion)
+ * se escribe el catálogo real.
+ */
+
+/** Normaliza un nombre de producto para comparar: minúsculas, sin tildes, sin espacios dobles. */
+function _prod_norm_nombre(string $s): string
+{
+    $s = trim(mb_strtolower($s, 'UTF-8'));
+    $s = strtr($s, ['á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ñ'=>'n','ü'=>'u']);
+    $s = preg_replace('/[^a-z0-9 ]/', ' ', $s);
+    return trim(preg_replace('/\s+/', ' ', $s));
+}
+
+/** ¿Dos montos son iguales? (null y 0 no son el mismo valor; tolera centavos). */
+function _prod_montos_iguales(?float $a, ?float $b): bool
+{
+    if ($a === null || $b === null) return $a === $b;
+    return abs($a - $b) < 0.01;
+}
+
+/** El más largo de dos nombres (el más descriptivo), como sugerencia. */
+function _prod_nombre_mas_largo(string $a, string $b): string
+{
+    return mb_strlen(trim($a)) >= mb_strlen(trim($b)) ? trim($a) : trim($b);
+}
+
+/**
+ * Compara los productos de dos Excel ya parseados (ver parsear_excel_productos).
+ * Devuelve ['igual'=>[...], 'conflicto_precio'=>[...], 'conflicto_nombre'=>[...],
+ * 'solo_a'=>[...], 'solo_b'=>[...], 'revisar'=>[...]]; cada elemento trae los
+ * campos "_a"/"_b" tal como venían, y en 'igual'/'solo_a'/'solo_b' además los
+ * "_final" ya resueltos (no hay nada que decidir). Los demás grupos quedan con
+ * "_final" en null: el usuario los resuelve en la pantalla de revisión.
+ *
+ * Un producto con el mismo código pero precio de venta distinto va a
+ * 'conflicto_precio' aunque el nombre TAMBIÉN difiera — el precio es el dato
+ * más sensible y se prioriza sobre el nombre (se resuelve primero, en su
+ * propia tabla). Solo si el precio es igual y únicamente cambia el nombre cae
+ * en 'conflicto_nombre' (menor riesgo).
+ */
+function comparar_catalogos(array $filasA, array $filasB): array
+{
+    $porCodigoA = [];
+    foreach ($filasA as $f) $porCodigoA[$f['codigo']] = $f;
+    $porCodigoB = [];
+    foreach ($filasB as $f) $porCodigoB[$f['codigo']] = $f;
+
+    $resultado = ['igual' => [], 'conflicto_precio' => [], 'conflicto_nombre' => [],
+        'solo_a' => [], 'solo_b' => [], 'revisar' => []];
+
+    $campos = ['nombre', 'precio_costo', 'precio_venta', 'precio_mayoreo', 'departamento', 'tipo_venta'];
+    $armarItem = function (?array $a, ?array $b) use ($campos): array {
+        $item = [];
+        foreach ($campos as $c) {
+            $item[$c . '_a'] = $a[$c] ?? null;
+            $item[$c . '_b'] = $b[$c] ?? null;
+        }
+        $item['codigo_a'] = $a['codigo'] ?? null;
+        $item['codigo_b'] = $b['codigo'] ?? null;
+        return $item;
+    };
+
+    // 1) Códigos presentes en los dos Excel: ¿son el mismo dato o hay conflicto?
+    $soloA = $porCodigoA;
+    $soloB = $porCodigoB;
+    foreach ($porCodigoA as $codigo => $a) {
+        if (!isset($porCodigoB[$codigo])) continue;
+        $b = $porCodigoB[$codigo];
+        unset($soloA[$codigo], $soloB[$codigo]);
+
+        $item = $armarItem($a, $b);
+        $mismoNombre = _prod_norm_nombre($a['nombre']) === _prod_norm_nombre($b['nombre']);
+        $mismoPrecio = _prod_montos_iguales($a['precio_venta'], $b['precio_venta']);
+
+        if ($mismoNombre && $mismoPrecio) {
+            $item['codigo_final']         = $codigo;
+            $item['nombre_final']         = $a['nombre'];
+            $item['precio_costo_final']   = $a['precio_costo'];
+            $item['precio_venta_final']   = $a['precio_venta'];
+            $item['precio_mayoreo_final'] = $a['precio_mayoreo'];
+            $item['departamento_final']   = $a['departamento'];
+            $item['tipo_venta_final']     = $a['tipo_venta'];
+            $resultado['igual'][] = $item;
+        } elseif (!$mismoPrecio) {
+            $item['nombre_sugerido'] = _prod_nombre_mas_largo($a['nombre'], $b['nombre']);
+            $resultado['conflicto_precio'][] = $item;
+        } else {
+            $item['nombre_sugerido'] = _prod_nombre_mas_largo($a['nombre'], $b['nombre']);
+            $resultado['conflicto_nombre'][] = $item;
+        }
+    }
+
+    // 2) Entre lo que quedó solo en un lado, busca el mismo nombre en el otro
+    //    (mismo producto, código distinto o mal tipeado) antes de darlo por
+    //    exclusivo de ese negocio.
+    $nombreANorm = [];
+    foreach ($soloA as $codigo => $a) $nombreANorm[_prod_norm_nombre($a['nombre'])][] = $codigo;
+    foreach ($soloB as $codigo => $b) {
+        $norm = _prod_norm_nombre($b['nombre']);
+        if (empty($nombreANorm[$norm])) continue;
+        $codigoA = array_shift($nombreANorm[$norm]);
+        $a = $soloA[$codigoA];
+        unset($soloA[$codigoA], $soloB[$codigo]);
+
+        $item = $armarItem($a, $b);
+        $item['nombre_sugerido'] = _prod_nombre_mas_largo($a['nombre'], $b['nombre']);
+        $resultado['revisar'][] = $item;
+    }
+
+    // 3) Lo que sigue sin pareja es exclusivo de un negocio.
+    foreach ($soloA as $codigo => $a) {
+        $item = $armarItem($a, null);
+        $item['codigo_final']         = $codigo;
+        $item['nombre_final']         = $a['nombre'];
+        $item['precio_costo_final']   = $a['precio_costo'];
+        $item['precio_venta_final']   = $a['precio_venta'];
+        $item['precio_mayoreo_final'] = $a['precio_mayoreo'];
+        $item['departamento_final']   = $a['departamento'];
+        $item['tipo_venta_final']     = $a['tipo_venta'];
+        $resultado['solo_a'][] = $item;
+    }
+    foreach ($soloB as $codigo => $b) {
+        $item = $armarItem(null, $b);
+        $item['codigo_final']         = $codigo;
+        $item['nombre_final']         = $b['nombre'];
+        $item['precio_costo_final']   = $b['precio_costo'];
+        $item['precio_venta_final']   = $b['precio_venta'];
+        $item['precio_mayoreo_final'] = $b['precio_mayoreo'];
+        $item['departamento_final']   = $b['departamento'];
+        $item['tipo_venta_final']     = $b['tipo_venta'];
+        $resultado['solo_b'][] = $item;
+    }
+
+    return $resultado;
+}
+
+/** Crea una unificación (cabecera + ítems) a partir de una comparación ya armada. Devuelve el id. */
+function crear_unificacion(PDO $pdo, int $negocioAId, int $negocioBId, array $comparacion, array $meta): int
+{
+    $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare(
+            "INSERT INTO producto_unificaciones
+               (negocio_a_id, negocio_b_id, archivo_a_nombre, archivo_b_nombre,
+                total_igual, total_conflicto_precio, total_conflicto_nombre,
+                total_solo_a, total_solo_b, total_revisar, creado_por)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        $st->execute([
+            $negocioAId, $negocioBId,
+            mb_substr((string)($meta['archivo_a'] ?? ''), 0, 255),
+            mb_substr((string)($meta['archivo_b'] ?? ''), 0, 255),
+            count($comparacion['igual']), count($comparacion['conflicto_precio']),
+            count($comparacion['conflicto_nombre']),
+            count($comparacion['solo_a']), count($comparacion['solo_b']), count($comparacion['revisar']),
+            $meta['usuario_id'] ?? null,
+        ]);
+        $id = (int)$pdo->lastInsertId();
+
+        $campos = ['codigo_a','codigo_b','nombre_a','nombre_b',
+            'precio_costo_a','precio_costo_b','precio_venta_a','precio_venta_b',
+            'precio_mayoreo_a','precio_mayoreo_b','departamento_a','departamento_b',
+            'tipo_venta_a','tipo_venta_b'];
+        $camposFinal = ['codigo_final','nombre_final','precio_costo_final',
+            'precio_venta_final','precio_mayoreo_final','departamento_final','tipo_venta_final'];
+
+        $ins = $pdo->prepare(
+            "INSERT INTO producto_unificacion_items
+               (unificacion_id, grupo, " . implode(',', $campos) . ", nombre_sugerido,
+                " . implode(',', $camposFinal) . ", resuelto)
+             VALUES (?,?," . implode(',', array_fill(0, count($campos), '?')) . ",?,"
+                            . implode(',', array_fill(0, count($camposFinal), '?')) . ",?)"
+        );
+
+        foreach (['igual', 'conflicto_precio', 'conflicto_nombre', 'solo_a', 'solo_b', 'revisar'] as $grupo) {
+            $resuelto = in_array($grupo, ['igual', 'solo_a', 'solo_b'], true) ? 1 : 0;
+            foreach ($comparacion[$grupo] as $item) {
+                $valores = [$id, $grupo];
+                foreach ($campos as $c) $valores[] = $item[$c] ?? null;
+                $valores[] = $item['nombre_sugerido'] ?? null;
+                foreach ($camposFinal as $c) $valores[] = $resuelto ? ($item[$c] ?? null) : null;
+                $valores[] = $resuelto;
+                $ins->execute($valores);
+            }
+        }
+
+        $pdo->commit();
+        return $id;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/** La cabecera de una unificación (con nombres de negocios/usuario), o null si no existe. */
+function obtener_unificacion(PDO $pdo, int $id): ?array
+{
+    $st = $pdo->prepare(
+        "SELECT u.*, na.nombre AS negocio_a_nombre, nb.nombre AS negocio_b_nombre,
+                uc.nombre AS creado_por_nombre, ua.nombre AS aplicado_por_nombre
+           FROM producto_unificaciones u
+           JOIN negocios na ON na.id = u.negocio_a_id
+           JOIN negocios nb ON nb.id = u.negocio_b_id
+      LEFT JOIN usuarios uc ON uc.id = u.creado_por
+      LEFT JOIN usuarios ua ON ua.id = u.aplicado_por
+          WHERE u.id = ?"
+    );
+    $st->execute([$id]);
+    $u = $st->fetch();
+    return $u ?: null;
+}
+
+/** Ítems de una unificación, opcionalmente filtrados por grupo. */
+function items_unificacion(PDO $pdo, int $id, ?string $grupo = null): array
+{
+    $sql = "SELECT * FROM producto_unificacion_items WHERE unificacion_id = ?";
+    $args = [$id];
+    if ($grupo !== null) { $sql .= " AND grupo = ?"; $args[] = $grupo; }
+    $sql .= " ORDER BY id";
+    $st = $pdo->prepare($sql);
+    $st->execute($args);
+    return $st->fetchAll();
+}
+
+/** Cuántos ítems (conflicto/revisar) todavía no tienen una decisión. */
+function contar_pendientes_unificacion(PDO $pdo, int $id): int
+{
+    $st = $pdo->prepare(
+        "SELECT COUNT(*) FROM producto_unificacion_items WHERE unificacion_id = ? AND resuelto = 0"
+    );
+    $st->execute([$id]);
+    return (int)$st->fetchColumn();
+}
+
+/**
+ * Guarda la decisión del usuario sobre un ítem en conflicto o a revisar.
+ * $decision: 'a' (usar los datos del negocio A), 'b' (usar los del B),
+ * 'personalizado' (nombre y/o precio propios, solo para 'conflicto_precio'/
+ * 'conflicto_nombre'), o 'distinto' (son productos distintos, solo para
+ * 'revisar': cada código entra por separado, como si nunca se hubieran
+ * emparejado).
+ */
+function resolver_item_unificacion(PDO $pdo, int $itemId, string $decision, array $personalizado = []): void
+{
+    $item = $pdo->prepare("SELECT * FROM producto_unificacion_items WHERE id = ?");
+    $item->execute([$itemId]);
+    $it = $item->fetch();
+    if (!$it) throw new RuntimeException('El producto a resolver ya no existe.');
+
+    if ($decision === 'distinto') {
+        if ($it['grupo'] !== 'revisar') {
+            throw new RuntimeException('Esa opción solo aplica a los productos marcados "a revisar".');
+        }
+        $pdo->prepare("UPDATE producto_unificacion_items SET decision = 'distinto', resuelto = 1 WHERE id = ?")
+            ->execute([$itemId]);
+        return;
+    }
+
+    if ($decision === 'a' || $decision === 'b') {
+        $suf = $decision;
+        $codigo = $it["codigo_$suf"] ?? null;
+        if ($codigo === null) {
+            throw new RuntimeException('Ese negocio no tiene este producto; elige la otra opción.');
+        }
+        $pdo->prepare(
+            "UPDATE producto_unificacion_items SET decision = ?, resuelto = 1,
+                codigo_final = ?, nombre_final = ?, precio_costo_final = ?,
+                precio_venta_final = ?, precio_mayoreo_final = ?,
+                departamento_final = ?, tipo_venta_final = ?
+              WHERE id = ?"
+        )->execute([
+            $decision, $codigo, $it["nombre_$suf"], $it["precio_costo_$suf"],
+            $it["precio_venta_$suf"], $it["precio_mayoreo_$suf"],
+            $it["departamento_$suf"], $it["tipo_venta_$suf"], $itemId,
+        ]);
+        return;
+    }
+
+    if ($decision === 'personalizado') {
+        if (!in_array($it['grupo'], ['conflicto_precio', 'conflicto_nombre'], true)) {
+            throw new RuntimeException('Personalizar solo está disponible para los conflictos de precio o de nombre.');
+        }
+        $nombre = trim((string)($personalizado['nombre'] ?? ''));
+        // En un conflicto de nombre el precio ya es el mismo en los dos negocios
+        // (es justamente por qué cayó ahí): si no se escribió uno nuevo, se deja
+        // ese precio tal cual y solo se decide el nombre.
+        $precioVenta = $personalizado['precio_venta'] ?? null;
+        if ($precioVenta === null && $it['grupo'] === 'conflicto_nombre') {
+            $precioVenta = $it['precio_venta_a'];
+        }
+        if ($nombre === '' || $precioVenta === null || $precioVenta < 0) {
+            throw new RuntimeException('Ingresa un nombre y un precio de venta válidos.');
+        }
+        // El resto de los datos (costo, mayoreo, departamento, tipo de venta) se
+        // completan con los del negocio A, que siempre existen en un conflicto.
+        $pdo->prepare(
+            "UPDATE producto_unificacion_items SET decision = 'personalizado', resuelto = 1,
+                codigo_final = codigo_a, nombre_final = ?, precio_venta_final = ?,
+                precio_costo_final = precio_costo_a, precio_mayoreo_final = precio_mayoreo_a,
+                departamento_final = departamento_a, tipo_venta_final = tipo_venta_a
+              WHERE id = ?"
+        )->execute([$nombre, $precioVenta, $itemId]);
+        return;
+    }
+
+    throw new RuntimeException('Decisión no reconocida.');
+}
+
+/** Descarta una unificación en curso: no toca el catálogo real. */
+function descartar_unificacion(PDO $pdo, int $id): void
+{
+    $pdo->prepare("UPDATE producto_unificaciones SET estado = 'descartada' WHERE id = ? AND estado = 'revisando'")
+        ->execute([$id]);
+}
+
+/**
+ * Aplica una unificación ya resuelta: escribe el catálogo real (upsert por
+ * código, igual que reemplazar_catalogo — nunca borra) en una sola
+ * transacción. Lanza RuntimeException si queda algo sin decidir.
+ * Devuelve ['nuevos'=>N, 'actualizados'=>M].
+ */
+function aplicar_unificacion(PDO $pdo, int $id, array $meta): array
+{
+    $unif = obtener_unificacion($pdo, $id);
+    if (!$unif) throw new RuntimeException('La unificación no existe.');
+    if ($unif['estado'] !== 'revisando') throw new RuntimeException('Esta unificación ya fue aplicada o descartada.');
+    if (contar_pendientes_unificacion($pdo, $id) > 0) {
+        throw new RuntimeException('Todavía hay productos sin resolver. Decide cada conflicto antes de aplicar.');
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $nuevos = 0;
+        $actualizados = 0;
+        $usuarioId = $meta['usuario_id'] ?? null;
+
+        $existe = $pdo->prepare("SELECT id FROM productos WHERE codigo = ?");
+        $insertar = $pdo->prepare(
+            "INSERT INTO productos
+               (codigo, nombre, precio_costo, precio_venta, precio_mayoreo,
+                departamento, tipo_venta, creado_por, actualizado_por)
+             VALUES (?,?,?,?,?,?,?,?,?)"
+        );
+        $actualizar = $pdo->prepare(
+            "UPDATE productos SET nombre=?, precio_costo=?, precio_venta=?, precio_mayoreo=?,
+                departamento=?, tipo_venta=?, actualizado_por=? WHERE codigo=?"
+        );
+
+        $guardarFila = function (string $codigo, string $nombre, ?float $costo, ?float $venta,
+                                  ?float $mayoreo, ?string $depto, ?string $tipo)
+            use ($existe, $insertar, $actualizar, $usuarioId, &$nuevos, &$actualizados): void {
+            $existe->execute([$codigo]);
+            if ($existe->fetch()) {
+                $actualizar->execute([$nombre, $costo, $venta, $mayoreo, $depto, $tipo, $usuarioId, $codigo]);
+                $actualizados++;
+            } else {
+                $insertar->execute([$codigo, $nombre, $costo, $venta, $mayoreo, $depto, $tipo, $usuarioId, $usuarioId]);
+                $nuevos++;
+            }
+        };
+
+        foreach (items_unificacion($pdo, $id) as $it) {
+            if ($it['grupo'] === 'revisar' && $it['decision'] === 'distinto') {
+                // Resultaron ser dos productos distintos: cada código entra por su cuenta.
+                $guardarFila($it['codigo_a'], $it['nombre_a'], $it['precio_costo_a'],
+                    $it['precio_venta_a'], $it['precio_mayoreo_a'], $it['departamento_a'], $it['tipo_venta_a']);
+                $guardarFila($it['codigo_b'], $it['nombre_b'], $it['precio_costo_b'],
+                    $it['precio_venta_b'], $it['precio_mayoreo_b'], $it['departamento_b'], $it['tipo_venta_b']);
+                continue;
+            }
+            $guardarFila($it['codigo_final'], $it['nombre_final'], $it['precio_costo_final'],
+                $it['precio_venta_final'], $it['precio_mayoreo_final'],
+                $it['departamento_final'], $it['tipo_venta_final']);
+        }
+
+        $pdo->prepare(
+            "UPDATE producto_unificaciones
+                SET estado = 'aplicada', aplicado_por = ?, aplicado_en = NOW(),
+                    total_nuevos = ?, total_actualizados = ?
+              WHERE id = ?"
+        )->execute([$usuarioId, $nuevos, $actualizados, $id]);
+
+        $pdo->commit();
+        return ['nuevos' => $nuevos, 'actualizados' => $actualizados];
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/** Últimas N unificaciones (cualquier estado), para el historial. */
+function historial_unificaciones(PDO $pdo, int $limite = 8): array
+{
+    $st = $pdo->prepare(
+        "SELECT u.*, na.nombre AS negocio_a_nombre, nb.nombre AS negocio_b_nombre,
+                uc.nombre AS creado_por_nombre
+           FROM producto_unificaciones u
+           JOIN negocios na ON na.id = u.negocio_a_id
+           JOIN negocios nb ON nb.id = u.negocio_b_id
+      LEFT JOIN usuarios uc ON uc.id = u.creado_por
+       ORDER BY u.creado_en DESC, u.id DESC LIMIT $limite"
+    );
+    $st->execute();
+    return $st->fetchAll();
+}

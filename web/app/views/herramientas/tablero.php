@@ -39,13 +39,6 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
                 <h3>Etiquetas de Ofertas</h3>
                 <p>Crea etiquetas de oferta llamativas: descuentos, %, 3x y producto del día.</p>
             </a>
-
-            <a class="herramienta-card" href="herramienta_productos.php">
-                <span class="h-ic"><?= icono('inventario') ?></span>
-                <h3>Base de Datos de Productos</h3>
-                <p>Carga el catálogo de Eleventa (Excel) para que el Gestor de Etiquetas
-                   busque por código de barras.</p>
-            </a>
         </div>
     </div>
     <?php pie_dashboard(); ?>

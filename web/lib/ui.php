@@ -40,12 +40,14 @@ function icono(string $nombre, string $extra = ''): string
         'correo'    => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
         'oferta'    => '<path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
         'inventario'=> '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/>',
+        'productos' => '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/>',
         'lupa'      => '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
         'codigo-barras' => '<path d="M3 5v14M6 5v14M9.5 5v14M13 5v14M16 5v14M18 5v14M21 5v14"/>',
         'ventas'    => '<circle cx="9" cy="20" r="1.6" fill="currentColor" stroke="none"/><circle cx="18" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M2 3h3l2.7 12.4a1.5 1.5 0 0 0 1.5 1.1h8.4a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/>',
         'caja'      => '<path d="M3 9l1.5-4.5A1.5 1.5 0 0 1 6 3.5h12a1.5 1.5 0 0 1 1.5 1L21 9"/><rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M9 13h6"/>',
         'subir'     => '<path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/>',
         'activar'   => '<path d="M12 2v6"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+        'comparar'  => '<circle cx="9" cy="12" r="6.5"/><circle cx="15" cy="12" r="6.5"/>',
     ];
     $d = $svg[$nombre] ?? '';
     $clase = 'ic' . ($extra !== '' ? ' ' . $extra : '');
@@ -120,6 +122,7 @@ function cabecera_dashboard(array $usuario, string $activo = 'facturas', string 
         <nav class="nav">
           <?= $item('home', 'Home', 'home.php') ?>
           <?php if (puede($usuario, 'ventas')): ?><?= $item('ventas', 'Ventas', 'pos.php') ?><?php endif; ?>
+          <?php if (puede($usuario, 'productos')): ?><?= $item('productos', 'Productos', 'productos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'ingresos')): ?><?= $item('ingresos', 'Ingresos', 'ingresos.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'facturas')): ?><?= $item('facturas', 'Facturas', 'panel_facturas.php') ?><?php endif; ?>
           <?php if (puede($usuario, 'gastos')): ?><?= $item('gastos', 'Gastos', 'gastos.php') ?>
@@ -234,6 +237,50 @@ function pie_dashboard(): void
     <?php
 }
 
+/** Aclara un color #rrggbb mezclándolo con blanco (0 = igual, 1 = blanco puro). Para el fondo suave del chip de usuario. */
+function color_mas_claro(string $hex, float $mezcla = 0.85): string
+{
+    $hex = ltrim($hex, '#');
+    if (strlen($hex) !== 6) return '#e5e7eb';
+    [$r, $g, $b] = [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
+    $clarear = fn($c) => (int)round($c + (255 - $c) * $mezcla);
+    return sprintf('#%02x%02x%02x', $clarear($r), $clarear($g), $clarear($b));
+}
+
+/**
+ * "Chip" con el nombre de un usuario: su color de identificación (negrita) sobre
+ * un fondo suave del mismo color (ver app/Models/Usuario::PALETA). Sin color
+ * asignado, usa un gris neutro. Se usa donde se muestra "quién hizo tal cosa"
+ * (ej. "Modificado por" en Productos, el listado de Usuarios). $titulo opcional
+ * agrega un tooltip (ej. el nombre completo cuando $nombre viene acortado).
+ */
+function chip_usuario(string $nombre, ?string $color, ?string $titulo = null): string
+{
+    $color = $color ?: '#6b7280';
+    $fondo = color_mas_claro($color);
+    $tituloAttr = $titulo ? ' title="' . h($titulo) . '"' : '';
+    return '<span class="chip-usuario" style="color:' . h($color) . ';background:' . h($fondo) . '"' . $tituloAttr . '>'
+         . h($nombre) . '</span>';
+}
+
+/**
+ * Indicador de "última venta" para el listado de Productos: un punto de
+ * color (sin texto, para no sobrecargar la tabla) que de un vistazo dice si
+ * un producto se sigue vendiendo o lleva tiempo sin movimiento. La fecha
+ * exacta (o "Nunca registrada") queda en el `title`, visible al pasar el
+ * cursor. $fecha es la fecha ISO de la última venta completada, o null si
+ * no hay ninguna registrada.
+ */
+function punto_venta(?string $fecha): string
+{
+    if (!$fecha) {
+        return '<span class="punto-venta punto-venta-rojo" title="Nunca registrada"></span>';
+    }
+    $dias = (int)floor((time() - strtotime($fecha)) / 86400);
+    $clase = $dias >= 180 ? 'punto-venta-amarillo' : 'punto-venta-verde';
+    return '<span class="punto-venta ' . $clase . '" title="' . h(hace_tiempo($fecha)) . '"></span>';
+}
+
 /** Formatea un número como pesos chilenos: 119990 -> $119.990 */
 function clp($v): string
 {
@@ -263,6 +310,26 @@ function fecha_dmy($iso): string
     if (!$iso) return '';
     $p = explode('-', $iso);
     return count($p) === 3 ? "$p[2]-$p[1]-$p[0]" : $iso;
+}
+
+/**
+ * Texto relativo de una fecha/hora pasada: "Hoy", "Ayer", "Hace 5 días",
+ * "Hace 3 meses", "Hace 2 años". Null -> '—'. Usado en Productos para
+ * "antigüedad de la última modificación" y "tiempo sin vender".
+ */
+function hace_tiempo(?string $fecha): string
+{
+    if (!$fecha) return '—';
+    $dias = (int)floor((time() - strtotime($fecha)) / 86400);
+    if ($dias <= 0) return 'Hoy';
+    if ($dias === 1) return 'Ayer';
+    if ($dias < 30) return "Hace $dias días";
+    if ($dias < 365) {
+        $meses = (int)floor($dias / 30);
+        return "Hace $meses mes" . ($meses === 1 ? '' : 'es');
+    }
+    $anios = (int)floor($dias / 365);
+    return "Hace $anios año" . ($anios === 1 ? '' : 's');
 }
 
 /** Estado visual de una factura según su confianza y notas. */

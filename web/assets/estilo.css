@@ -322,6 +322,42 @@ tr:hover td { background: #eef5ff; }
 .punto.amarillo { background: var(--amarillo); }
 .punto.rojo { background: var(--rojo); }
 
+/* Chip de usuario (ver app/Models/Usuario::PALETA y lib/ui.php::chip_usuario()):
+   mismo lenguaje visual que .btn-ver-corte (pastilla, una sola línea), pero
+   con el color propio de cada usuario en vez de uno fijo. */
+.chip-usuario { display: inline-block; font-weight: 700; font-size: 13px;
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+
+/* Evita que el nombre/chip de usuario se corte en dos líneas en la tabla */
+.col-nowrap { white-space: nowrap; }
+
+/* Chip de "Vendidos" (ver app/views/productos/listado.php): mismo lenguaje
+   de pastilla que .chip-usuario, pero con el color de acento de la tabla
+   (no es por usuario, es un dato que siempre queremos destacar). */
+.chip-vendidos { display: inline-block; font-weight: 700; font-size: 13px;
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+  color: #0f9488; background: #d9f3f0; }
+
+/* Estado de "última venta" (ver app/views/productos/listado.php): un punto
+   de color, igual lenguaje visual que .punto (Estado de facturas) — rojo
+   nunca se vendió, amarillo 6 meses o más sin venderse, verde ventas
+   recientes. Sin texto, para no sobrecargar la tabla; la fecha exacta (o
+   "Nunca registrada") va en el `title`, visible al pasar el cursor. */
+.punto-venta { display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  cursor: default; }
+.punto-venta-verde    { background: var(--verde-ok); }
+.punto-venta-amarillo { background: var(--amarillo); }
+.punto-venta-rojo     { background: var(--rojo); }
+.col-venta { text-align: center; }
+
+.color-elige { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.color-elige input[type="color"] { width: 44px; height: 34px; padding: 2px;
+  border: 1px solid var(--borde); border-radius: 8px; cursor: pointer; background: #fff; }
+.color-paleta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.color-chip { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--borde); cursor: pointer; padding: 0; }
+.color-chip:hover { box-shadow: 0 0 0 2px var(--azul); }
+
 .vacio { text-align: center; color: var(--texto-tenue); padding: 40px; }
 .resumen { color: var(--texto-sec); font-size: 13px; margin: 16px 2px;
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
@@ -476,6 +512,10 @@ tr:hover td { background: #eef5ff; }
 .badge-carga.b-activa      { background: #e8f8ef; color: #1e7e44; }
 .badge-carga.b-reemplazada { background: #eef1f4; color: var(--texto-sec); }
 .badge-carga.b-eliminada   { background: #fdecea; color: var(--rojo); }
+/* Variantes propias del Historial de Productos (no tocar las de arriba:
+   b-reemplazada/b-eliminada las reusa también Promociones). */
+.badge-carga.b-naranjo     { background: #fdf0e3; color: #b35900; }
+.badge-carga.b-gris        { background: #eceef1; color: #5f6b7a; }
 
 /* Zona de peligro */
 .zona-peligro { border: 1px solid #f3c7cb; background: #fff7f7; }
@@ -483,6 +523,62 @@ tr:hover td { background: #eef5ff; }
 .btn.peligro { background: var(--rojo); }
 .btn.peligro:hover { background: #b32a37; }
 .btn.peligro:disabled { background: #e3a3a8; cursor: not-allowed; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Unificar catálogos: estado de la corrida + decisión por producto */
+.badge-aplicada  { background: #eafaf1; color: #1e7e44; }
+.badge-revisando { background: #fff4e5; color: #b9690e; }
+.resolver-botones { display: flex; flex-wrap: wrap; gap: 6px; }
+.resolver-personalizado { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.resolver-personalizado input { font: inherit; padding: 6px 8px; border: 1px solid var(--borde);
+  border-radius: 6px; max-width: 160px; }
+
+/* Unificar catálogos: tarjetas de decisión para un conflicto de precio o de
+   nombre. Color fijo por negocio (azul = A, morado = B) en toda la pantalla,
+   igual que las tarjetas resumen, para que nunca haga falta leer el texto
+   del botón para saber a quién pertenece cada opción. */
+.acordeon-conflicto > p.texto-ayuda { margin: 0 0 14px; }
+.conflicto-lista { display: flex; flex-direction: column; gap: 14px; }
+.conflicto-fila { border: 1px solid var(--borde); border-radius: 10px; padding: 14px; }
+.conflicto-fila-resuelta { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 10px 14px; flex-wrap: wrap; }
+.conflicto-fila-resuelta .conflicto-codigo { margin-bottom: 0; }
+.conflicto-codigo { font-size: 12.5px; color: var(--texto-sec); margin-bottom: 10px; }
+.decision-tarjetas { display: flex; gap: 12px; flex-wrap: wrap; }
+.decision-tarjeta { flex: 1 1 220px; border-radius: 10px; padding: 12px 14px;
+  border: 2px solid transparent; display: flex; flex-direction: column; gap: 2px; }
+.decision-tarjeta.decision-a { background: #eef5ff; border-color: #cfe2ff; }
+.decision-tarjeta.decision-b { background: #f7eefc; border-color: #e3cff5; }
+.decision-tarjeta-neg { font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; margin-bottom: 4px; }
+.decision-tarjeta.decision-a .decision-tarjeta-neg { color: var(--azul); }
+.decision-tarjeta.decision-b .decision-tarjeta-neg { color: #8e44ad; }
+.decision-tarjeta-precio { font-size: 22px; font-weight: 800; line-height: 1.1; }
+.decision-tarjeta.decision-a .decision-tarjeta-precio { color: var(--azul); }
+.decision-tarjeta.decision-b .decision-tarjeta-precio { color: #8e44ad; }
+.decision-tarjeta-nombre-grande { font-size: 15.5px; font-weight: 700; color: var(--texto); line-height: 1.25; }
+.decision-tarjeta-sub { font-size: 12.5px; color: var(--texto-sec); margin: 2px 0 10px; }
+.btn-decision { width: 100%; font: inherit; font-weight: 700; border: none; border-radius: 7px;
+  padding: 9px 10px; cursor: pointer; color: #fff; margin-top: auto; }
+.btn-decision-a { background: var(--azul); }
+.btn-decision-a:hover { background: #0e4a95; }
+.btn-decision-b { background: #8e44ad; }
+.btn-decision-b:hover { background: #763892; }
+.decision-diferencia { font-size: 13px; margin: 10px 0 10px; padding: 8px 10px;
+  border-radius: 7px; background: #f4f4f5; color: var(--texto-sec); }
+.decision-diferencia.alerta { background: #fff4e5; color: #b9690e; font-weight: 600;
+  border: 1px solid #ffd9a8; display: flex; align-items: center; gap: 6px; }
+.decision-diferencia.alerta .ic { color: #b9690e; }
+.btn-personalizar-toggle { background: none; border: 1px dashed var(--borde); color: var(--texto-sec);
+  font: inherit; font-size: 12.5px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; }
+.btn-personalizar-toggle:hover { background: #f7f7f8; }
+.ic-chico { width: 14px; height: 14px; }
+.chip-resuelto { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
+  border-radius: 7px; font-size: 13.5px; font-weight: 600; }
+.chip-resuelto-a { background: #eef5ff; color: var(--azul); }
+.chip-resuelto-b { background: #f7eefc; color: #8e44ad; }
+.chip-resuelto-neutro { background: #f4f4f5; color: var(--texto-sec); }
 
 /* Buscador del Gestor de Etiquetas */
 .et-panel { display: flex; flex-direction: column; gap: 16px; }
@@ -795,7 +891,7 @@ tr:hover td { background: #eef5ff; }
 .form-pagina { max-width: 600px; margin: 0 auto; }
 /* Campos a ancho completo dentro del panel del formulario (no los checkboxes
    ni radios, que deben mantener su tamaño natural — ej. lista de negocios). */
-.form-pagina .campo input:not([type=checkbox]):not([type=radio]),
+.form-pagina .campo input:not([type=checkbox]):not([type=radio]):not([type=color]),
 .form-pagina .campo select,
 .form-pagina .campo textarea { width: 100%; }
 .form-pagina .campo { margin-bottom: 14px; }
@@ -861,6 +957,24 @@ tr:hover td { background: #eef5ff; }
 .tabla-fiados thead tr { border-bottom: 3px solid #8e44ad; } /* morado, el color del módulo Fiados */
 .tabla-fiados td:first-child { font-weight: 600; } /* Cliente */
 .tabla-fiados td.monto-col { font-weight: 700; } /* Saldo: ya trae su color de .saldo-deuda/.saldo-ok */
+
+.tabla-productos thead tr { border-bottom: 3px solid #0d9488; } /* turquesa, el color del módulo Productos */
+.tabla-productos td:nth-child(2) { font-weight: 600; } /* Producto */
+.tabla-productos thead th a { color: inherit; text-decoration: none; }
+.tabla-productos thead th a:hover { text-decoration: underline; }
+/* Precio de venta: el dato más importante para el dueño, con más protagonismo
+   que un número de tabla cualquiera (negrita + color + un poco más grande),
+   mismo criterio que .tabla-cortes td.col-ventas en Ingresos. */
+.tabla-productos td.col-precio { font-weight: 700; font-size: 14.5px; color: #0d9488; }
+/* El nombre del producto es el dato que más importa identificar completo:
+   le damos un ancho mínimo propio y dejamos que el resto de las columnas
+   (con contenido corto y de ancho fijo) se acomoden alrededor. Si aun así no
+   entran todas, esta tabla se desliza horizontal en vez de aplastar el
+   nombre en una columna angosta (el resto de las tablas del sistema siguen
+   sin scroll propio en escritorio). */
+.tabla-wrap.tabla-productos { overflow-x: auto; }
+.tabla-productos th:nth-child(2), .tabla-productos td:nth-child(2) { min-width: 220px; }
+.tabla-productos th:nth-child(3), .tabla-productos td:nth-child(3) { min-width: 0; } /* Departamento: cede espacio al nombre */
 
 /* Aviso de error fuera de un modal (ej. "editar" falló la validación) */
 .aviso-pagina { margin: 0 0 20px; }
@@ -1076,6 +1190,7 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
 .stat-card.t-verde   { border-top: 3px solid var(--verde-ok); }
 .stat-card.t-morado  { border-top: 3px solid #8e44ad; }
 .stat-card.t-naranjo { border-top: 3px solid #e67e22; }
+.stat-card.t-amarillo { border-top: 3px solid #8a5a00; }
 .valor-azul   { color: var(--azul); }      /* valores coloreados (Home / Ingresos / paneles) */
 .valor-verde  { color: var(--verde-ok); }
 .valor-naranjo{ color: #e67e22; }
@@ -1137,6 +1252,8 @@ details.bloque > p, details.bloque > pre { padding: 0 18px 14px; }
 /* Columnas numéricas alineadas a la derecha (montos) */
 .col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 th.col-num { text-align: right; }
+/* Columna centrada (ej. Departamento en Productos) */
+.col-centro { text-align: center; }
 /* Aviso plegable de correos sin procesar (mismo patrón details.bloque) */
 .bloque-aviso { border-color: #f5c6cb; background: #fdf3f4; }
 .bloque-aviso > summary { color: var(--rojo); }
@@ -1616,12 +1733,52 @@ th.col-num { text-align: right; }
 .campo-check label { display: inline-flex; align-items: center; gap: 8px;
   font-weight: 400; cursor: pointer; }
 .campo-check input[type=checkbox] { width: 17px; height: 17px; }
+/* Opciones de Nuevo/Editar producto (Disponible para la venta / Afecto a
+   IVA): cada una como una tarjeta propia, en vez de una casilla suelta con
+   texto plano — más fácil de leer y de marcar. */
+.opciones-producto { display: flex; flex-direction: column; gap: 10px; }
+.opcion-check { display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border: 1px solid var(--borde); border-radius: 8px;
+  cursor: pointer; transition: background .15s, border-color .15s; }
+.opcion-check:hover { background: #f7f9fa; border-color: #cbd3db; }
+.opcion-check input[type=checkbox] { width: 18px; height: 18px; margin-top: 1px;
+  flex-shrink: 0; cursor: pointer; }
+.opcion-check .oc-texto { display: flex; flex-direction: column; gap: 2px; }
+.opcion-check .oc-texto strong { font-size: 14px; font-weight: 600; }
+.opcion-check .oc-texto small { font-size: 12px; color: var(--texto-tenue); }
+/* Formulario de Nuevo/Editar producto: botones centrados (a diferencia del
+   resto de los formularios del sistema, que los dejan a la izquierda). */
+.form-acciones-centro { justify-content: center; }
+/* Combo de Departamento (Nuevo/Editar producto): reemplaza el <input
+   list="..."> nativo, que en el celular abre el desplegable mal ubicado
+   (pegado arriba de la pantalla, no bajo el campo). Es un campo de texto
+   normal (se puede escribir un departamento nuevo) con una lista propia,
+   anclada justo debajo, que aparece igual en computador y celular. */
+.combo-depto { position: relative; }
+.combo-depto input { padding-right: 38px !important; }
+.combo-depto-flecha { position: absolute; top: 0; right: 0; width: 38px; height: 100%;
+  border: none; background: none; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; color: var(--texto-sec); }
+.combo-depto-flecha .ic { width: 16px; height: 16px; transition: transform .15s; }
+.combo-depto.abierto .combo-depto-flecha .ic { transform: rotate(180deg); }
+.combo-depto-lista { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  background: #fff; border: 1px solid var(--borde); border-radius: 8px;
+  max-height: 240px; overflow-y: auto; box-shadow: 0 10px 28px rgba(0,0,0,.14); }
+.combo-depto-opcion { padding: 10px 14px; font-size: 13.5px; cursor: pointer; }
+.combo-depto-opcion:hover { background: #f2f6fa; }
+.combo-depto-vacio { margin: 0; padding: 10px 14px; font-size: 12.5px; color: var(--texto-tenue); }
+/* Validación de Nuevo/Editar producto: borde rojo en el campo con error +
+   mensaje puntual debajo (ver ProductosController::formulario(), $errores). */
+.campo input.input-error,
+.campo .combo-depto input.input-error { border-color: var(--rojo); }
+.campo-error { display: block; color: var(--rojo); font-size: 12px; margin-top: 2px; }
 /* Firma de quien edito por ultima vez */
 .firma-cambio { margin: 14px 0 0; font-size: 12.5px; }
 /* Producto oculto de la venta: se ve atenuado en el listado */
 .fila-inactiva td { opacity: .55; }
 
 /* ===== Historial de cambios del catalogo ===== */
+.tabla-historial thead tr { border-bottom: 3px solid #0d9488; } /* turquesa, mismo módulo que Productos */
 .tabla-historial td { vertical-align: top; }
 /* Fecha en dos lineas: dia arriba, hora abajo en gris */
 .hist-fecha { white-space: nowrap; line-height: 1.2; }
@@ -1974,6 +2131,8 @@ a.stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.09); transform: translate
 .btn-pastilla-rojo:hover { background: #a93226; }
 .btn-pastilla-azul { background: var(--azul); box-shadow: 0 2px 6px rgba(21,101,192,.35); }
 .btn-pastilla-azul:hover { background: #0e4a95; }
+.btn-pastilla-turquesa { background: #0d9488; box-shadow: 0 2px 6px rgba(13,148,136,.35); }
+.btn-pastilla-turquesa:hover { background: #0b7d72; }
 
 /* Tabla del listado de Gastos (2026-11-14), mismo patrón que Facturas/Fiados */
 .tabla-gastos thead tr { border-bottom: 3px solid var(--rojo); }

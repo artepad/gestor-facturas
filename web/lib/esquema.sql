@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   nombre        VARCHAR(150),
   rol           VARCHAR(20) NOT NULL DEFAULT 'vendedor',   -- ver lib/permisos.php
   pin_hash      VARCHAR(64) NULL,                          -- cerrojo local de la caja
+  color         VARCHAR(7) NULL,                           -- identificador visual (#rrggbb), ver lib/ui.php
   creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -319,6 +320,68 @@ CREATE TABLE IF NOT EXISTS producto_cargas (
   FOREIGN KEY (negocio_id)  REFERENCES negocios(id)  ON DELETE CASCADE,
   FOREIGN KEY (cargado_por) REFERENCES usuarios(id)  ON DELETE SET NULL,
   INDEX idx_carga_negocio (negocio_id, cargado_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Unificar catalogos: compara los Excel de dos negocios antes de fusionarlos
+-- en el catalogo compartido. Una fila = una corrida de comparacion.
+CREATE TABLE IF NOT EXISTS producto_unificaciones (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  negocio_a_id     INT NOT NULL,
+  negocio_b_id     INT NOT NULL,
+  archivo_a_nombre VARCHAR(255) NULL,
+  archivo_b_nombre VARCHAR(255) NULL,
+  total_igual      INT NOT NULL DEFAULT 0,
+  total_conflicto_precio  INT NOT NULL DEFAULT 0,
+  total_conflicto_nombre  INT NOT NULL DEFAULT 0,
+  total_solo_a     INT NOT NULL DEFAULT 0,
+  total_solo_b     INT NOT NULL DEFAULT 0,
+  total_revisar    INT NOT NULL DEFAULT 0,
+  estado           VARCHAR(12) NOT NULL DEFAULT 'revisando', -- revisando|aplicada|descartada
+  creado_por       INT NULL,
+  creado_en        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  aplicado_por     INT NULL,
+  aplicado_en      TIMESTAMP NULL,
+  total_nuevos       INT NULL, -- solo se llena al aplicar
+  total_actualizados INT NULL,
+  FOREIGN KEY (negocio_a_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (negocio_b_id) REFERENCES negocios(id) ON DELETE CASCADE,
+  FOREIGN KEY (creado_por)   REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (aplicado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Un producto dentro de una comparacion. "_a"/"_b" son los datos tal como
+-- venian en cada Excel; "_final" es lo que se decidio guardar (null hasta
+-- resolver un conflicto o un caso a revisar).
+CREATE TABLE IF NOT EXISTS producto_unificacion_items (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  unificacion_id     INT NOT NULL,
+  grupo              VARCHAR(20) NOT NULL, -- igual|conflicto_precio|conflicto_nombre|solo_a|solo_b|revisar
+  codigo_a           VARCHAR(40) NULL,
+  codigo_b           VARCHAR(40) NULL,
+  nombre_a           VARCHAR(255) NULL,
+  nombre_b           VARCHAR(255) NULL,
+  precio_costo_a     DECIMAL(14,2) NULL,
+  precio_costo_b     DECIMAL(14,2) NULL,
+  precio_venta_a     DECIMAL(14,2) NULL,
+  precio_venta_b     DECIMAL(14,2) NULL,
+  precio_mayoreo_a   DECIMAL(14,2) NULL,
+  precio_mayoreo_b   DECIMAL(14,2) NULL,
+  departamento_a     VARCHAR(150) NULL,
+  departamento_b     VARCHAR(150) NULL,
+  tipo_venta_a       VARCHAR(30) NULL,
+  tipo_venta_b       VARCHAR(30) NULL,
+  nombre_sugerido    VARCHAR(255) NULL,
+  decision           VARCHAR(15) NULL, -- a|b|personalizado|distinto
+  codigo_final       VARCHAR(40) NULL,
+  nombre_final       VARCHAR(255) NULL,
+  precio_costo_final DECIMAL(14,2) NULL,
+  precio_venta_final DECIMAL(14,2) NULL,
+  precio_mayoreo_final DECIMAL(14,2) NULL,
+  departamento_final VARCHAR(150) NULL,
+  tipo_venta_final   VARCHAR(30) NULL,
+  resuelto           TINYINT(1) NOT NULL DEFAULT 0,
+  FOREIGN KEY (unificacion_id) REFERENCES producto_unificaciones(id) ON DELETE CASCADE,
+  INDEX idx_unif_items (unificacion_id, grupo, resuelto)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ===== Modulo Gastos (gastos operacionales del negocio: agua, luz, sueldos...) =====

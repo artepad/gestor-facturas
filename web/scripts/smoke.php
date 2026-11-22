@@ -28,10 +28,11 @@ $base = $argv[1] ?? 'http://localhost/minimark';
 // abierta manda a caja.php, o un modulo sin permiso manda a home.php).
 $rutas = [
     'home.php', 'panel_facturas.php', 'fiados.php', 'ingresos.php', 'gastos.php',
-    'gasto_form.php',
+    'gasto_form.php', 'productos.php',
     'herramientas.php', 'negocios.php', 'usuarios.php',
     'caja.php', 'pos.php', 'inventario.php', 'compras.php', 'promociones.php',
-    'historial_productos.php', 'precios_fv.php?accion=listar',
+    'historial_productos.php', 'herramienta_unificar_productos.php', 'producto_exportar.php',
+    'precios_fv.php?accion=listar',
 ];
 
 // Fragmentos que delatan un error de PHP colado en el HTML.

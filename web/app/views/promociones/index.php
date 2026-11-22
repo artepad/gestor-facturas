@@ -22,7 +22,7 @@ require_once dirname(__DIR__, 3) . '/lib/pos.php';
                 <h2>Promociones</h2>
             </div>
             <div class="cab-botones">
-                <a class="btn gris" href="herramienta_productos.php">Catálogo</a>
+                <a class="btn gris" href="productos.php">Catálogo</a>
                 <?php if (!$editando): ?>
                     <a class="btn verde" href="promociones.php?nueva=1">+ Nueva promoción</a>
                 <?php endif; ?>

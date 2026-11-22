@@ -31,7 +31,7 @@ const KARDEX_ETIQUETAS_VISTA = [
             </div>
             <div class="cab-botones">
                 <a class="btn gris" href="compras.php?negocio_id=<?= $negocioId ?>">Compras</a>
-                <a class="btn gris" href="herramienta_productos.php">Catálogo</a>
+                <a class="btn gris" href="productos.php">Catálogo</a>
                 <?php if (count($negocios) > 1): ?>
                 <form method="get">
                     <select name="negocio_id" onchange="this.form.submit()">

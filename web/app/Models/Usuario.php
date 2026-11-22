@@ -12,6 +12,29 @@ use App\Core\Database;
  */
 final class Usuario
 {
+    /**
+     * Colores sugeridos para identificar usuarios en las tablas (nombre +
+     * color). Elegidos a mano para que se distingan bien entre sí y con la
+     * paleta del sistema (ver assets/estilo.css) — nada de tonos parecidos.
+     */
+    public const PALETA = [
+        '#1565c0', '#2ecc71', '#e67e22', '#8e44ad', '#c0392b',
+        '#16a085', '#d4ac0d', '#34495e', '#e84393', '#7f8c8d',
+    ];
+
+    /** El primer color de la paleta que ningún usuario esté usando todavía (o el primero, si ya se repiten todos). */
+    public static function colorSugerido(): string
+    {
+        $usados = array_column(
+            Database::todos('SELECT color FROM usuarios WHERE color IS NOT NULL'),
+            'color'
+        );
+        foreach (self::PALETA as $color) {
+            if (!in_array($color, $usados, true)) return $color;
+        }
+        return self::PALETA[0];
+    }
+
     public static function todosConNegocios(): array
     {
         return Database::todos(
@@ -53,25 +76,28 @@ final class Usuario
         return (int)Database::valor("SELECT COUNT(*) FROM usuarios WHERE rol = 'admin'");
     }
 
-    public static function crear(string $email, string $nombre, string $rol, string $passwordHash): int
+    public static function crear(string $email, string $nombre, string $rol, string $passwordHash, string $color): int
     {
         Database::consultar(
-            'INSERT INTO usuarios (email, nombre, rol, password_hash) VALUES (?,?,?,?)',
-            [$email, $nombre, $rol, $passwordHash]
+            'INSERT INTO usuarios (email, nombre, rol, password_hash, color) VALUES (?,?,?,?,?)',
+            [$email, $nombre, $rol, $passwordHash, $color]
         );
         return (int)Database::pdo()->lastInsertId();
     }
 
-    public static function actualizar(int $id, string $email, string $nombre, string $rol): void
-    {
-        Database::consultar('UPDATE usuarios SET email=?, nombre=?, rol=? WHERE id=?', [$email, $nombre, $rol, $id]);
-    }
-
-    public static function actualizarConClave(int $id, string $email, string $nombre, string $rol, string $passwordHash): void
+    public static function actualizar(int $id, string $email, string $nombre, string $rol, string $color): void
     {
         Database::consultar(
-            'UPDATE usuarios SET email=?, nombre=?, rol=?, password_hash=? WHERE id=?',
-            [$email, $nombre, $rol, $passwordHash, $id]
+            'UPDATE usuarios SET email=?, nombre=?, rol=?, color=? WHERE id=?',
+            [$email, $nombre, $rol, $color, $id]
+        );
+    }
+
+    public static function actualizarConClave(int $id, string $email, string $nombre, string $rol, string $passwordHash, string $color): void
+    {
+        Database::consultar(
+            'UPDATE usuarios SET email=?, nombre=?, rol=?, password_hash=?, color=? WHERE id=?',
+            [$email, $nombre, $rol, $passwordHash, $color, $id]
         );
     }
 

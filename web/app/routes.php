@@ -93,9 +93,12 @@ $ambos('/corte.php', [IngresosController::class, 'detalle']);
 // --- Herramientas ---
 $ambos('/herramientas.php', [HerramientasController::class, 'tablero']);
 $ambos('/herramienta_caja.php', [HerramientasController::class, 'caja']);
+$ambos('/productos.php', [ProductosController::class, 'listado']);
 $ambos('/herramienta_productos.php', [ProductosController::class, 'panel']);
 $ambos('/producto_form.php', [ProductosController::class, 'formulario']);
 $ambos('/historial_productos.php', [ProductosController::class, 'historial']);
+$ambos('/herramienta_unificar_productos.php', [ProductosController::class, 'unificar']);
+$ambos('/producto_exportar.php', [ProductosController::class, 'exportar']);
 $ambos('/herramienta_etiquetas.php', [EtiquetasController::class, 'formulario']);
 $ambos('/etiquetas_imprimir.php', [EtiquetasController::class, 'imprimir']);
 $ambos('/productos_buscar.php', [EtiquetasController::class, 'buscarJson']);

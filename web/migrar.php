@@ -878,4 +878,115 @@ if (!nombre_fk($pdo, 'facturas', 'creada_por')) {
     echo "  - fk facturas.creada_por ya existe\n";
 }
 
+echo "\n[Productos: unificar catalogos de dos negocios]\n";
+// Compara los Excel de dos negocios antes de fusionarlos en el catalogo
+// compartido (ver lib/productos.php). Idempotente, mismas definiciones que
+// lib/esquema.sql.
+$pdo->exec("CREATE TABLE IF NOT EXISTS producto_unificaciones (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    negocio_a_id     INT NOT NULL,
+    negocio_b_id     INT NOT NULL,
+    archivo_a_nombre VARCHAR(255) NULL,
+    archivo_b_nombre VARCHAR(255) NULL,
+    total_igual      INT NOT NULL DEFAULT 0,
+    total_conflicto_precio  INT NOT NULL DEFAULT 0,
+    total_conflicto_nombre  INT NOT NULL DEFAULT 0,
+    total_solo_a     INT NOT NULL DEFAULT 0,
+    total_solo_b     INT NOT NULL DEFAULT 0,
+    total_revisar    INT NOT NULL DEFAULT 0,
+    estado           VARCHAR(12) NOT NULL DEFAULT 'revisando',
+    creado_por       INT NULL,
+    creado_en        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    aplicado_por     INT NULL,
+    aplicado_en      TIMESTAMP NULL,
+    total_nuevos       INT NULL,
+    total_actualizados INT NULL,
+    FOREIGN KEY (negocio_a_id) REFERENCES negocios(id) ON DELETE CASCADE,
+    FOREIGN KEY (negocio_b_id) REFERENCES negocios(id) ON DELETE CASCADE,
+    FOREIGN KEY (creado_por)   REFERENCES usuarios(id) ON DELETE SET NULL,
+    FOREIGN KEY (aplicado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla producto_unificaciones lista\n";
+agregar_columna($pdo, 'producto_unificaciones', 'total_nuevos',       "INT NULL");
+agregar_columna($pdo, 'producto_unificaciones', 'total_actualizados', "INT NULL");
+// 2026-11-17: el conflicto de precio y el de nombre se separaron en dos
+// tablas en la pantalla de revision (el precio es mas sensible, se resuelve
+// primero). 'total_conflicto' (una sola columna) queda sin usar si ya existia
+// de una instalacion anterior -- no se borra, igual criterio que el resto de
+// columnas retiradas en este archivo.
+agregar_columna($pdo, 'producto_unificaciones', 'total_conflicto_precio', "INT NOT NULL DEFAULT 0");
+agregar_columna($pdo, 'producto_unificaciones', 'total_conflicto_nombre', "INT NOT NULL DEFAULT 0");
+$pdo->exec("CREATE TABLE IF NOT EXISTS producto_unificacion_items (
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    unificacion_id     INT NOT NULL,
+    grupo              VARCHAR(20) NOT NULL,
+    codigo_a           VARCHAR(40) NULL,
+    codigo_b           VARCHAR(40) NULL,
+    nombre_a           VARCHAR(255) NULL,
+    nombre_b           VARCHAR(255) NULL,
+    precio_costo_a     DECIMAL(14,2) NULL,
+    precio_costo_b     DECIMAL(14,2) NULL,
+    precio_venta_a     DECIMAL(14,2) NULL,
+    precio_venta_b     DECIMAL(14,2) NULL,
+    precio_mayoreo_a   DECIMAL(14,2) NULL,
+    precio_mayoreo_b   DECIMAL(14,2) NULL,
+    departamento_a     VARCHAR(150) NULL,
+    departamento_b     VARCHAR(150) NULL,
+    tipo_venta_a       VARCHAR(30) NULL,
+    tipo_venta_b       VARCHAR(30) NULL,
+    nombre_sugerido    VARCHAR(255) NULL,
+    decision           VARCHAR(15) NULL,
+    codigo_final       VARCHAR(40) NULL,
+    nombre_final       VARCHAR(255) NULL,
+    precio_costo_final DECIMAL(14,2) NULL,
+    precio_venta_final DECIMAL(14,2) NULL,
+    precio_mayoreo_final DECIMAL(14,2) NULL,
+    departamento_final VARCHAR(150) NULL,
+    tipo_venta_final   VARCHAR(30) NULL,
+    resuelto           TINYINT(1) NOT NULL DEFAULT 0,
+    FOREIGN KEY (unificacion_id) REFERENCES producto_unificaciones(id) ON DELETE CASCADE,
+    INDEX idx_unif_items (unificacion_id, grupo, resuelto)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+echo "  ~ tabla producto_unificacion_items lista\n";
+$largoGrupo = $pdo->query(
+    "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'producto_unificacion_items' AND COLUMN_NAME = 'grupo'"
+)->fetchColumn();
+if ((int)$largoGrupo < 20) {
+    $pdo->exec("ALTER TABLE producto_unificacion_items MODIFY grupo VARCHAR(20) NOT NULL");
+    echo "  + producto_unificacion_items.grupo ensanchada a VARCHAR(20) (conflicto_precio/conflicto_nombre)\n";
+} else {
+    echo "  - producto_unificacion_items.grupo ya es suficientemente ancha\n";
+}
+// Reclasifica los items que hayan quedado con el grupo viejo 'conflicto' (de
+// antes de separar precio/nombre en dos tablas): no toca decision/resuelto/
+// los "_final" ya guardados, solo decide a cuál de las dos tablas nuevas
+// pertenece cada uno, mirando si el precio de venta coincide o no.
+$viejos = (int)$pdo->query("SELECT COUNT(*) FROM producto_unificacion_items WHERE grupo = 'conflicto'")->fetchColumn();
+if ($viejos > 0) {
+    $aPrecio = $pdo->exec(
+        "UPDATE producto_unificacion_items SET grupo = 'conflicto_precio'
+          WHERE grupo = 'conflicto'
+            AND (precio_venta_a IS NULL OR precio_venta_b IS NULL OR precio_venta_a <> precio_venta_b)"
+    );
+    $aNombre = $pdo->exec(
+        "UPDATE producto_unificacion_items SET grupo = 'conflicto_nombre' WHERE grupo = 'conflicto'"
+    );
+    $pdo->exec(
+        "UPDATE producto_unificaciones u SET
+            total_conflicto_precio = (SELECT COUNT(*) FROM producto_unificacion_items i WHERE i.unificacion_id = u.id AND i.grupo = 'conflicto_precio'),
+            total_conflicto_nombre = (SELECT COUNT(*) FROM producto_unificacion_items i WHERE i.unificacion_id = u.id AND i.grupo = 'conflicto_nombre')
+          WHERE u.estado = 'revisando'"
+    );
+    echo "  ~ $viejos item(s) con el grupo viejo 'conflicto' reclasificados ($aPrecio a precio, $aNombre a nombre)\n";
+} else {
+    echo "  - no hay items con el grupo viejo 'conflicto' que reclasificar\n";
+}
+
+echo "\n[Color de identificacion por usuario]\n";
+// Cada usuario tiene un color propio para distinguirlo rapido en las tablas
+// donde aparece su nombre (ej. "Modificado por" en Productos). Se asigna
+// desde Usuarios (ver app/Models/Usuario.php, PALETA).
+agregar_columna($pdo, 'usuarios', 'color', "VARCHAR(7) NULL");
+
 echo "\nListo. Migraciones aplicadas.\n";

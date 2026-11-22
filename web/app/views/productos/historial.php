@@ -32,6 +32,13 @@ function valor_historial($v, string $tipo): string
     return (string)$v;
 }
 
+/** Nombre + primer apellido (las dos primeras palabras), para que "Quién" ocupe menos espacio. */
+function nombre_apellido(string $nombre): string
+{
+    $partes = preg_split('/\s+/', trim($nombre));
+    return implode(' ', array_slice($partes, 0, 2));
+}
+
 /** Arma la URL de la página N conservando los filtros. */
 function url_pagina(int $n): string
 {
@@ -40,15 +47,18 @@ function url_pagina(int $n): string
 }
 
 $ETIQUETAS = [
-    'crear_producto'    => ['Creó',     'b-activa'],
-    'editar_producto'   => ['Editó',    'b-reemplazada'],
-    'eliminar_producto' => ['Eliminó',  'b-eliminada'],
+    'crear_producto'      => ['Creó',             'b-activa'],
+    'editar_producto'     => ['Editó',            'b-naranjo'],
+    'eliminar_producto'   => ['Eliminó',           'b-eliminada'],
+    'desactivar_producto' => ['Marcó inactivo',   'b-gris'],
+    'activar_producto'    => ['Reactivó',          'b-activa'],
 ];
 
 $q = $filtros['q']; $accion = $filtros['accion']; $usuId = $filtros['usuario'];
 $desde = $filtros['desde']; $hasta = $filtros['hasta'];
+$filtrosActivos = $q !== '' || $accion !== '' || $usuId !== 0 || $desde !== '' || $hasta !== '';
 ?>
-<?php cabecera_dashboard($usuario, 'herramientas', 'Historial del catálogo'); ?>
+<?php cabecera_dashboard($usuario, 'productos', 'Historial del catálogo'); ?>
 
     <div class="contenido">
         <div class="cab-modulo modulo-turquesa">
@@ -56,15 +66,21 @@ $desde = $filtros['desde']; $hasta = $filtros['hasta'];
                 <span class="modulo-badge"><?= icono('reloj') ?></span>
                 <h2>Historial del catálogo</h2>
             </div>
-            <a class="btn gris" href="herramienta_productos.php">Volver</a>
+            <a class="btn gris" href="productos.php">Volver</a>
         </div>
 
-        <div class="panel">
-            <p class="texto-ayuda">
-                Todo cambio en el catálogo queda registrado acá: quién lo hizo, cuándo, y
-                qué cambió exactamente. Como el catálogo es <strong>compartido por los dos
-                negocios</strong>, un cambio de precio afecta a ambos.
-            </p>
+        <p class="texto-ayuda">
+            Todo cambio en el catálogo queda registrado acá: quién lo hizo, cuándo, y
+            qué cambió exactamente. Como el catálogo es <strong>compartido por los dos
+            negocios</strong>, un cambio de precio afecta a ambos.
+        </p>
+
+        <div class="panel panel-filtros<?= $filtrosActivos ? '' : ' colapsado' ?>" id="panelFiltros">
+            <button type="button" class="panel-filtros-cab" id="btnToggleFiltros"
+                    aria-expanded="<?= $filtrosActivos ? 'true' : 'false' ?>">
+                <h2>Filtros</h2>
+                <span class="chevron"><?= icono('chevron') ?></span>
+            </button>
             <form method="get" class="filtros">
                 <div class="campo" style="flex:1 1 220px">
                     <label>Buscar</label>
@@ -78,6 +94,8 @@ $desde = $filtros['desde']; $hasta = $filtros['hasta'];
                         <option value="crear_producto"    <?= $accion === 'crear_producto' ? 'selected' : '' ?>>Creados</option>
                         <option value="editar_producto"   <?= $accion === 'editar_producto' ? 'selected' : '' ?>>Editados</option>
                         <option value="eliminar_producto" <?= $accion === 'eliminar_producto' ? 'selected' : '' ?>>Eliminados</option>
+                        <option value="desactivar_producto" <?= $accion === 'desactivar_producto' ? 'selected' : '' ?>>Marcados inactivos</option>
+                        <option value="activar_producto"  <?= $accion === 'activar_producto'  ? 'selected' : '' ?>>Reactivados</option>
                     </select>
                 </div>
                 <div class="campo">
@@ -104,7 +122,7 @@ $desde = $filtros['desde']; $hasta = $filtros['hasta'];
                     <label>&nbsp;</label>
                     <button class="btn" type="submit">Filtrar</button>
                 </div>
-                <?php if ($q || $accion || $usuId || $desde || $hasta): ?>
+                <?php if ($filtrosActivos): ?>
                 <div class="campo">
                     <label>&nbsp;</label>
                     <a class="btn gris" href="historial_productos.php">Limpiar</a>
@@ -123,7 +141,7 @@ $desde = $filtros['desde']; $hasta = $filtros['hasta'];
 
             <?php if (!$filas): ?>
                 <p class="vacio">
-                    <?= $total === 0 && !$q && !$accion && !$usuId && !$desde && !$hasta
+                    <?= $total === 0 && !$filtrosActivos
                         ? 'Todavía no hay cambios registrados en el catálogo.'
                         : 'No hay cambios que coincidan con el filtro.' ?>
                 </p>
@@ -146,8 +164,9 @@ $desde = $filtros['desde']; $hasta = $filtros['hasta'];
                                     <span class="hf-hora"><?= h(date('H:i', strtotime($f['creado_en']))) ?></span>
                                 </td>
                                 <td>
-                                    <?= h($f['usuario_nombre'] ?: '—') ?>
-                                    <span class="texto-tenue"><?= h(nombre_rol((string)$f['rol'])) ?></span>
+                                    <?php if ($f['usuario_nombre']): ?>
+                                        <?= chip_usuario(nombre_apellido($f['usuario_nombre']), $f['usuario_color'], $f['usuario_nombre']) ?>
+                                    <?php else: ?><span class="texto-tenue">—</span><?php endif; ?>
                                 </td>
                                 <td><span class="badge-carga <?= $et[1] ?>"><?= $et[0] ?></span></td>
                                 <td><?= h($f['descripcion']) ?></td>
@@ -197,4 +216,17 @@ $desde = $filtros['desde']; $hasta = $filtros['hasta'];
             <?php endif; ?>
         </div>
     </div>
+    <script>
+      // Panel de Filtros: plegable para aprovechar espacio (mismo patrón que Facturas/Gastos/Productos).
+      (function () {
+        var panel = document.getElementById('panelFiltros');
+        var btn = document.getElementById('btnToggleFiltros');
+        if (!panel || !btn) return;
+        btn.addEventListener('click', function () {
+          var abierto = !panel.classList.contains('colapsado');
+          panel.classList.toggle('colapsado');
+          btn.setAttribute('aria-expanded', abierto ? 'false' : 'true');
+        });
+      })();
+    </script>
     <?php pie_dashboard(); ?>

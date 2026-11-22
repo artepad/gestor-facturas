@@ -81,6 +81,20 @@ final class Producto
         return \consultar_catalogo(Database::pdo(), $q, $departamento, $limite);
     }
 
+    /** Todo el catálogo (cualquier estado), para exportar a Excel. */
+    public static function catalogoCompleto(): array
+    {
+        self::cargarLibProductos();
+        return \catalogo_completo(Database::pdo());
+    }
+
+    /** Arma los bytes de un .xlsx (formato Eleventa) a partir de filas del catálogo. */
+    public static function generarExcel(array $filas): string
+    {
+        self::cargarLibProductos();
+        return \generar_excel_productos($filas);
+    }
+
     /** Últimas N cargas de Excel (historial global: el catálogo es compartido). */
     public static function historialCargas(int $limite = 8): array
     {
@@ -91,6 +105,62 @@ final class Producto
                LEFT JOIN negocios n ON n.id = c.negocio_id
               ORDER BY c.cargado_en DESC, c.id DESC LIMIT $limite"
         );
+    }
+
+    // ---- Unificar catálogos de dos negocios (envoltorio de lib/productos.php) ----
+
+    public static function comparar(array $filasA, array $filasB): array
+    {
+        self::cargarLibProductos();
+        return \comparar_catalogos($filasA, $filasB);
+    }
+
+    public static function crearUnificacion(int $negocioAId, int $negocioBId, array $comparacion, array $meta): int
+    {
+        self::cargarLibProductos();
+        return \crear_unificacion(Database::pdo(), $negocioAId, $negocioBId, $comparacion, $meta);
+    }
+
+    public static function unificacion(int $id): ?array
+    {
+        self::cargarLibProductos();
+        return \obtener_unificacion(Database::pdo(), $id);
+    }
+
+    public static function itemsUnificacion(int $id, ?string $grupo = null): array
+    {
+        self::cargarLibProductos();
+        return \items_unificacion(Database::pdo(), $id, $grupo);
+    }
+
+    public static function pendientesUnificacion(int $id): int
+    {
+        self::cargarLibProductos();
+        return \contar_pendientes_unificacion(Database::pdo(), $id);
+    }
+
+    public static function resolverItemUnificacion(int $itemId, string $decision, array $personalizado = []): void
+    {
+        self::cargarLibProductos();
+        \resolver_item_unificacion(Database::pdo(), $itemId, $decision, $personalizado);
+    }
+
+    public static function aplicarUnificacion(int $id, array $meta): array
+    {
+        self::cargarLibProductos();
+        return \aplicar_unificacion(Database::pdo(), $id, $meta);
+    }
+
+    public static function descartarUnificacion(int $id): void
+    {
+        self::cargarLibProductos();
+        \descartar_unificacion(Database::pdo(), $id);
+    }
+
+    public static function historialUnificaciones(int $limite = 8): array
+    {
+        self::cargarLibProductos();
+        return \historial_unificaciones(Database::pdo(), $limite);
     }
 
     // ---- CRUD de un producto puntual (sin equivalente previo en lib/productos.php) ----
@@ -128,6 +198,112 @@ final class Producto
             "SELECT DISTINCT departamento FROM productos
               WHERE departamento IS NOT NULL AND departamento <> '' ORDER BY departamento"
         ), 'departamento');
+    }
+
+    // ---- Listado principal del módulo Productos (tabla con ventas + auditoría) ----
+
+    /**
+     * Catálogo paginado con quién/cuándo lo modificó por última vez y sus
+     * ventas (unidades vendidas + fecha de la última venta). Las ventas se
+     * calculan con un LEFT JOIN a un resumen por producto (venta_items +
+     * ventas, solo 'completada'), nunca tocan las tablas del POS.
+     */
+    public static function listado(array $filtros, int $pagina = 1, int $porPag = 30): array
+    {
+        [$subSql, $subArgs] = self::ventasSubquery((int)($filtros['negocio'] ?? 0));
+        [$where, $whereArgs] = self::condicionListado($filtros);
+        $orden = self::columnaOrden((string)($filtros['orden'] ?? ''), (string)($filtros['dir'] ?? ''));
+        $sql = "SELECT p.*, u.nombre AS editor, u.color AS editor_color,
+                       COALESCE(v.unidades, 0) AS unidades_vendidas, v.ultima_venta
+                  FROM productos p
+                  LEFT JOIN usuarios u ON u.id = p.actualizado_por
+                  LEFT JOIN ($subSql) v ON v.producto_id = p.id
+                 WHERE $where
+                 ORDER BY $orden
+                 LIMIT $porPag OFFSET " . (($pagina - 1) * $porPag);
+        return Database::todos($sql, array_merge($subArgs, $whereArgs));
+    }
+
+    /** Cantidad total de productos que calzan con los filtros (para la paginación). */
+    public static function contarListado(array $filtros): int
+    {
+        [$subSql, $subArgs] = self::ventasSubquery((int)($filtros['negocio'] ?? 0));
+        [$where, $whereArgs] = self::condicionListado($filtros);
+        $sql = "SELECT COUNT(*) FROM productos p
+                  LEFT JOIN ($subSql) v ON v.producto_id = p.id
+                 WHERE $where";
+        return (int)Database::valor($sql, array_merge($subArgs, $whereArgs));
+    }
+
+    /** Resumen de ventas por producto (unidades + última venta), opcionalmente de un solo negocio. */
+    private static function ventasSubquery(int $negocioId): array
+    {
+        $cond = "ve.estado = 'completada'";
+        $args = [];
+        if ($negocioId > 0) {
+            $cond .= " AND ve.negocio_id = ?";
+            $args[] = $negocioId;
+        }
+        $sql = "SELECT vi.producto_id, SUM(vi.cantidad) AS unidades, MAX(ve.fecha) AS ultima_venta
+                  FROM venta_items vi
+                  JOIN ventas ve ON ve.id = vi.venta_id
+                 WHERE vi.producto_id IS NOT NULL AND $cond
+                 GROUP BY vi.producto_id";
+        return [$sql, $args];
+    }
+
+    private static function condicionListado(array $f): array
+    {
+        $where = ['1=1'];
+        $args = [];
+        if (($f['q'] ?? '') !== '') {
+            $where[] = '(p.codigo LIKE ? OR p.nombre LIKE ?)';
+            $args[] = $f['q'] . '%';
+            $args[] = '%' . $f['q'] . '%';
+        }
+        if (($f['departamento'] ?? '') !== '') {
+            $where[] = 'p.departamento = ?';
+            $args[] = $f['departamento'];
+        }
+        if (($f['estado'] ?? '') === 'activo')        { $where[] = 'p.activo = 1'; }
+        elseif (($f['estado'] ?? '') === 'inactivo')  { $where[] = 'p.activo = 0'; }
+
+        $mov = (string)($f['movimiento'] ?? '');
+        if ($mov === 'nunca') {
+            $where[] = 'v.producto_id IS NULL';
+        } elseif (ctype_digit($mov) && (int)$mov > 0) {
+            $where[] = '(v.ultima_venta IS NULL OR v.ultima_venta <= DATE_SUB(NOW(), INTERVAL ? DAY))';
+            $args[] = (int)$mov;
+        }
+        return [implode(' AND ', $where), $args];
+    }
+
+    /** Columna/dirección de orden, siempre de una lista fija (nunca el texto del usuario directo al SQL). */
+    private static function columnaOrden(string $campo, string $dir): string
+    {
+        $dir = strtoupper($dir) === 'ASC' ? 'ASC' : 'DESC';
+        $columnas = [
+            'nombre'         => 'p.nombre',
+            'codigo'         => 'p.codigo',
+            'precio_venta'   => 'p.precio_venta',
+            'actualizado_en' => 'p.actualizado_en',
+            'unidades'       => 'unidades_vendidas',
+            'ultima_venta'   => 'v.ultima_venta',
+        ];
+        $col = $columnas[$campo] ?? 'p.nombre';
+        return "$col $dir, p.nombre ASC";
+    }
+
+    /** Activa o desactiva un producto (reutiliza el campo "activo" que ya existía). Devuelve el producto antes del cambio. */
+    public static function toggleActivo(int $id, bool $activo, int $usuarioId): array
+    {
+        $prod = self::porId($id);
+        if (!$prod) throw new \RuntimeException('El producto no existe.');
+        Database::consultar(
+            "UPDATE productos SET activo = ?, actualizado_por = ?, actualizado_en = CURRENT_TIMESTAMP WHERE id = ?",
+            [$activo ? 1 : 0, $usuarioId, $id]
+        );
+        return $prod;
     }
 
     /** Quién creó y quién editó por última vez un producto (se muestra al editar). */
@@ -197,8 +373,13 @@ final class Producto
     public static function historial(array $filtros, int $pagina, int $porPag): array
     {
         [$where, $args] = self::condicionHistorial($filtros);
+        // u.color: el chip de "Quién" reusa el color de identificación del usuario
+        // (ver Usuario::PALETA); LEFT JOIN porque usuario_id queda NULL si el
+        // usuario ya se eliminó (el nombre snapshot de auditoria igual se conserva).
         return Database::todos(
-            "SELECT * FROM auditoria WHERE $where ORDER BY id DESC LIMIT $porPag OFFSET "
+            "SELECT a.*, u.color AS usuario_color
+               FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id
+              WHERE $where ORDER BY a.id DESC LIMIT $porPag OFFSET "
             . (($pagina - 1) * $porPag),
             $args
         );
@@ -230,7 +411,8 @@ final class Producto
             $args[] = '%' . $f['q'] . '%';
             $args[] = '%' . $f['q'] . '%';
         }
-        if (in_array($f['accion'] ?? '', ['crear_producto', 'editar_producto', 'eliminar_producto'], true)) {
+        if (in_array($f['accion'] ?? '', ['crear_producto', 'editar_producto', 'eliminar_producto',
+                'desactivar_producto', 'activar_producto'], true)) {
             $where[] = "accion = ?";
             $args[] = $f['accion'];
         }

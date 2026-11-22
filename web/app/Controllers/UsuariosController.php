@@ -36,6 +36,8 @@ final class UsuariosController extends BaseController
                 $rolPost = Request::post('rol');
                 $rol = array_key_exists($rolPost, \roles_disponibles()) ? $rolPost : 'vendedor';
                 $negociosSel = array_map('intval', $_POST['negocios'] ?? []);
+                $colorPost = Request::post('color');
+                $color = preg_match('/^#[0-9a-fA-F]{6}$/', $colorPost) ? strtolower($colorPost) : Usuario::colorSugerido();
 
                 // Salvaguarda: no dejar el sistema sin ningún administrador
                 $degradaUltimoAdmin = false;
@@ -53,12 +55,12 @@ final class UsuariosController extends BaseController
                     try {
                         if ($uid) {
                             if ($clave !== '') {
-                                Usuario::actualizarConClave($uid, $email, $nombre, $rol, password_hash($clave, PASSWORD_DEFAULT));
+                                Usuario::actualizarConClave($uid, $email, $nombre, $rol, password_hash($clave, PASSWORD_DEFAULT), $color);
                             } else {
-                                Usuario::actualizar($uid, $email, $nombre, $rol);
+                                Usuario::actualizar($uid, $email, $nombre, $rol, $color);
                             }
                         } else {
-                            $uid = Usuario::crear($email, $nombre, $rol, password_hash($clave, PASSWORD_DEFAULT));
+                            $uid = Usuario::crear($email, $nombre, $rol, password_hash($clave, PASSWORD_DEFAULT), $color);
                         }
                         // PIN de la caja: cerrojo local del terminal, no una contraseña.
                         // Vacío = no se toca; "0" borra el PIN existente.
@@ -102,9 +104,10 @@ final class UsuariosController extends BaseController
             }
         }
         $modoFormulario = ($editar !== null || Request::get('editar') !== '');
+        $colorSugerido = ($editar === null) ? Usuario::colorSugerido() : '';
 
         View::render('usuarios/index', compact(
-            'usuario', 'error', 'exito', 'usuarios', 'negociosTodos', 'editar', 'modoFormulario'
+            'usuario', 'error', 'exito', 'usuarios', 'negociosTodos', 'editar', 'modoFormulario', 'colorSugerido'
         ));
     }
 }

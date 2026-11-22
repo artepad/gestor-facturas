@@ -11,7 +11,7 @@ require_once dirname(__DIR__, 3) . '/lib/permisos.php'; // roles_disponibles(), 
 <?php cabecera_dashboard($usuario, 'usuarios', 'Usuarios'); ?>
     <div class="contenido">
         <?php if ($modoFormulario):
-            $e = $editar ?: ['id'=>0,'email'=>'','nombre'=>'','rol'=>'vendedor','negocios_ids'=>[]]; ?>
+            $e = $editar ?: ['id'=>0,'email'=>'','nombre'=>'','rol'=>'vendedor','negocios_ids'=>[],'color'=>$colorSugerido]; ?>
         <div class="form-pagina form-pagina-ancha">
             <div class="cab-acciones">
                 <h2><?= $e['id'] ? 'Editar usuario' : 'Crear usuario' ?></h2>
@@ -44,6 +44,24 @@ require_once dirname(__DIR__, 3) . '/lib/permisos.php'; // roles_disponibles(), 
                         Sirve para desbloquear la caja en el PC, incluso sin internet.
                         Es un cerrojo local: no reemplaza la contraseña.
                     </small>
+                </div>
+                <div class="campo">
+                    <label>Color de identificación</label>
+                    <p class="campo-ayuda">Se usa para reconocer a este usuario en las tablas (ej. "Modificado por").</p>
+                    <div class="color-elige">
+                        <input type="color" name="color" id="selColor"
+                               value="<?= h($e['color'] ?: '#1565c0') ?>">
+                        <span class="chip-usuario" id="colorVistaPrevia"
+                              style="color:<?= h($e['color'] ?: '#1565c0') ?>;background:<?= h(\color_mas_claro($e['color'] ?: '#1565c0')) ?>">
+                            <?= e($e['nombre'] ?: 'Vista previa') ?>
+                        </span>
+                    </div>
+                    <div class="color-paleta">
+                        <?php foreach (\App\Models\Usuario::PALETA as $c): ?>
+                            <button type="button" class="color-chip" data-color="<?= h($c) ?>"
+                                    style="background:<?= h($c) ?>" title="<?= h($c) ?>" aria-label="Usar color <?= h($c) ?>"></button>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
                 <div class="campo">
                     <label>Rol</label>
@@ -94,7 +112,7 @@ require_once dirname(__DIR__, 3) . '/lib/permisos.php'; // roles_disponibles(), 
                     <tr><td class="vacio" colspan="5">No hay usuarios.</td></tr>
                 <?php else: foreach ($usuarios as $u): ?>
                     <tr>
-                        <td><?= e($u['nombre']) ?></td>
+                        <td class="col-nowrap"><?= chip_usuario($u['nombre'], $u['color']) ?></td>
                         <td><?= e($u['email']) ?></td>
                         <td><?= e(\nombre_rol($u['rol'])) ?></td>
                         <td><?= $u['rol']==='admin' ? '<em style="color:#aaa">todos</em>' : e($u['negocios'] ?: '—') ?></td>
@@ -122,5 +140,32 @@ require_once dirname(__DIR__, 3) . '/lib/permisos.php'; // roles_disponibles(), 
       var box = document.getElementById('boxNegocios');
       function actualizar() { if (sel && box) box.style.display = sel.value !== 'admin' ? '' : 'none'; }
       if (sel) { sel.addEventListener('change', actualizar); actualizar(); }
+
+      // Vista previa del chip (selector de color o paleta sugerida), mismo
+      // cálculo de fondo claro que lib/ui.php::color_mas_claro()
+      var inputColor = document.getElementById('selColor');
+      var vista = document.getElementById('colorVistaPrevia');
+      var inputNombre = document.querySelector('input[name="nombre"]');
+      function colorMasClaro(hex, mezcla) {
+        var n = parseInt(hex.slice(1), 16);
+        var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+        var clarear = function (c) { return Math.round(c + (255 - c) * mezcla); };
+        return '#' + [clarear(r), clarear(g), clarear(b)].map(function (c) {
+          return c.toString(16).padStart(2, '0');
+        }).join('');
+      }
+      function pintar(color) {
+        if (inputColor) inputColor.value = color;
+        if (vista) { vista.style.color = color; vista.style.background = colorMasClaro(color, 0.85); }
+      }
+      if (inputColor) inputColor.addEventListener('input', function () { pintar(this.value); });
+      document.querySelectorAll('.color-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () { pintar(this.dataset.color); });
+      });
+      if (inputNombre) {
+        inputNombre.addEventListener('input', function () {
+          if (vista) vista.textContent = this.value || 'Vista previa';
+        });
+      }
     </script>
     <?php pie_dashboard(); ?>

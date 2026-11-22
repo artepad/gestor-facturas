@@ -193,7 +193,7 @@ web/
 | `gastos.php` / `gasto_form.php` / `categorias_gasto.php` | `GastosController::panel` / `formulario` / `categorias` |
 | `ingresos.php` / `corte.php` | `IngresosController::panel` / `detalle` |
 | `herramientas.php` / `herramienta_caja.php` | `HerramientasController::tablero` / `caja` |
-| `herramienta_productos.php` / `producto_form.php` / `historial_productos.php` | `ProductosController::panel` / `formulario` / `historial` |
+| `productos.php` (menú propio) / `herramienta_productos.php` / `producto_form.php` / `historial_productos.php` / `herramienta_unificar_productos.php` / `producto_exportar.php` | `ProductosController::listado` / `panel` / `formulario` / `historial` / `unificar` / `exportar` |
 | `herramienta_etiquetas.php` / `etiquetas_imprimir.php` / `productos_buscar.php` | `EtiquetasController::formulario` / `imprimir` / `buscarJson` |
 | `herramienta_ofertas.php` / `ofertas_imprimir.php` | `OfertasController::formulario` / `imprimir` |
 | `herramienta_catalogo.php` / `catalogo_buscar.php` | `CatalogoController::index` / `buscarJson` |
@@ -708,8 +708,11 @@ su propio historial de `caja.php` funciona sin darle el módulo completo.
 
 **Módulo Herramientas** (utilidades operativas, web-nativo). Tablero de tarjetas
 (`herramientas.php`) gateado por el permiso `herramientas` (lo tienen `admin` y
-`vendedor`). Incluye el contador de caja, el gestor de etiquetas de precio, el
-creador de etiquetas de oferta y la Base de Datos de Productos. El contador de
+`vendedor`). Incluye el contador de caja, el gestor de etiquetas de precio y el
+creador de etiquetas de oferta (la tarjeta "Base de Datos de Productos" se sacó
+de acá 2026-11-18: ese catálogo pasó a tener su propio ítem de menú, ver
+«Módulo Productos» más abajo — `herramienta_productos.php` sigue existiendo,
+solo que ya no se llega por Herramientas). El contador de
 caja (billetes y monedas, todo calculado en el navegador) vive en
 `app/views/partials/contador_caja.php` — un `require` directo, sin Modelo ni
 Controlador propio, que comparten `herramienta_caja.php` (pantalla standalone)
@@ -802,28 +805,249 @@ no existía código viejo que mereciera conservarse).
   completa (para pegar en el local), no etiquetas individuales — esas ya
   existen en Herramientas → Etiquetas, son cosas distintas.
 
-**Base de Datos de Productos** (catálogo por negocio que alimenta el gestor de
+**Base de Datos de Productos** (catálogo **compartido** por los dos negocios —
+ver también «Catálogo compartido» más abajo — que alimenta el gestor de
 etiquetas):
-- **`productos`** — catálogo de cada negocio (`negocio_id`, `codigo` único por
-  negocio, `nombre`, `precio_costo/venta/mayoreo`, `departamento`, `tipo_venta`,
-  `carga_id`). Se **reemplaza completo** en cada carga de Excel.
-- **`producto_cargas`** — una fila por subida de Excel (`archivo_nombre`,
-  `total_productos`, `total_omitidos`, `cargado_por`, `cargado_en`). Da la "última
-  actualización" (`MAX(cargado_en)`) y el historial; no se borra al reemplazar.
+- **`productos`** — un catálogo único para todo el sistema. `codigo` es
+  **UNIQUE global** (no lleva `negocio_id`: un mismo código de barras es el
+  mismo producto en cualquier negocio), `nombre`, `precio_costo/venta/mayoreo`,
+  `departamento`, `tipo_venta`, `carga_id` (de qué subida de Excel vino la
+  última vez). Las existencias sí son por negocio (`producto_stock`, ver
+  «Catálogo compartido»).
+- **`producto_cargas`** — una fila por subida de Excel (`negocio_id`: quién lo
+  subió, no de quién son los productos; `archivo_nombre`, `total_productos`,
+  `total_nuevos`, `total_actualizados`, `total_omitidos`, `cargado_por`,
+  `cargado_en`). Da la "última actualización" (`MAX(cargado_en)`) y el
+  historial; nunca se borra.
 
 **Flujo**: el usuario exporta el catálogo desde Eleventa a un `.xlsx` y lo sube en
-`herramienta_productos.php` (selector de negocio acotado por `negocios_visibles`).
-`lib/productos.php` lo parsea con **`ZipArchive`+`SimpleXML` nativos** (un `.xlsx`
-es un zip de XML; **no se usa Composer ni PhpSpreadsheet**): mapea columnas por el
-texto del encabezado (resiste reordenamientos), parsea los precios como texto
-chileno (`$2.000`→`2000`) y descarta filas sin código/nombre. `reemplazar_catalogo()`
-hace un **reemplazo transaccional** (registra la carga, `DELETE` del catálogo,
-`INSERT` por lotes; `rollBack` si algo falla). **Salvaguardas anti-borrado**: un
-archivo vacío/equivocado nunca borra el catálogo (falla antes), y "Vaciar catálogo"
-exige escribir `ELIMINAR`. `estado_actualizacion()` calcula el aviso de antigüedad
-(≤6 días ok, 7–14 naranja, >14 rojo) que se muestra en el administrador y en el
-gestor de etiquetas. `buscar_productos()` (vía `productos_buscar.php`, JSON)
+`herramienta_productos.php`. `lib/productos.php` lo parsea con **`ZipArchive`+`SimpleXML`
+nativos** (un `.xlsx` es un zip de XML; **no se usa Composer ni PhpSpreadsheet**):
+mapea columnas por el texto del encabezado (resiste reordenamientos), parsea los
+precios como texto chileno (`$2.000`→`2000`) y descarta filas sin código/nombre.
+`reemplazar_catalogo()` hace un **upsert transaccional** (registra la carga,
+`INSERT ... ON DUPLICATE KEY UPDATE` por lotes sobre el código: agrega lo nuevo y
+actualiza lo que ya existía; **nunca borra** un producto que falte en el Excel
+subido — ver «Unificar catálogos» más abajo sobre el riesgo de esto cuando dos
+negocios suben Excel distintos para el mismo código). **Salvaguardas anti-borrado**:
+un archivo vacío/equivocado nunca borra el catálogo (falla antes), y "Vaciar
+catálogo" exige escribir `ELIMINAR`. `estado_actualizacion()` calcula el aviso de
+antigüedad (≤6 días ok, 7–14 naranja, >14 rojo) que se muestra en el administrador
+y en el gestor de etiquetas. `buscar_productos()` (vía `productos_buscar.php`, JSON)
 resuelve el autocompletar: por código de barras (prefijo) o por nombre (`LIKE`).
+
+**Módulo Productos** (`productos.php`, ítem propio del menú desde 2026-11-18,
+entre Ventas e Ingresos — antes vivía escondido dentro de Herramientas; mismo
+permiso `productos` que ya tenían los dos roles, no cambió el acceso real):
+`ProductosController::listado()` es la puerta de entrada — una tabla con
+búsqueda, filtros, orden por columna y paginación (30 por página, mismo
+patrón que Facturas/Gastos). `herramienta_productos.php` (`panel()`) sigue
+existiendo tal cual para "Cargar Excel" y "Zona de peligro", pero perdió su
+buscador propio (`buscarParaEditar()`/"Buscar y editar") porque esta tabla
+ya lo hace mejor; se llega a `panel()`, `historial_productos.php` y
+`herramienta_unificar_productos.php` con botones desde acá.
+- **Columnas nuevas** (sobre lo que ya mostraba el buscador viejo): además de
+  código/nombre/departamento/precio, **última modificación** + **antigüedad**
+  (`actualizado_en`, con `hace_tiempo()` en `lib/ui.php` — "Hace 5 días", ya
+  existía la columna cruda) y **modificado por** (`actualizado_por`, ya
+  existía) + **unidades vendidas** y **última venta** (nuevas: `Producto::listado()`
+  arma un `LEFT JOIN` a un resumen por producto — `SUM(venta_items.cantidad)`
+  + `MAX(ventas.fecha)`, solo ventas `'completada'` — sin tocar ninguna tabla
+  del POS, es de solo lectura). El filtro **"Ventas de"** deja ver el
+  combinado de los dos negocios (por defecto) o acotar a uno solo, repitiendo
+  el mismo resumen con `ve.negocio_id = ?` adentro del `LEFT JOIN`.
+- **Filtro "Sin movimiento"** (30/90/180 días sin vender, o "Nunca
+  registradas"): compara contra `MAX(ventas.fecha)` del producto (o su
+  ausencia). **Ojo con esto**: el POS se habilitó para las vendedoras recién
+  el 2026-11-08 (ver «Roles y permisos»), así que hoy casi no hay historia de
+  ventas real — un producto "nunca registrado" significa "no se vendió por
+  este sistema todavía", no "nunca se vendió en la vida" (las ventas de
+  Eleventa, de antes, no están en esta base). La franja de 30 días ya es útil
+  hoy; 90 y 180 se van a ir llenando solas con el tiempo sin tocar el código
+  de nuevo — la vista avisa de esto en pantalla cuando se usan esas dos
+  franjas. **No se implementó ningún aviso proactivo automático todavía**
+  (ej. en el Home) — queda para una segunda etapa, cuando haya más historia
+  real que mostrar.
+- **"Marcar inactivo/Reactivar"** por fila (ícono `activar`, mismo que ya usa
+  `categorias_gasto.php`): reutiliza el campo `productos.activo` que ya
+  existía (lo respetan el POS/Etiquetas/Consultar Catálogo) — no se inventó
+  un estado nuevo. `Producto::toggleActivo()` + `registrar_auditoria()` (acciones
+  nuevas `activar_producto`/`desactivar_producto`, agregadas también al mapa
+  de etiquetas y al filtro de `historial_productos.php`). **Nunca borra
+  nada**: es la acción que se ofrece para un producto sin movimiento que se
+  decide retirar, a propósito reversible.
+- **Orden por columna**: whitelist fija en `Producto::columnaOrden()` (nunca
+  el texto de la URL directo al SQL). El ícono de historial de cada fila
+  reutiliza `historial_productos.php?q=CODIGO` tal cual — no hizo falta
+  ninguna ruta nueva para eso.
+- **Historial de cambios habilitado para vendedoras (2026-11-22)**:
+  `ProductosController::historial()` pasó de exigir `usuarios` (solo admin)
+  a exigir `productos` (ambos roles) — mismo permiso que ya tenía el
+  listado. Es seguro porque la pantalla es **puramente de lectura** (un
+  solo `<form method="get">` de filtros, sin ningún POST que edite o borre
+  nada de `auditoria`): una vendedora puede ahora consultar quién cambió
+  qué y cuándo, igual que un admin, pero no tiene forma de alterar el
+  historial. El botón "Historial" de la cabecera y el ícono de reloj por
+  fila dejaron de estar condicionados a `puede($usuario,'usuarios')`.
+  "Unificar catálogos" y "Cargar Excel" siguen siendo solo admin — no
+  cambiaron.
+- **"Tipo de venta" fuera del formulario (2026-11-22)**: el campo no cumple
+  ninguna función real en el sistema — no interviene en `lib/pos.php` ni en
+  ningún cálculo de precio, es solo un dato suelto que venía del Excel de
+  Eleventa y se mostraba como chip en `herramienta_catalogo.php`. Se sacó
+  del formulario (`producto_form.php`) a pedido del dueño, pero **la
+  columna sigue existiendo** y el Excel/Unificar catálogos la siguen
+  leyendo/escribiendo igual que siempre (`lib/productos.php`) — no se tocó
+  nada de esa cadena. Al editar un producto por el formulario,
+  `ProductosController::formulario()` ya no lee `tipo_venta` del POST (el
+  campo no existe más ahí): en su lugar preserva el valor que ya tenía el
+  producto (`$original['tipo_venta']`), así una edición manual no borra lo
+  que trajo el Excel.
+- **"Afecto a IVA" fuera del formulario (2026-11-22)**: igual que "Tipo de
+  venta", se analizó antes de sacarlo — `productos.afecto_iva` SÍ viaja más
+  lejos que `tipo_venta` (`lib/pos.php::catalogo_para_pos()` lo manda al
+  POS, el carrito lo copia a la línea de venta y queda guardado en
+  `venta_items.afecto_iva`), pero **ninguna pantalla, cálculo ni reporte lo
+  vuelve a leer** — no afecta el precio (acá, a diferencia del analizador de
+  la app de escritorio, el precio de venta lo escribe la persona
+  directamente, nunca se calcula a partir de un neto+IVA), no afecta el
+  arqueo de caja, Ingresos ni Home. La boleta electrónica del SII —el único
+  motivo real para distinguir afecto/exento— está explícitamente fuera del
+  alcance del diseño actual (`docs/POS_DISENO.md`). Mismo tratamiento que
+  `tipo_venta`: se sacó el checkbox de `producto_form.php`, la columna sigue
+  existiendo con su default (`1`), y `ProductosController::formulario()`
+  preserva el valor ya guardado del producto al editar (`$original['afecto_iva']
+  ?? 1`) en vez de leerlo del formulario; uno nuevo siempre nace en `1`.
+- **Validación robusta de Nuevo/Editar producto (2026-11-22)**: antes de
+  tocar nada se revisó `lib/esquema.sql` y los datos reales del catálogo
+  (`codigo` más largo: 20 — `nombre` más largo: 80 — `departamento` más
+  largo: 20 — precio más alto: $55.000) para fijar límites parejos con lo
+  que ya existe, no inventados: `ProductosController::MAX_LARGO_CODIGO` (20),
+  `MAX_LARGO_NOMBRE` (150), `MAX_LARGO_DEPTO` (60), `MAX_MONTO` (99.999.999,
+  tope de sentido común para CLP, muy por encima de cualquier precio real
+  pero bloquea el típico error de tipeo de sobra de ceros). Las mismas
+  constantes alimentan los `maxlength` del HTML (vista) y la validación real
+  (controlador) para que nunca queden desincronizados.
+  - **Código de barras solo números — con una excepción a propósito**: el
+    catálogo real tiene 9 productos con códigos alfanuméricos heredados
+    (`SRT5000`, `MARV 120 GRS`, códigos con espacios de tipeos viejos del
+    Excel). En vez de romperlos, la regla es *"solo números, salvo que el
+    código no haya cambiado respecto al que ya tenía el producto"* — así se
+    puede seguir editando precio/nombre/departamento de esos 9 productos
+    sin tocar su código, pero no se puede crear uno nuevo ni cambiar un
+    código existente a algo que no sea solo dígitos. El JS del campo
+    (`#inputCodigo`) filtra en vivo cualquier carácter que no sea número
+    mientras se escribe — pero solo actúa sobre lo que el usuario *toca*: si
+    no hace click ahí, un código legado con letras no se altera solo por
+    abrir y guardar el formulario.
+  - **Precios con separador de miles en vivo**: mismo patrón ya probado de
+    `formatoMiles()` en `facturas/panel.php`/`detalle.php` (quita todo lo
+    que no sea dígito, lo recorta a `MAX_MONTO` y le agrega los puntos),
+    replicado en `producto_form.php` para `precio_venta`/`precio_costo`/
+    `precio_mayoreo`. El valor que llega al servidor (ej. "15.000") lo seguía
+    entendiendo `parsear_monto()` sin cambios — ninguna lógica de guardado
+    se tocó, solo la validación alrededor.
+  - **Errores junto al campo, no un solo cartel genérico**: `$errores` es un
+    arreglo `campo => mensaje` (antes era un `$error` de texto único). La
+    vista pinta el borde del campo en rojo (`.input-error`) y el mensaje
+    puntual debajo (`.campo-error`) con `error_campo()`/`clase_campo()`
+    (funciones de la vista, mismo patrón que `valor_historial()` en
+    `historial.php`). Es la única pantalla del sistema con errores por
+    campo — se decidió así a pedido explícito del dueño para este
+    formulario puntual; el resto del sistema sigue con el cartel único
+    arriba del formulario, no se tocó.
+  - **Todo se valida en el servidor, no solo en JS**: la vista agrega
+    `maxlength`/filtros en vivo como ayuda de UX, pero
+    `ProductosController::formulario()` vuelve a validar todo desde cero
+    (nunca confía en lo que ya filtró el navegador) — probado a propósito
+    con un POST directo por `curl` saltándose el navegador (nombre de 200
+    caracteres, precio negativo, costo no numérico, mayoreo sobre el tope):
+    los cinco quedaron bloqueados con su mensaje, sin guardar nada.
+  - **Precio de costo y mayoreo también se validan ahora** (antes solo
+    `precio_venta` se revisaba): deben ser un monto válido, no negativo y no
+    mayor a `MAX_MONTO` si se completan (siguen siendo opcionales).
+
+**Unificar catálogos** (`herramienta_unificar_productos.php`, **solo admin**
+— mismo criterio que "Vaciar catálogo" e `historial_productos.php`: es una
+fusión masiva que toca el catálogo de los dos negocios a la vez, 2026-11-17):
+como cada local tiene su propio Eleventa, cada uno trae su propio Excel; con
+el upsert de arriba, subir el Excel de un negocio **pisaba en silencio** el
+nombre/precio de cualquier código que el otro negocio ya tuviera distinto, sin
+avisar. Esta pantalla compara los dos Excel ANTES de tocar el catálogo real y
+deja que el admin decida cada diferencia:
+- `comparar_catalogos()` (`lib/productos.php`, función pura, sin tocar la BD)
+  cruza por código de barras y clasifica cada producto en **igual** (mismo
+  nombre normalizado y mismo precio de venta: pasa directo), **conflicto_precio**
+  (mismo código, precio de venta distinto — aunque el nombre TAMBIÉN difiera: el
+  precio se prioriza sobre el nombre), **conflicto_nombre** (mismo código,
+  precio igual, solo cambia el nombre: menor riesgo), **solo_a/solo_b** (código
+  exclusivo de un negocio: entra tal cual) o **revisar** (código distinto pero
+  nombre normalizado idéntico entre lo que quedó suelto de cada lado: puede ser
+  el mismo producto mal tipeado, o dos productos distintos). La detección de
+  "revisar" es por **coincidencia exacta de nombre normalizado** (sin tildes,
+  minúsculas, espacios), no por similitud difusa (Levenshtein) — a propósito:
+  barato y predecible, coherente con "PHP plano sin frameworks"; detecta el
+  caso real (mismo nombre, código distinto) sin comparar miles de productos
+  entre sí. **Conflicto de precio y de nombre se separaron en dos tablas**
+  (2026-11-17, a pedido del dueño: el precio es el dato más sensible y debe
+  resolverse primero) — antes eran un solo grupo `'conflicto'`.
+- `crear_unificacion()` guarda la comparación en `producto_unificaciones`
+  (cabecera: los dos negocios, los dos archivos, totales por grupo —
+  `total_conflicto_precio`/`total_conflicto_nombre` desde la separación—,
+  `estado` revisando\|aplicada\|descartada) + `producto_unificacion_items` (un
+  producto por fila, con los datos "_a"/"_b" tal como venían y, para
+  igual/solo_a/solo_b, ya con los "_final" resueltos: no hay nada que decidir).
+  Las filas de **conflicto** (precio o nombre) se resuelven con "Usar negocio
+  A", "Usar negocio B" o "Personalizar" (nombre y/o precio de venta propios —
+  en un conflicto de nombre el precio ya es el mismo en los dos negocios, así
+  que si no se escribe uno nuevo se deja el que ya había; costo/mayoreo/
+  departamento/tipo de venta siempre se completan con los del negocio A). Las
+  de **revisar** se resuelven con "Mismo, usar A/B" (un solo producto, el otro
+  código se descarta) o "Son distintos" (entran los dos códigos por separado,
+  como si nunca se hubieran emparejado) — `resolver_item_unificacion()` por
+  ítem. **Pantalla de revisión** (`unificar_revision.php`): cada decisión de
+  conflicto se muestra como dos tarjetas de color fijo por negocio (azul =
+  negocio A, morado = negocio B — los mismos colores que ya usan "Solo en
+  A"/"Solo en B" en el resumen) en vez de botones de texto parecidos entre sí,
+  para que nunca haga falta leer la etiqueta para saber a quién pertenece cada
+  opción; un conflicto de precio además muestra la diferencia en pesos y en
+  %, con una alerta visual (borde e ícono naranja) cuando supera el 25% — con
+  catálogos reales de dos negocios independientes esto puede ser una fracción
+  grande de los productos, así que vale la pena remarcar los casos más
+  llamativos. **Límite de tarjetas por pantalla** (`$CAP_CONFLICTOS = 60` en
+  la vista): con catálogos reales puede haber miles de conflictos (two
+  negocios con precios sistemáticamente distintos fácilmente superan 1.000);
+  mostrar todos de una haría la página enorme y lenta, así que cada tabla
+  muestra como máximo 60 pendientes a la vez — se resuelven, se recarga la
+  página y aparecen los siguientes (el orden es por id, así que el "cupo" se
+  va liberando solo). Lo ya resuelto se lista como un chip por fila si son
+  pocos (≤30) o como un conteo simple si son muchos, para no alargar la
+  página al infinito.
+- `aplicar_unificacion()` exige que **no quede ningún ítem sin resolver**
+  (`contar_pendientes_unificacion()`), y recién ahí escribe el catálogo real en
+  una sola transacción (mismo upsert por código de `reemplazar_catalogo()`),
+  deja `producto_unificaciones.estado='aplicada'` con los totales
+  nuevos/actualizados, y un registro en `auditoria` (módulo `productos`,
+  acción `unificar_catalogo`). `descartar_unificacion()` la marca
+  `'descartada'` sin tocar nada del catálogo. Ninguna de las dos borra la
+  comparación: queda en el historial de la pantalla para consultar después.
+- La pantalla queda disponible de forma permanente (no es una herramienta de
+  un solo uso): sirve para la próxima vez que haga falta auditar o fusionar
+  catálogos (ej. un tercer local).
+
+**Exportar catálogo a Excel** (`producto_exportar.php`, mismo permiso que el
+panel — `herramientas` — no solo admin, 2026-11-17): descarga el catálogo
+completo en un `.xlsx` con las mismas columnas que exporta Eleventa
+(Codigo/Producto/P. Costo/P. Venta/P. Mayoreo/Departamento/Tipo de venta),
+armado a mano con `ZipArchive` (sin Composer/PhpSpreadsheet, mismo criterio que
+el parseo) vía `generar_excel_productos()`. Pensado para el caso de probar
+"Unificar catálogos" en el ambiente local y después llevar el resultado a
+producción **sin repetir las decisiones manuales**: se descarga acá y se sube
+tal cual en el otro ambiente con "Cargar / actualizar base de datos" de
+siempre (upsert por código, nunca borra) — confirmado con una prueba de
+ida y vuelta (`parsear_excel_productos()` sobre el archivo recién exportado
+lee exactamente los mismos productos). El botón vive en el panel principal de
+Productos y también en la pantalla de una unificación ya aplicada.
 
 **Consultar Catálogo** (`herramienta_catalogo.php`, solo lectura): buscador
 móvil-primero del catálogo. Búsqueda en vivo (debounce) contra `catalogo_buscar.php`

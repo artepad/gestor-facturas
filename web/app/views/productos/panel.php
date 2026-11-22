@@ -2,7 +2,13 @@
 /**
  * Vista de app/Controllers/ProductosController::panel().
  * Variables disponibles: $usuario, $negocios, $negocioId, $mensaje, $ultima,
- * $totalP, $estado, $historial, $q, $encontrados, $msg, $nombreNegocio.
+ * $totalP, $estado, $historial, $nombreNegocio.
+ *
+ * Esta pantalla es el sub-panel de "Cargar Excel / Vaciar catálogo" del
+ * módulo Productos (se llega acá desde productos.php, que es la puerta de
+ * entrada del módulo desde 2026-11-18). El buscador "Buscar y editar" que
+ * vivía acá se sacó: productos.php ya lo hace mejor (con ventas, auditoría,
+ * filtros y paginación).
  *
  * Muestra la fecha de última actualización con aviso si está vieja (naranja > 1
  * semana, rojo > 2 semanas) e incluye salvaguardas contra el borrado accidental.
@@ -10,11 +16,11 @@
 
 require_once dirname(__DIR__, 3) . '/lib/ui.php';
 ?>
-<?php cabecera_dashboard($usuario, 'herramientas', 'Base de Datos de Productos'); ?>
+<?php cabecera_dashboard($usuario, 'productos', 'Cargar / actualizar catálogo'); ?>
     <div class="contenido">
         <div class="cab-acciones">
-            <h2>Base de Datos de Productos</h2>
-            <a class="btn gris" href="herramientas.php">Volver</a>
+            <h2>Cargar / actualizar catálogo</h2>
+            <a class="btn gris" href="productos.php">Volver</a>
         </div>
 
         <?php if (!$negocios): ?>
@@ -41,12 +47,6 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
         </form>
         <?php endif; ?>
 
-        <?php if ($msg === 'guardado'): ?>
-            <div class="panel exito"><p>Producto guardado. El cambio ya está en los dos negocios.</p></div>
-        <?php elseif ($msg === 'eliminado'): ?>
-            <div class="panel exito"><p>Producto eliminado del catálogo.</p></div>
-        <?php endif; ?>
-
         <!-- Estado de la base de datos -->
         <div class="panel">
             <div class="bd-estado bd-<?= $estado['nivel'] ?>">
@@ -66,81 +66,14 @@ require_once dirname(__DIR__, 3) . '/lib/ui.php';
             </div>
         </div>
 
-        <!-- Buscar y editar productos del catalogo -->
-        <div class="panel">
-            <div class="cab-acciones">
-                <h2 class="panel-titulo">Buscar y editar productos</h2>
-                <div class="cab-botones">
-                    <?php if (puede($usuario, 'usuarios')): ?>
-                        <a class="btn gris" href="historial_productos.php">Ver historial</a>
-                    <?php endif; ?>
-                    <a class="btn gris" href="inventario.php">Inventario</a>
-                    <a class="btn gris" href="promociones.php">Promociones</a>
-                    <a class="btn verde" href="producto_form.php">+ Nuevo producto</a>
-                </div>
-            </div>
-            <p class="texto-ayuda">
-                El catálogo es <strong>compartido por los dos negocios</strong>: lo que
-                cambies acá se ve en ambos. Cada cambio queda registrado con tu nombre.
-            </p>
-            <form method="get" class="filtros">
-                <div class="campo" style="flex:1 1 260px">
-                    <label>Código o nombre</label>
-                    <input type="text" name="q" value="<?= h($q) ?>" autocomplete="off"
-                           placeholder="Coca Cola o 7801234567890" style="width:100%">
-                </div>
-                <div class="campo">
-                    <label>&nbsp;</label>
-                    <button class="btn" type="submit">Buscar</button>
-                </div>
-            </form>
-            <?php if ($q !== ''): ?>
-                <?php if (!$encontrados): ?>
-                    <p class="vacio">No se encontró ningún producto con "<?= h($q) ?>".</p>
-                <?php else: ?>
-                    <div class="tabla-wrap">
-                        <table>
-                            <thead><tr>
-                                <th>Código</th><th>Producto</th><th>Departamento</th>
-                                <th class="col-num">Costo</th><th class="col-num">Venta</th>
-                                <th>Última edición</th><th></th>
-                            </tr></thead>
-                            <tbody>
-                            <?php foreach ($encontrados as $p): ?>
-                                <tr<?= $p['activo'] ? '' : ' class="fila-inactiva"' ?>>
-                                    <td><?= h($p['codigo']) ?></td>
-                                    <td>
-                                        <?= h($p['nombre']) ?>
-                                        <?php if (!$p['activo']): ?>
-                                            <span class="badge-inactivo">Oculto</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><?= h($p['departamento'] ?: '—') ?></td>
-                                    <td class="col-num"><?= $p['precio_costo'] !== null ? clp($p['precio_costo']) : '—' ?></td>
-                                    <td class="col-num"><?= clp($p['precio_venta']) ?></td>
-                                    <td class="texto-tenue">
-                                        <?= h($p['editor'] ?: '—') ?>
-                                        <?= $p['actualizado_en'] ? '· ' . h(date('d-m-Y', strtotime($p['actualizado_en']))) : '' ?>
-                                    </td>
-                                    <td><a class="btn sm" href="producto_form.php?id=<?= (int)$p['id'] ?>">Editar</a></td>
-                                </tr>
-                            <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <?php if (count($encontrados) >= 40): ?>
-                        <p class="texto-tenue">Se muestran los primeros 40. Afina la búsqueda para ver menos.</p>
-                    <?php endif; ?>
-                <?php endif; ?>
-            <?php endif; ?>
-        </div>
-
         <!-- Cargar nuevo Excel -->
         <div class="panel">
             <h2 class="panel-titulo">Cargar / actualizar base de datos</h2>
             <p class="texto-ayuda">Sube el archivo Excel (<strong>.xlsx</strong>) exportado desde Eleventa.
-                Reemplaza por completo el catálogo de <strong><?= h($nombreNegocio) ?></strong>. Si el
-                archivo no es válido, el catálogo actual <strong>no se borra</strong>.</p>
+                Agrega los productos nuevos y <strong>actualiza</strong> los que ya existen (por código de
+                barras) en el catálogo compartido por los dos negocios — nunca borra productos que falten
+                en el archivo. Si el mismo código ya tiene datos distintos en el otro negocio, usa
+                "Unificar catálogos" en vez de subir el Excel directo, para decidir cuál dato dejar.</p>
 
             <form method="post" enctype="multipart/form-data">
                 <?= campo_csrf() ?>
